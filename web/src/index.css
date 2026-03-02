@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Dark control-room palette */
+:root {
+  --bg-primary: #0a0e17;
+  --bg-panel: #111827;
+  --bg-card: #1f2937;
+  --border: #374151;
+  --accent: #22d3ee;
+  --accent-warm: #f59e0b;
+  --danger: #ef4444;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}

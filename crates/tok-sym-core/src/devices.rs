@@ -1,0 +1,176 @@
+use serde::{Deserialize, Serialize};
+
+/// Tokamak device geometry and operational parameters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Device {
+    pub name: String,
+    pub id: String,
+    /// Major radius (m)
+    pub r0: f64,
+    /// Minor radius (m)
+    pub a: f64,
+    /// Maximum toroidal field on axis (T)
+    pub bt_max: f64,
+    /// Maximum plasma current (MA)
+    pub ip_max: f64,
+    /// Reference elongation
+    pub kappa: f64,
+    /// Reference upper triangularity
+    pub delta_upper: f64,
+    /// Reference lower triangularity
+    pub delta_lower: f64,
+    /// Plasma volume (m³)
+    pub volume: f64,
+    /// Plasma surface area (m²)
+    pub surface_area: f64,
+    /// Default ion mass number (deuterium = 2)
+    pub mass_number: f64,
+    /// Default effective charge
+    pub z_eff: f64,
+    /// Wall outline for display: (R, Z) points in meters
+    pub wall_outline: Vec<(f64, f64)>,
+    /// Magnetic configuration
+    pub config: MagneticConfig,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum MagneticConfig {
+    Limited,
+    LowerSingleNull,
+    UpperSingleNull,
+    DoubleNull,
+}
+
+impl Device {
+    /// Inverse aspect ratio ε = a/R₀
+    pub fn epsilon(&self) -> f64 {
+        self.a / self.r0
+    }
+
+    /// Greenwald density limit (10²⁰ m⁻³), given Ip in MA
+    pub fn greenwald_density(&self, ip_ma: f64) -> f64 {
+        ip_ma / (std::f64::consts::PI * self.a * self.a)
+    }
+}
+
+/// Approximate DIII-D wall outline (simplified polygon)
+fn diiid_wall() -> Vec<(f64, f64)> {
+    // Simplified DIII-D first wall contour (R, Z) in meters
+    // Clockwise from outboard midplane
+    let n = 60;
+    let r0 = 1.67;
+    let a_wall = 0.72; // wall minor radius slightly larger than plasma
+    let kappa_wall = 1.9;
+    let delta_wall: f64 = 0.55;
+    let mut wall = Vec::with_capacity(n + 1);
+    for i in 0..=n {
+        let theta = 2.0 * std::f64::consts::PI * (i as f64) / (n as f64);
+        let r = r0 + a_wall * (theta + delta_wall.asin() * theta.sin()).cos();
+        let z = kappa_wall * a_wall * theta.sin();
+        wall.push((r, z));
+    }
+    // Add simplified divertor shelf at bottom
+    wall
+}
+
+/// Approximate ITER wall outline (simplified polygon)
+fn iter_wall() -> Vec<(f64, f64)> {
+    let n = 60;
+    let r0 = 6.2;
+    let a_wall = 2.1;
+    let kappa_wall = 1.8;
+    let delta_wall: f64 = 0.35;
+    let mut wall = Vec::with_capacity(n + 1);
+    for i in 0..=n {
+        let theta = 2.0 * std::f64::consts::PI * (i as f64) / (n as f64);
+        let r = r0 + a_wall * (theta + delta_wall.asin() * theta.sin()).cos();
+        let z = kappa_wall * a_wall * theta.sin();
+        wall.push((r, z));
+    }
+    wall
+}
+
+pub fn diiid() -> Device {
+    Device {
+        name: "DIII-D".to_string(),
+        id: "diiid".to_string(),
+        r0: 1.67,
+        a: 0.67,
+        bt_max: 2.2,
+        ip_max: 3.0,
+        kappa: 1.8,
+        delta_upper: 0.55,
+        delta_lower: 0.55,
+        volume: 19.4,
+        surface_area: 47.0,
+        mass_number: 2.0,
+        z_eff: 1.5,
+        wall_outline: diiid_wall(),
+        config: MagneticConfig::LowerSingleNull,
+    }
+}
+
+pub fn iter() -> Device {
+    Device {
+        name: "ITER".to_string(),
+        id: "iter".to_string(),
+        r0: 6.2,
+        a: 2.0,
+        bt_max: 5.3,
+        ip_max: 15.0,
+        kappa: 1.7,
+        delta_upper: 0.33,
+        delta_lower: 0.33,
+        volume: 837.0,
+        surface_area: 683.0,
+        mass_number: 2.5, // D-T mix
+        z_eff: 1.7,
+        wall_outline: iter_wall(),
+        config: MagneticConfig::LowerSingleNull,
+    }
+}
+
+pub fn get_device(id: &str) -> Option<Device> {
+    match id {
+        "diiid" => Some(diiid()),
+        "iter" => Some(iter()),
+        _ => None,
+    }
+}
+
+pub fn all_devices() -> Vec<Device> {
+    vec![diiid(), iter()]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_device_params() {
+        let d = diiid();
+        assert!((d.epsilon() - 0.4012).abs() < 0.01);
+        // Greenwald density at 2 MA
+        let ngw = d.greenwald_density(2.0);
+        assert!(ngw > 1.0 && ngw < 2.0); // ~1.42
+    }
+
+    #[test]
+    fn test_iter_params() {
+        let d = iter();
+        assert!((d.epsilon() - 0.3226).abs() < 0.01);
+        let ngw = d.greenwald_density(15.0);
+        assert!(ngw > 1.0 && ngw < 2.0); // ~1.19
+    }
+
+    #[test]
+    fn test_wall_outlines() {
+        let d = diiid();
+        assert!(!d.wall_outline.is_empty());
+        // Wall should be closed (first ≈ last)
+        let first = d.wall_outline.first().unwrap();
+        let last = d.wall_outline.last().unwrap();
+        assert!((first.0 - last.0).abs() < 0.01);
+        assert!((first.1 - last.1).abs() < 0.01);
+    }
+}

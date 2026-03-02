@@ -1,0 +1,14 @@
+/Users/danielburgess/Desktop/plasma/tok-sym/target/debug/deps/serde-c05c288ba3e86a96.d: /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/danielburgess/Desktop/plasma/tok-sym/target/debug/build/serde-1d84d94038952bdb/out/private.rs
+
+/Users/danielburgess/Desktop/plasma/tok-sym/target/debug/deps/libserde-c05c288ba3e86a96.rlib: /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/danielburgess/Desktop/plasma/tok-sym/target/debug/build/serde-1d84d94038952bdb/out/private.rs
+
+/Users/danielburgess/Desktop/plasma/tok-sym/target/debug/deps/libserde-c05c288ba3e86a96.rmeta: /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/danielburgess/Desktop/plasma/tok-sym/target/debug/build/serde-1d84d94038952bdb/out/private.rs
+
+/Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/danielburgess/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/danielburgess/Desktop/plasma/tok-sym/target/debug/build/serde-1d84d94038952bdb/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/danielburgess/Desktop/plasma/tok-sym/target/debug/build/serde-1d84d94038952bdb/out

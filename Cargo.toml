@@ -1,0 +1,7 @@
+[workspace]
+members = ["crates/tok-sym-core"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
