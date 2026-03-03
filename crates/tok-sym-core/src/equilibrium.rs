@@ -308,8 +308,8 @@ fn assemble_lsn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
 
     // X-point location for LSN
     let alpha = shape.x_point_alpha.unwrap_or(delta.asin());
-    let x_xpt = 1.0 - 1.10 * eps * delta; // slightly inboard due to Shafranov shift
-    let y_xpt = -1.1 * eps * kappa; // below midplane
+    let x_xpt = 1.0 - 1.05 * eps * delta; // slightly inboard due to Shafranov shift
+    let y_xpt = -1.05 * eps * kappa; // below midplane
 
     // Upper crown (top of plasma)
     let x_top = 1.0 - eps * delta;
@@ -649,8 +649,8 @@ impl CerfonEquilibrium {
         let eps = self.shape.epsilon;
         let kappa = self.shape.kappa;
         let delta = self.shape.delta;
-        let x_xpt = 1.0 - 1.10 * eps * delta;
-        let y_xpt = -1.1 * eps * kappa;
+        let x_xpt = 1.0 - 1.05 * eps * delta;
+        let y_xpt = -1.05 * eps * kappa;
         (x_xpt * self.r0, y_xpt * self.r0)
     }
 

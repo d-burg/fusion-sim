@@ -4,6 +4,7 @@ import type { Snapshot, Contour } from '../lib/types'
 interface Props {
   snapshot: Snapshot | null
   wallJson: string // JSON array of [r, z] pairs
+  limiterPoints?: [number, number][] // optional CAD limiter — replaces wall when provided
 }
 
 /** Colour palette for flux surfaces — core (warm) → edge (cool). */
@@ -15,7 +16,7 @@ function fluxColor(normalizedLevel: number): string {
   return `rgb(${r},${g},${b})`
 }
 
-export default function EquilibriumCanvas({ snapshot, wallJson }: Props) {
+export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -43,12 +44,16 @@ export default function EquilibriumCanvas({ snapshot, wallJson }: Props) {
     ctx.fillStyle = '#0a0e17'
     ctx.fillRect(0, 0, W, H)
 
-    // Parse wall outline
+    // Use limiter as wall boundary when provided, otherwise parse wallJson
     let wall: [number, number][] = []
-    try {
-      wall = JSON.parse(wallJson)
-    } catch {
-      // empty
+    if (limiterPoints && limiterPoints.length > 0) {
+      wall = limiterPoints
+    } else {
+      try {
+        wall = JSON.parse(wallJson)
+      } catch {
+        // empty
+      }
     }
 
     if (wall.length === 0) {
@@ -196,7 +201,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson }: Props) {
         ctx.fillText('L-mode', labelX, labelY)
       }
     }
-  }, [snapshot, wallJson])
+  }, [snapshot, wallJson, limiterPoints])
 
   // Redraw on data change
   useEffect(() => {

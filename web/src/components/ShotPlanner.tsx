@@ -33,6 +33,8 @@ const SCALAR_PARAMS: ScalarParam[] = [
   { key: 'p_nbi', label: 'NBI power', unit: 'MW', waveformKey: 'p_nbi', min: 0, max: 40, step: 0.5, precision: 1 },
   { key: 'p_ech', label: 'ECH power', unit: 'MW', waveformKey: 'p_ech', min: 0, max: 20, step: 0.5, precision: 1 },
   { key: 'ne', label: 'Density target', unit: '10²⁰m⁻³', waveformKey: 'ne_target', min: 0.1, max: 3.0, step: 0.05, precision: 2 },
+  { key: 'kappa', label: 'Elongation κ', unit: '', waveformKey: 'kappa', min: 1.0, max: 2.2, step: 0.05, precision: 2 },
+  { key: 'delta', label: 'Triangularity δ', unit: '', waveformKey: 'delta', min: 0.0, max: 0.8, step: 0.05, precision: 2 },
 ]
 
 /* ─── Helpers ───────────────────────────────────────────── */
@@ -170,6 +172,8 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
     p_nbi: '#3b82f6',
     p_ech: '#8b5cf6',
     ne: '#a78bfa',
+    kappa: '#f59e0b',
+    delta: '#ef4444',
   }
 
   return (

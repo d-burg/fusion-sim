@@ -24,6 +24,7 @@ export interface SimControls {
   switchPreset: (deviceId: string, preset: PresetId) => void
   runProgram: (deviceId: string, programJson: string) => void
   setScrubIndex: (index: number | null) => void
+  setSpeed: (speed: number) => void
 }
 
 export function useSimulation(
@@ -37,6 +38,8 @@ export function useSimulation(
   const rafRef = useRef<number>(0)
   const wallJsonRef = useRef<string>('[]')
   const programJsonRef = useRef<string>('{}')
+  const speedRef = useRef(1.0)
+  const stepAccRef = useRef(0.0)  // fractional step accumulator for sub-1x speeds
 
   const [state, setState] = useState<SimState>({
     snapshot: null,
@@ -127,11 +130,15 @@ export function useSimulation(
     const sim = simRef.current
 
     // Step physics multiple times per frame for real-time feel
-    // (at 60fps, we want ~0.016s wall time → 3 steps of 5ms = 15ms sim time per frame)
-    const stepsPerFrame = 3
+    // (at 60fps, 3 steps of 5ms = 15ms sim time per frame ≈ 1x speed)
+    // Use fractional accumulator so sub-1x speeds are accurate on average
+    const BASE_STEPS = 3
+    stepAccRef.current += BASE_STEPS * speedRef.current
+    const stepsThisFrame = Math.floor(stepAccRef.current)
+    stepAccRef.current -= stepsThisFrame
     let snap: Snapshot | null = null
 
-    for (let i = 0; i < stepsPerFrame; i++) {
+    for (let i = 0; i < stepsThisFrame; i++) {
       const json = sim.step(DT)
       snap = JSON.parse(json)
       if (snap && (snap.status === 'Complete' || snap.status === 'Disrupted')) {
@@ -238,6 +245,11 @@ export function useSimulation(
     [createSimFromProgram],
   )
 
+  const setSpeed = useCallback((speed: number) => {
+    speedRef.current = speed
+    stepAccRef.current = 0
+  }, [])
+
   const setScrubIndex = useCallback((index: number | null) => {
     setState((prev) => {
       const displaySnapshot =
@@ -254,8 +266,8 @@ export function useSimulation(
 
   // Memoize controls to keep a stable reference
   const controls = useMemo<SimControls>(
-    () => ({ start, pause, reset, switchPreset, runProgram, setScrubIndex }),
-    [start, pause, reset, switchPreset, runProgram, setScrubIndex],
+    () => ({ start, pause, reset, switchPreset, runProgram, setScrubIndex, setSpeed }),
+    [start, pause, reset, switchPreset, runProgram, setScrubIndex, setSpeed],
   )
 
   return [state, controls]

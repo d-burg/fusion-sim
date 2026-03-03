@@ -133,7 +133,7 @@ pub fn diiid() -> Device {
         name: "DIII-D".to_string(),
         id: "diiid".to_string(),
         r0: 1.67,
-        a: 0.67,
+        a: 0.59, // effective plasma minor radius in diverted operation (limiter is ~0.67m)
         bt_max: 2.2,
         ip_max: 3.0,
         kappa: 1.8,
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn test_device_params() {
         let d = diiid();
-        assert!((d.epsilon() - 0.4012).abs() < 0.01);
+        assert!((d.epsilon() - 0.3533).abs() < 0.01); // a/R₀ = 0.59/1.67
         // Greenwald density at 2 MA
         let ngw = d.greenwald_density(2.0);
         assert!(ngw > 1.0 && ngw < 2.0); // ~1.42
