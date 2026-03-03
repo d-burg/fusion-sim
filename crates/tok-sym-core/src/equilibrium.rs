@@ -611,9 +611,11 @@ impl CerfonEquilibrium {
 
     /// Find the magnetic axis (O-point) by gradient search.
     fn find_axis(&mut self) {
-        // Start near geometric center and iterate using Newton's method
-        let mut x = 1.0 + 0.05; // slight Shafranov shift outboard
-        let mut y = 0.0;
+        // Always start from a fixed starting guess near the geometric center.
+        // Using the previous axis as a starting guess can cause convergence issues
+        // when epsilon changes between frames (the axis can drift to a false maximum
+        // outside the plasma, especially during the limited→diverted transition).
+        let (mut x, mut y) = (1.0 + 0.05, 0.0); // slight Shafranov shift outboard
 
         for _ in 0..100 {
             let gx = self.dpsi_dx(x, y);

@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contour::{self, Contour};
-use crate::devices::Device;
+use crate::devices::{Device, MagneticConfig};
 use crate::diagnostics::{DiagnosticSignals, NoiseGen};
 use crate::disruption::DisruptionModel;
 use crate::equilibrium::{CerfonEquilibrium, ShapeParams};
@@ -268,6 +268,7 @@ pub struct SimulationSnapshot {
     pub axis_z: f64,
     pub xpoint_r: f64,
     pub xpoint_z: f64,
+    pub is_limited: bool,
 
     // Status
     pub status: SimulationStatus,
@@ -446,13 +447,42 @@ impl Simulation {
         };
         let a_param = -0.05 - 0.1 * beta_p.min(2.0); // A shifts with pressure
 
+        let config = if prog.delta < 0.1 {
+            MagneticConfig::Limited
+        } else {
+            self.device.config
+        };
+
+        // During limited phase, reduce epsilon so plasma starts small and grows with Ip
+        let ip_frac = if prog.ip > 0.1 {
+            (self.actual_ip / prog.ip).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let epsilon = if config == MagneticConfig::Limited {
+            self.device.epsilon() * (0.35 + 0.65 * ip_frac)
+        } else {
+            self.device.epsilon()
+        };
+
+        // During limited phase (δ < 0.1), the LSN X-point boundary conditions
+        // place the X-point at x ≈ 1.0 (geometric center), producing a degenerate
+        // equilibrium with inverted ψ. Use a minimum effective delta of 0.2 in the
+        // boundary conditions to keep the X-point well-separated from the center.
+        // The visual aspects (X-point suppression, LIMITED label) use prog.delta.
+        let delta_eff = if config == MagneticConfig::Limited {
+            prog.delta.max(0.2)
+        } else {
+            prog.delta
+        };
+
         let new_shape = ShapeParams {
-            epsilon: self.device.epsilon(),
+            epsilon,
             kappa: prog.kappa,
-            delta: prog.delta,
+            delta: delta_eff,
             a_param,
-            config: self.device.config,
-            x_point_alpha: Some(prog.delta.asin()),
+            config,
+            x_point_alpha: Some(delta_eff.asin()),
             squareness: 0.0,
         };
         self.equilibrium.update(&new_shape);
@@ -464,20 +494,53 @@ impl Simulation {
     fn snapshot(&self) -> SimulationSnapshot {
         let prog = self.program.values_at(self.time);
 
-        // Generate flux surfaces and separatrix
-        let flux_surfaces = if self.actual_ip > 0.1 {
-            contour::extract_flux_surfaces(
-                &self.equilibrium,
-                self.eq_nr,
-                self.eq_nz,
-                self.n_flux_surfaces,
+        // Compute grid bounds using DEVICE dimensions (not the possibly-scaled shape
+        // epsilon). This ensures the contour grid always extends to the full plasma
+        // extent / divertor region, even during limited phase when epsilon is small.
+        let full_eps = self.device.epsilon();
+        let full_kappa = self.device.kappa.max(self.equilibrium.shape.kappa);
+        let margin = 0.15;
+        let grid_r_min = self.device.r0 * (1.0 - full_eps - margin);
+        let grid_r_max = self.device.r0 * (1.0 + full_eps + margin);
+        let grid_z_min = self.device.r0 * (-full_eps * full_kappa - margin);
+        let grid_z_max = self.device.r0 * (full_eps * full_kappa + margin);
+
+        // Generate flux surfaces using device-level grid bounds
+        let mut flux_surfaces = if self.actual_ip > 0.1 {
+            let grid = self.equilibrium.psi_norm_grid(
+                grid_r_min, grid_r_max, grid_z_min, grid_z_max,
+                self.eq_nr, self.eq_nz,
+            );
+            let levels: Vec<f64> = (1..=self.n_flux_surfaces)
+                .map(|i| i as f64 / (self.n_flux_surfaces + 1) as f64)
+                .collect();
+            contour::extract_contours(
+                &grid, self.eq_nr, self.eq_nz,
+                grid_r_min, grid_r_max, grid_z_min, grid_z_max,
+                &levels,
             )
         } else {
             vec![]
         };
 
-        let separatrix = if self.actual_ip > 0.1 {
-            contour::extract_separatrix(&self.equilibrium, self.eq_nr, self.eq_nz)
+        let is_limited = self.equilibrium.shape.config == MagneticConfig::Limited;
+
+        // Draw separatrix in both limited and diverted phases — in limited config
+        // it represents the LCFS touching the wall, clipped by the frontend canvas
+        let mut separatrix = if self.actual_ip > 0.1 {
+            let grid = self.equilibrium.psi_grid(
+                grid_r_min, grid_r_max, grid_z_min, grid_z_max,
+                self.eq_nr, self.eq_nz,
+            );
+            let contours = contour::extract_contours(
+                &grid, self.eq_nr, self.eq_nz,
+                grid_r_min, grid_r_max, grid_z_min, grid_z_max,
+                &[0.0],
+            );
+            contours.into_iter().next().unwrap_or(Contour {
+                level: 0.0,
+                points: vec![],
+            })
         } else {
             Contour {
                 level: 0.0,
@@ -485,8 +548,40 @@ impl Simulation {
             }
         };
 
-        let (axis_r, axis_z) = self.equilibrium.axis_physical();
-        let (xpoint_r, xpoint_z) = self.equilibrium.x_point_physical();
+        let (mut axis_r, axis_z) = self.equilibrium.axis_physical();
+        let (xpoint_r, xpoint_z) = if is_limited {
+            (0.0, 0.0)
+        } else {
+            self.equilibrium.x_point_physical()
+        };
+
+        // During limited phase, shift plasma inboard so inboard edge touches limiter
+        if is_limited && self.actual_ip > 0.1 {
+            let ip_frac = if prog.ip > 0.1 {
+                (self.actual_ip / prog.ip).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            // Find inboard limiter R (minimum R of wall outline near midplane)
+            let r_limiter = self.device.wall_outline.iter()
+                .filter(|(_, z)| z.abs() < 0.3)
+                .map(|(r, _)| *r)
+                .fold(f64::INFINITY, f64::min);
+            // Current inboard edge of the equilibrium
+            let r_inboard = self.device.r0 * (1.0 - self.equilibrium.shape.epsilon);
+            // Shift decreases as Ip ramps toward flat-top
+            let shift = (r_inboard - r_limiter).max(0.0) * (1.0 - ip_frac);
+
+            axis_r -= shift;
+            for surface in &mut flux_surfaces {
+                for pt in &mut surface.points {
+                    pt.0 -= shift;
+                }
+            }
+            for pt in &mut separatrix.points {
+                pt.0 -= shift;
+            }
+        }
 
         // Generate diagnostic signals with noise
         let mut noise = NoiseGen::new(self.time.to_bits());
@@ -547,6 +642,7 @@ impl Simulation {
             axis_z,
             xpoint_r,
             xpoint_z,
+            is_limited,
             status: self.status,
         }
     }
