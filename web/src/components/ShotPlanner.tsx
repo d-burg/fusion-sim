@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   getPreset,
   getDevice,
@@ -24,6 +24,13 @@ interface Props {
   deviceId: string
   onRun: (deviceId: string, programJson: string) => void
   onClose: () => void
+  /* Lifted state from ControlRoom — persists across open/close */
+  overrides: Record<string, number | null>
+  onOverridesChange: (overrides: Record<string, number | null>) => void
+  durationOverride: number | null
+  onDurationChange: (d: number | null) => void
+  basePreset: PresetId
+  onPresetChange: (p: PresetId) => void
 }
 
 /* ─── Parameter definitions ─────────────────────────────── */
@@ -105,23 +112,20 @@ function WaveformSparkline({ waveform, color }: { waveform: WaveformPoint[]; col
 
 /* ─── Component ─────────────────────────────────────────── */
 
-export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
-  const [basePreset, setBasePreset] = useState<PresetId>('hmode')
-  const [durationOverride, setDurationOverride] = useState<number | null>(null)
-
+export default function ShotPlanner({
+  deviceId,
+  onRun,
+  onClose,
+  overrides,
+  onOverridesChange,
+  durationOverride,
+  onDurationChange,
+  basePreset,
+  onPresetChange,
+}: Props) {
   // Load the base program from the selected preset
   const baseProgram = useMemo(() => getPreset(deviceId, basePreset), [deviceId, basePreset])
   const device = useMemo(() => getDevice(deviceId), [deviceId])
-
-  // Per-parameter override values (null = use base program value)
-  const [overrides, setOverrides] = useState<Record<string, number | null>>({})
-
-  // Reset overrides when preset changes
-  const handlePresetChange = useCallback((preset: PresetId) => {
-    setBasePreset(preset)
-    setOverrides({})
-    setDurationOverride(null)
-  }, [])
 
   // Get the effective value for a parameter
   const getEffectiveValue = useCallback(
@@ -177,8 +181,7 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
     }
 
     onRun(deviceId, JSON.stringify(modified))
-    onClose()
-  }, [baseProgram, overrides, durationOverride, deviceId, onRun, onClose])
+  }, [baseProgram, overrides, durationOverride, deviceId, onRun])
 
   if (!baseProgram || !device) {
     return (
@@ -222,7 +225,7 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
             {(['hmode', 'lmode', 'density_limit'] as PresetId[]).map((p) => (
               <button
                 key={p}
-                onClick={() => handlePresetChange(p)}
+                onClick={() => onPresetChange(p)}
                 className={`flex-1 px-2 py-1.5 text-xs font-semibold transition-colors cursor-pointer
                   ${
                     basePreset === p
@@ -246,7 +249,7 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
               max={30}
               step={0.5}
               value={effectiveDuration}
-              onChange={(e) => setDurationOverride(parseFloat(e.target.value))}
+              onChange={(e) => onDurationChange(parseFloat(e.target.value))}
               className="flex-1 accent-cyan-500"
             />
             <input
@@ -255,7 +258,7 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
               max={30}
               step={0.5}
               value={effectiveDuration}
-              onChange={(e) => setDurationOverride(parseFloat(e.target.value) || baseProgram.duration)}
+              onChange={(e) => onDurationChange(parseFloat(e.target.value) || baseProgram.duration)}
               className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs
                          text-cyan-400 font-mono text-right focus:outline-none focus:border-cyan-600"
             />
@@ -285,10 +288,10 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
                   step={param.step}
                   value={value}
                   onChange={(e) =>
-                    setOverrides((prev) => ({
-                      ...prev,
+                    onOverridesChange({
+                      ...overrides,
                       [param.key]: parseFloat(e.target.value),
-                    }))
+                    })
                   }
                   className="flex-1 accent-cyan-500"
                 />
@@ -299,10 +302,10 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
                   step={param.step}
                   value={value.toFixed(param.precision)}
                   onChange={(e) =>
-                    setOverrides((prev) => ({
-                      ...prev,
+                    onOverridesChange({
+                      ...overrides,
                       [param.key]: parseFloat(e.target.value) || 0,
-                    }))
+                    })
                   }
                   className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs
                              text-cyan-400 font-mono text-right focus:outline-none focus:border-cyan-600"
@@ -322,7 +325,14 @@ export default function ShotPlanner({ deviceId, onRun, onClose }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-gray-800">
+      <div className="p-3 border-t border-gray-800 space-y-2">
+        <button
+          onClick={() => { onOverridesChange({}); onDurationChange(null) }}
+          className="w-full px-4 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-semibold
+                     transition-colors cursor-pointer"
+        >
+          ↺ Reset Parameters
+        </button>
         <button
           onClick={handleRun}
           className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-sm font-bold

@@ -26,6 +26,12 @@ export default function ControlRoom() {
   const [showPlanner, setShowPlanner] = useState(false)
   const [activeSpeed, setActiveSpeed] = useState(1.0)
 
+  // Persistent Shot Planner state — survives open/close of the drawer
+  const [plannerOverrides, setPlannerOverrides] = useState<Record<string, number | null>>({})
+  const [plannerDuration, setPlannerDuration] = useState<number | null>(null)
+  const [plannerPreset, setPlannerPreset] = useState<PresetId>(routePreset)
+  const [hasCustomProgram, setHasCustomProgram] = useState(false)
+
   const devices = useMemo(() => getDevices(), [])
 
   const [state, controls] = useSimulation(activeDevice, activePreset)
@@ -45,11 +51,18 @@ export default function ControlRoom() {
 
   const handleDeviceChange = (newDeviceId: string) => {
     setActiveDevice(newDeviceId)
+    setPlannerOverrides({})
+    setPlannerDuration(null)
+    setHasCustomProgram(false)
     controls.switchPreset(newDeviceId, activePreset)
   }
 
   const handlePresetChange = (newPreset: PresetId) => {
     setActivePreset(newPreset)
+    setPlannerPreset(newPreset)
+    setPlannerOverrides({})
+    setPlannerDuration(null)
+    setHasCustomProgram(false)
     controls.switchPreset(activeDevice, newPreset)
   }
 
@@ -67,6 +80,13 @@ export default function ControlRoom() {
   const handleRunProgram = (devId: string, json: string) => {
     controls.runProgram(devId, json)
     setShowPlanner(false)
+    setHasCustomProgram(true)
+  }
+
+  const handlePlannerPresetChange = (preset: PresetId) => {
+    setPlannerPreset(preset)
+    setPlannerOverrides({})
+    setPlannerDuration(null)
   }
 
   return (
@@ -135,7 +155,7 @@ export default function ControlRoom() {
             className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs font-semibold
                        transition-colors cursor-pointer"
           >
-            ↺ Reset
+            {hasCustomProgram ? '↺ New Shot' : '↺ Reset'}
           </button>
 
           {/* Speed selector */}
@@ -156,16 +176,14 @@ export default function ControlRoom() {
             ))}
           </div>
 
-          {/* Edit Program button — visible when discharge is finished */}
-          {finished && (
-            <button
-              onClick={() => setShowPlanner(!showPlanner)}
-              className="px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[11px] font-semibold
-                         transition-colors cursor-pointer flex items-center gap-1"
-            >
-              {showPlanner ? '✕ Close' : '📋 Edit'}
-            </button>
-          )}
+          {/* Edit Program button — always visible */}
+          <button
+            onClick={() => setShowPlanner(!showPlanner)}
+            className="px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[11px] font-semibold
+                       transition-colors cursor-pointer flex items-center gap-1"
+          >
+            {showPlanner ? '✕ Close' : '📋 Edit'}
+          </button>
         </div>
 
         {/* Time readout */}
@@ -225,9 +243,14 @@ export default function ControlRoom() {
           deviceId={activeDevice}
           onRun={handleRunProgram}
           onClose={() => setShowPlanner(false)}
+          overrides={plannerOverrides}
+          onOverridesChange={setPlannerOverrides}
+          durationOverride={plannerDuration}
+          onDurationChange={setPlannerDuration}
+          basePreset={plannerPreset}
+          onPresetChange={handlePlannerPresetChange}
         />
       )}
     </div>
   )
 }
-

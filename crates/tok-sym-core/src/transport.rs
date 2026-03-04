@@ -54,6 +54,9 @@ pub struct TransportModel {
     pub elm_energy_loss: f64,
     /// Whether ELMs are suppressed (e.g., by neon seeding / QCE regime)
     pub elm_suppressed: bool,
+    /// ELM display cooldown (s) — keeps elm_active true for multiple timesteps
+    /// so the display can capture it (prevents temporal aliasing at high frame skip)
+    pub elm_cooldown: f64,
     /// Neon impurity fraction (relative to electron density)
     pub neon_fraction: f64,
 }
@@ -82,6 +85,7 @@ impl Default for TransportModel {
             elm_active: false,
             elm_energy_loss: 0.0,
             elm_suppressed: false,
+            elm_cooldown: 0.0,
             neon_fraction: 0.0,
         }
     }
@@ -262,7 +266,15 @@ impl TransportModel {
         self.w_th = self.w_th.max(0.0);
 
         // ── ELM model (Type-I ELMs in H-mode, with neon seeding suppression) ──
-        self.elm_active = false;
+        // Decrement ELM display cooldown first — keeps elm_active true for
+        // multiple timesteps (15 ms ≈ 3 steps) so the animation frame loop
+        // captures it even when skipping 3–12 physics steps per rendered frame.
+        if self.elm_cooldown > 0.0 {
+            self.elm_cooldown -= dt;
+            self.elm_active = self.elm_cooldown > 0.0;
+        } else {
+            self.elm_active = false;
+        }
         self.elm_energy_loss = 0.0;
 
         // Check for ELM suppression via neon seeding
@@ -282,6 +294,7 @@ impl TransportModel {
             if self.elm_timer > elm_period {
                 self.elm_timer = 0.0;
                 self.elm_active = true;
+                self.elm_cooldown = 0.015; // 15 ms = 3 timesteps for display capture
                 // ELM crashes ~3-8% of stored energy
                 let elm_fraction = 0.03 + 0.05 * power_excess.min(1.0);
                 self.elm_energy_loss = elm_fraction * self.w_th;

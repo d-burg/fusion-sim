@@ -137,10 +137,18 @@ export function useSimulation(
     const stepsThisFrame = Math.floor(stepAccRef.current)
     stepAccRef.current -= stepsThisFrame
     let snap: Snapshot | null = null
+    // Track peak Dα and any ELM across all sub-steps so that ELMs
+    // are reliably captured even when many physics steps are skipped.
+    let maxDAlpha = 0
+    let anyElmActive = false
 
     for (let i = 0; i < stepsThisFrame; i++) {
       const json = sim.step(DT)
       snap = JSON.parse(json)
+      if (snap) {
+        if (snap.diagnostics.d_alpha > maxDAlpha) maxDAlpha = snap.diagnostics.d_alpha
+        if (snap.elm_active) anyElmActive = true
+      }
       if (snap && (snap.status === 'Complete' || snap.status === 'Disrupted')) {
         runningRef.current = false
         break
@@ -149,6 +157,7 @@ export function useSimulation(
 
     if (snap) {
       // Append to trace history ring buffer
+      // Use peak d_alpha and any-ELM flag from all sub-steps for reliable display
       const pt: TracePoint = {
         t: snap.time,
         ip: snap.ip,
@@ -158,7 +167,7 @@ export function useSimulation(
         p_input: snap.p_input,
         p_rad: snap.p_rad,
         p_loss: snap.p_loss,
-        d_alpha: snap.diagnostics.d_alpha,
+        d_alpha: maxDAlpha,
         beta_n: snap.beta_n,
         disruption_risk: snap.disruption_risk,
         li: snap.li,
