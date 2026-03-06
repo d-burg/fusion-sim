@@ -469,8 +469,8 @@ mod tests {
             p_nbi: 0.0,
             p_ech: 0.0,
             p_ich: 0.0,
-            kappa: 1.8,
-            delta: 0.55,
+            kappa: 1.75,
+            delta: 0.35,
             d2_puff: 0.0,
             neon_puff: 0.0,
         };
@@ -500,8 +500,8 @@ mod tests {
             p_nbi: 5.0,
             p_ech: 0.0,
             p_ich: 0.0,
-            kappa: 1.8,
-            delta: 0.55,
+            kappa: 1.75,
+            delta: 0.35,
             d2_puff: 0.0,
             neon_puff: 0.0,
         };
@@ -559,8 +559,8 @@ mod tests {
             bt: 2.0,
             ne_target: 0.8,
             p_nbi: 3.0,
-            kappa: 1.8,
-            delta: 0.55,
+            kappa: 1.75,
+            delta: 0.35,
             ..Default::default()
         };
 

@@ -482,4 +482,154 @@ mod tests {
             "Separatrix should have points"
         );
     }
+
+    /// Helper: compute extended grid bounds that cover the device wall outline,
+    /// matching the logic in simulation.rs snapshot().
+    fn device_wall_bounds(
+        device: &crate::devices::Device,
+        eq: &crate::equilibrium::CerfonEquilibrium,
+    ) -> (f64, f64, f64, f64) {
+        let full_eps = device.epsilon();
+        let full_kappa = device.kappa.max(eq.shape.kappa);
+        let margin = 0.15;
+        let mut r_min = device.r0 * (1.0 - full_eps - margin);
+        let mut r_max = device.r0 * (1.0 + full_eps + margin);
+        let mut z_min = device.r0 * (-full_eps * full_kappa - margin);
+        let mut z_max = device.r0 * (full_eps * full_kappa + margin);
+
+        let wall_pad = 0.02;
+        for &(r, z) in &device.wall_outline {
+            r_min = r_min.min(r - wall_pad);
+            r_max = r_max.max(r + wall_pad);
+            z_min = z_min.min(z - wall_pad);
+            z_max = z_max.max(z + wall_pad);
+        }
+        (r_min, r_max, z_min, z_max)
+    }
+
+    /// Verify that separatrix divertor legs extend to near the wall Z-extent
+    /// for all three diverted configurations (LSN, USN, DN).
+    ///
+    /// The grid bounds must cover the device wall outline — without this,
+    /// marching-squares truncates the legs at the grid boundary.
+    #[test]
+    fn test_separatrix_legs_reach_wall() {
+        use crate::devices::{self, MagneticConfig};
+        use crate::equilibrium::{CerfonEquilibrium, ShapeParams};
+
+        let device = devices::diiid();
+        let wall_z_min = device
+            .wall_outline
+            .iter()
+            .map(|&(_, z)| z)
+            .fold(f64::INFINITY, f64::min);
+        let wall_z_max = device
+            .wall_outline
+            .iter()
+            .map(|&(_, z)| z)
+            .fold(f64::NEG_INFINITY, f64::max);
+
+        let configs = [
+            ("LSN", MagneticConfig::LowerSingleNull),
+            ("USN", MagneticConfig::UpperSingleNull),
+            ("DN", MagneticConfig::DoubleNull),
+        ];
+
+        for (label, config) in &configs {
+            let mut shape = ShapeParams::from_device(&device);
+            shape.config = *config;
+            // DN uses slightly reduced epsilon (matching simulation.rs behavior)
+            if *config == MagneticConfig::DoubleNull {
+                shape.epsilon *= 0.88;
+            }
+
+            let eq = CerfonEquilibrium::solve(&shape, device.r0)
+                .unwrap_or_else(|| panic!("{}: equilibrium solve failed", label));
+
+            let bounds = device_wall_bounds(&device, &eq);
+            let sep = extract_separatrix(&eq, 64, 72, Some(bounds));
+
+            assert!(
+                !sep.points.is_empty(),
+                "{}: separatrix should have points",
+                label
+            );
+
+            let sep_z_min = sep
+                .points
+                .iter()
+                .map(|&(_, z)| z)
+                .fold(f64::INFINITY, f64::min);
+            let sep_z_max = sep
+                .points
+                .iter()
+                .map(|&(_, z)| z)
+                .fold(f64::NEG_INFINITY, f64::max);
+
+            // Get X-point locations to verify legs extend well past them
+            let (xpt_lower, xpt_upper) = eq.x_points_physical();
+
+            match config {
+                MagneticConfig::LowerSingleNull => {
+                    let xpt_z = xpt_lower.unwrap().1;
+                    // LSN: lower leg should reach near or past the wall floor
+                    assert!(
+                        sep_z_min <= wall_z_min + 0.05,
+                        "{}: lower leg z_min={:.3} should reach wall floor z={:.3}",
+                        label,
+                        sep_z_min,
+                        wall_z_min
+                    );
+                    // Leg should extend well below the X-point
+                    assert!(
+                        sep_z_min < xpt_z - 0.1,
+                        "{}: lower leg z_min={:.3} should extend below X-point z={:.3}",
+                        label,
+                        sep_z_min,
+                        xpt_z
+                    );
+                }
+                MagneticConfig::UpperSingleNull => {
+                    let xpt_z = xpt_upper.unwrap().1;
+                    // USN: upper leg should reach near or past the wall ceiling
+                    assert!(
+                        sep_z_max >= wall_z_max - 0.05,
+                        "{}: upper leg z_max={:.3} should reach wall ceiling z={:.3}",
+                        label,
+                        sep_z_max,
+                        wall_z_max
+                    );
+                    // Leg should extend well above the X-point
+                    assert!(
+                        sep_z_max > xpt_z + 0.1,
+                        "{}: upper leg z_max={:.3} should extend above X-point z={:.3}",
+                        label,
+                        sep_z_max,
+                        xpt_z
+                    );
+                }
+                MagneticConfig::DoubleNull => {
+                    let lower_z = xpt_lower.unwrap().1;
+                    let upper_z = xpt_upper.unwrap().1;
+                    // DN has reduced epsilon (0.88×), so legs are shorter.
+                    // Verify legs extend well past the X-points (at least 0.2 m).
+                    assert!(
+                        sep_z_min < lower_z - 0.2,
+                        "{}: lower leg z_min={:.3} should extend well below X-point z={:.3}",
+                        label,
+                        sep_z_min,
+                        lower_z
+                    );
+                    assert!(
+                        sep_z_max > upper_z + 0.2,
+                        "{}: upper leg z_max={:.3} should extend well above X-point z={:.3}",
+                        label,
+                        sep_z_max,
+                        upper_z
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
 }

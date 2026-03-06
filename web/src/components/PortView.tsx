@@ -333,6 +333,47 @@ function densifyContour(pts: [number, number][], maxGap: number): [number, numbe
   return result
 }
 
+/**
+ * Truncate a polyline at its first intersection with a closed wall polygon.
+ * Returns a new array containing points up to (and including) the intersection.
+ * If no intersection is found, returns the original path.
+ */
+function truncateAtWall(
+  path: [number, number][],
+  wall: [number, number][],
+): [number, number][] {
+  for (let i = 0; i < path.length - 1; i++) {
+    const [ax, ay] = path[i]
+    const [bx, by] = path[i + 1]
+    const dx = bx - ax, dy = by - ay
+
+    let bestT = Infinity
+    let bestPt: [number, number] | null = null
+    for (let j = 0; j < wall.length; j++) {
+      const nj = (j + 1) % wall.length
+      const [cx, cy] = wall[j]
+      const [ex, ey] = wall[nj]
+      const fx = ex - cx, fy = ey - cy
+      const denom = dx * fy - dy * fx
+      if (Math.abs(denom) < 1e-12) continue
+      const t = ((cx - ax) * fy - (cy - ay) * fx) / denom
+      const u = ((cx - ax) * dy - (cy - ay) * dx) / denom
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1 && t < bestT) {
+        bestT = t
+        bestPt = [ax + t * dx, ay + t * dy]
+      }
+    }
+
+    if (bestPt) {
+      // Return path up to this segment, plus the intersection point
+      const truncated = path.slice(0, i + 1)
+      truncated.push(bestPt)
+      return truncated
+    }
+  }
+  return path
+}
+
 // ── Projected point type ───────────────────────────────────────────────────
 
 interface ScreenPt { sx: number; sy: number; depth: number }
@@ -851,11 +892,19 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         lowerInner.sort((a, b) => b[1] - a[1])
         lowerOuter.sort((a, b) => b[1] - a[1])
         const xPtLower: [number, number] = [xpR, xpZ]
-        if (lowerInner.length >= 2) { lowerInner.unshift(xPtLower); allLegPts.push(lowerInner) }
-        if (lowerOuter.length >= 2) { lowerOuter.unshift(xPtLower); allLegPts.push(lowerOuter) }
-        // Strike points — last = lowest Z in each leg
-        if (lowerInner.length > 0) strikePointRZ.push(lowerInner[lowerInner.length - 1])
-        if (lowerOuter.length > 0) strikePointRZ.push(lowerOuter[lowerOuter.length - 1])
+        if (lowerInner.length >= 2) {
+          lowerInner.unshift(xPtLower)
+          const clipped = resolvedWall ? truncateAtWall(lowerInner, resolvedWall) : lowerInner
+          allLegPts.push(clipped)
+          // Strike point = wall intersection (last point of clipped path)
+          strikePointRZ.push(clipped[clipped.length - 1])
+        }
+        if (lowerOuter.length >= 2) {
+          lowerOuter.unshift(xPtLower)
+          const clipped = resolvedWall ? truncateAtWall(lowerOuter, resolvedWall) : lowerOuter
+          allLegPts.push(clipped)
+          strikePointRZ.push(clipped[clipped.length - 1])
+        }
       }
 
       // Upper divertor legs
@@ -870,11 +919,18 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         upperInner.sort((a, b) => a[1] - b[1])
         upperOuter.sort((a, b) => a[1] - b[1])
         const xPtUpper: [number, number] = [xpUpperR, xpUpperZ]
-        if (upperInner.length >= 2) { upperInner.unshift(xPtUpper); allLegPts.push(upperInner) }
-        if (upperOuter.length >= 2) { upperOuter.unshift(xPtUpper); allLegPts.push(upperOuter) }
-        // Strike points — last = highest Z in each leg
-        if (upperInner.length > 0) strikePointRZ.push(upperInner[upperInner.length - 1])
-        if (upperOuter.length > 0) strikePointRZ.push(upperOuter[upperOuter.length - 1])
+        if (upperInner.length >= 2) {
+          upperInner.unshift(xPtUpper)
+          const clipped = resolvedWall ? truncateAtWall(upperInner, resolvedWall) : upperInner
+          allLegPts.push(clipped)
+          strikePointRZ.push(clipped[clipped.length - 1])
+        }
+        if (upperOuter.length >= 2) {
+          upperOuter.unshift(xPtUpper)
+          const clipped = resolvedWall ? truncateAtWall(upperOuter, resolvedWall) : upperOuter
+          allLegPts.push(clipped)
+          strikePointRZ.push(clipped[clipped.length - 1])
+        }
       }
 
       // Leg color: slightly brighter/whiter than bulk plasma
@@ -998,13 +1054,6 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height, 0, 0, W, H)
     ctx.restore()
 
-    // ── Step 3a: Draw NEAR wall on top of plasma ──
-    // Only the outboard wall (between camera and plasma) occludes.
-    // The far/inboard wall was already drawn before the plasma.
-    if (wallCacheRef.current) {
-      ctx.drawImage(wallCacheRef.current.nearCanvas, 0, 0, canvas.width, canvas.height, 0, 0, W, H)
-    }
-
     // ── Step 3b: Wall illumination from strike points ──
     // When strike points are active, nearby wall tiles glow with warm orange
     // light — visible mostly on the divertor region.
@@ -1079,6 +1128,14 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         }
       }
       ctx.restore()
+    }
+
+    // ── Step 4a: Draw NEAR wall on top of plasma + glow ──
+    // Only the outboard wall (between camera and plasma) occludes.
+    // Drawn AFTER glow effects so the near wall properly occludes glow
+    // at the port plug edges (prevents glow arc on widescreen monitors).
+    if (wallCacheRef.current) {
+      ctx.drawImage(wallCacheRef.current.nearCanvas, 0, 0, canvas.width, canvas.height, 0, 0, W, H)
     }
 
     // ── Step 5: ELM flash overlay ──

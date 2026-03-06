@@ -443,7 +443,7 @@ impl Simulation {
             smoothed_p_rad_frac: 0.0,
             smoothed_li: 1.2,
             eq_nr: 48,
-            eq_nz: 64,
+            eq_nz: 72,
             n_flux_surfaces: 8,
             device,
         }
@@ -697,10 +697,24 @@ impl Simulation {
         let full_eps = self.device.epsilon();
         let full_kappa = self.device.kappa.max(self.equilibrium.shape.kappa);
         let margin = 0.15;
-        let grid_r_min = self.device.r0 * (1.0 - full_eps - margin);
-        let grid_r_max = self.device.r0 * (1.0 + full_eps + margin);
-        let grid_z_min = self.device.r0 * (-full_eps * full_kappa - margin);
-        let grid_z_max = self.device.r0 * (full_eps * full_kappa + margin);
+        let mut grid_r_min = self.device.r0 * (1.0 - full_eps - margin);
+        let mut grid_r_max = self.device.r0 * (1.0 + full_eps + margin);
+        let mut grid_z_min = self.device.r0 * (-full_eps * full_kappa - margin);
+        let mut grid_z_max = self.device.r0 * (full_eps * full_kappa + margin);
+
+        // Extend grid bounds to cover the device wall outline so separatrix
+        // divertor legs can be traced all the way to the wall/divertor targets.
+        // Without this, the marching-squares contour extraction truncates legs
+        // at the grid boundary, which falls short of the divertor floor.
+        if !self.device.wall_outline.is_empty() {
+            let wall_pad = 0.02; // small padding beyond wall
+            for &(r, z) in &self.device.wall_outline {
+                grid_r_min = grid_r_min.min(r - wall_pad);
+                grid_r_max = grid_r_max.max(r + wall_pad);
+                grid_z_min = grid_z_min.min(z - wall_pad);
+                grid_z_max = grid_z_max.max(z + wall_pad);
+            }
+        }
 
         // Generate flux surfaces using device-level grid bounds
         let mut flux_surfaces = if self.actual_ip > 0.1 {
@@ -1003,9 +1017,9 @@ mod tests {
     #[test]
     fn test_sample_lcfs() {
         let r0 = 1.67;
-        let a = 0.59;
-        let kappa = 1.8;
-        let delta = 0.55;
+        let a = 0.56;
+        let kappa = 1.75;
+        let delta = 0.35;
         let points = sample_lcfs(r0, a, kappa, delta, 24);
         assert_eq!(points.len(), 24);
 
