@@ -525,7 +525,14 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     const lcfsSorted = [...edgeSurface].sort((a, b) => {
       return Math.atan2(a[1] - cZ, a[0] - cR) - Math.atan2(b[1] - cZ, b[0] - cR)
     })
-    const lcfs = subsample(lcfsSorted, 35)
+    const lcfsRaw = subsample(lcfsSorted, 35)
+    // Densify: the 35-point subsample leaves large gaps (up to 0.2 m) at the
+    // inboard midplane where the contour curvature is tight.  This causes a
+    // 30+ pixel screen gap between consecutive points — the limb glow stroke
+    // and emission shells can't bridge it, creating the dark toroidal band.
+    // Densifying to ≤0.10 m between points adds ~4 interpolated points at the
+    // inboard midplane, closing the gap.
+    const lcfs = densifyContour(lcfsRaw, 0.10)
 
     // Extract below-X-point separatrix points for divertor leg rendering.
     // Use the FULL (un-subsampled) actual separatrix for smooth legs.
@@ -741,28 +748,46 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
 
         const slicePts = grid[s]
 
-        // Draw glow passes per sector (8 arc segments, each with its own alpha)
+        // Draw glow passes per sector (arc segments, each with its own alpha).
+        // The LCFS contour is sorted by poloidal angle; the wrap-around
+        // segment (last point → first point) falls at the inboard midplane.
+        // We draw LIMB_N_SECTORS+1 segments: the +1 connects the last point
+        // back to the first, closing the contour and preventing a dark gap.
         for (const pass of LIMB_GLOW_PASSES) {
           oCtx.lineWidth = pass.lineWidth
           oCtx.lineCap = 'round'
           oCtx.lineJoin = 'round'
 
-          for (let sec = 0; sec < LIMB_N_SECTORS; sec++) {
-            const segAlpha = sliceLimbAlpha * pass.alphaScale * sectorLimb[sec]
+          for (let sec = 0; sec <= LIMB_N_SECTORS; sec++) {
+            // The extra segment (sec == LIMB_N_SECTORS) closes the contour:
+            // it strokes from the last sector's end back to the first point.
+            const isWrap = sec === LIMB_N_SECTORS
+            const secIdx = isWrap ? LIMB_N_SECTORS - 1 : sec  // use last sector's alpha
+            const segAlpha = sliceLimbAlpha * pass.alphaScale * sectorLimb[secIdx]
             if (segAlpha < 0.0003) continue
 
-            const j0 = sec * sectorSize
-            const j1 = Math.min((sec + 1) * sectorSize + 1, lcfs.length)
+            if (isWrap) {
+              // Wrap-around: stroke from last point to first point
+              const pLast = slicePts[lcfs.length - 1]
+              const pFirst = slicePts[0]
+              if (!pLast || !pFirst) continue
+              oCtx.beginPath()
+              oCtx.moveTo(pLast.sx, pLast.sy)
+              oCtx.lineTo(pFirst.sx, pFirst.sy)
+            } else {
+              const j0 = sec * sectorSize
+              const j1 = Math.min((sec + 1) * sectorSize + 1, lcfs.length)
 
-            oCtx.beginPath()
-            let started = false
-            for (let j = j0; j < j1; j++) {
-              const p = slicePts[j]
-              if (!p) continue
-              if (!started) { oCtx.moveTo(p.sx, p.sy); started = true }
-              else oCtx.lineTo(p.sx, p.sy)
+              oCtx.beginPath()
+              let started = false
+              for (let j = j0; j < j1; j++) {
+                const p = slicePts[j]
+                if (!p) continue
+                if (!started) { oCtx.moveTo(p.sx, p.sy); started = true }
+                else oCtx.lineTo(p.sx, p.sy)
+              }
+              if (!started) continue
             }
-            if (!started) continue
             oCtx.strokeStyle = `rgba(${sr},${sg},${sb},${segAlpha.toFixed(4)})`
             oCtx.stroke()
           }
