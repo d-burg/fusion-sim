@@ -72,13 +72,13 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     const zMin = Math.min(...zs)
     const zMax = Math.max(...zs)
 
-    const padFrac = 0.08
     const dataW = rMax - rMin
     const dataH = zMax - zMin
-    const rLo = rMin - dataW * padFrac
-    const rHi = rMax + dataW * padFrac
-    const zLo = zMin - dataH * padFrac
-    const zHi = zMax + dataH * padFrac
+    // Asymmetric padding: extra room on left & bottom for axis labels
+    const rLo = rMin - dataW * 0.14
+    const rHi = rMax + dataW * 0.06
+    const zLo = zMin - dataH * 0.14
+    const zHi = zMax + dataH * 0.06
 
     const scaleR = W / (rHi - rLo)
     const scaleZ = H / (zHi - zLo)
@@ -187,6 +187,89 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     if (snapshot && (snapshot.xpoint_upper_r ?? 0) > 0) {
       drawXMark(snapshot.xpoint_upper_r, snapshot.xpoint_upper_z)
     }
+
+    // --- R / Z Axes ---
+    // Pick a "nice" tick step that avoids overcrowding at small panel sizes.
+    // pixelsPerUnit lets us adapt to actual rendered size.
+    const niceStep = (range: number, pixelsPerUnit: number) => {
+      // Target ~40-60 px between ticks
+      const candidates = [0.1, 0.2, 0.5, 1.0, 2.0]
+      for (const c of candidates) {
+        if (c * pixelsPerUnit >= 40) return c
+      }
+      return 2.0
+    }
+
+    ctx.lineWidth = 0.5
+
+    // R axis ticks (bottom)
+    const rStep = niceStep(rMax - rMin, scale)
+    let rTick = Math.ceil(rMin / rStep) * rStep
+    rTick = Math.round(rTick * 1000) / 1000
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    const bottomEdge = toY(zMin)
+    while (rTick <= rMax + rStep * 0.01) {
+      const x = toX(rTick)
+      // Faint vertical grid line
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)'
+      ctx.beginPath()
+      ctx.moveTo(x, toY(zMax))
+      ctx.lineTo(x, bottomEdge)
+      ctx.stroke()
+      // Tick mark
+      ctx.strokeStyle = 'rgba(107,114,128,0.5)'
+      ctx.beginPath()
+      ctx.moveTo(x, bottomEdge)
+      ctx.lineTo(x, bottomEdge + 4)
+      ctx.stroke()
+      // Label
+      ctx.fillStyle = '#6b7280'
+      ctx.font = '9px monospace'
+      ctx.fillText(rTick.toFixed(1), x, bottomEdge + 5)
+      rTick = Math.round((rTick + rStep) * 1000) / 1000
+    }
+
+    // Z axis ticks (left)
+    const zStep = niceStep(zMax - zMin, scale)
+    let zTick = Math.ceil(zMin / zStep) * zStep
+    zTick = Math.round(zTick * 1000) / 1000
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    const leftEdge = toX(rMin)
+    while (zTick <= zMax + zStep * 0.01) {
+      const y = toY(zTick)
+      // Faint horizontal grid line
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)'
+      ctx.beginPath()
+      ctx.moveTo(leftEdge, y)
+      ctx.lineTo(toX(rMax), y)
+      ctx.stroke()
+      // Tick mark
+      ctx.strokeStyle = 'rgba(107,114,128,0.5)'
+      ctx.beginPath()
+      ctx.moveTo(leftEdge, y)
+      ctx.lineTo(leftEdge - 4, y)
+      ctx.stroke()
+      // Label
+      ctx.fillStyle = '#6b7280'
+      ctx.font = '9px monospace'
+      ctx.fillText(zTick.toFixed(1), leftEdge - 6, y)
+      zTick = Math.round((zTick + zStep) * 1000) / 1000
+    }
+
+    // Axis unit labels
+    ctx.fillStyle = '#4b5563'
+    ctx.font = '9px monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText('R (m)', (toX(rMin) + toX(rMax)) / 2, bottomEdge + 16)
+    ctx.save()
+    ctx.translate(leftEdge - 22, (toY(zMax) + toY(zMin)) / 2)
+    ctx.rotate(-Math.PI / 2)
+    ctx.textBaseline = 'middle'
+    ctx.fillText('Z (m)', 0, 0)
+    ctx.restore()
 
     // --- Labels ---
     ctx.fillStyle = '#9ca3af'

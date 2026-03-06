@@ -308,8 +308,8 @@ fn assemble_lsn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
 
     // X-point location for LSN
     let alpha = shape.x_point_alpha.unwrap_or(delta.asin());
-    let x_xpt = 1.0 - 1.05 * eps * delta; // slightly inboard due to Shafranov shift
-    let y_xpt = -1.05 * eps * kappa; // below midplane
+    let x_xpt = 1.0 - 1.01 * eps * delta; // slightly inboard due to Shafranov shift
+    let y_xpt = -1.01 * eps * kappa; // below midplane
 
     // Upper crown (top of plasma)
     let x_top = 1.0 - eps * delta;
@@ -430,8 +430,8 @@ fn assemble_usn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
 
     // X-point above midplane for USN
     let alpha = shape.x_point_alpha.unwrap_or(delta.asin());
-    let x_xpt = 1.0 - 1.05 * eps * delta;
-    let y_xpt = 1.05 * eps * kappa; // POSITIVE — above midplane
+    let x_xpt = 1.0 - 1.01 * eps * delta;
+    let y_xpt = 1.01 * eps * kappa; // POSITIVE — above midplane
 
     // Lower crown (bottom of plasma) — mirror of LSN upper crown
     let x_bot = 1.0 - eps * delta;
@@ -549,8 +549,8 @@ fn assemble_dn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
     let y_mid = 0.0;
 
     // X-point location (lower) — upper is symmetric at +y_xpt
-    let x_xpt = 1.0 - 1.05 * eps * delta;
-    let y_xpt = -1.05 * eps * kappa;
+    let x_xpt = 1.0 - 1.01 * eps * delta;
+    let y_xpt = -1.01 * eps * kappa;
 
     let n1 = -(1.0 + sq).powi(2) / (eps * kappa * kappa);
     let n2 = (1.0 - sq).powi(2) / (eps * kappa * kappa);
@@ -856,14 +856,14 @@ impl CerfonEquilibrium {
         let eps = self.shape.epsilon;
         let kappa = self.shape.kappa;
         let delta = self.shape.delta;
-        let x_xpt = 1.0 - 1.05 * eps * delta;
+        let x_xpt = 1.0 - 1.01 * eps * delta;
         match self.shape.config {
             MagneticConfig::UpperSingleNull => {
-                let y_xpt = 1.05 * eps * kappa;
+                let y_xpt = 1.01 * eps * kappa;
                 (x_xpt * self.r0, y_xpt * self.r0)
             }
             _ => {
-                let y_xpt = -1.05 * eps * kappa;
+                let y_xpt = -1.01 * eps * kappa;
                 (x_xpt * self.r0, y_xpt * self.r0)
             }
         }
@@ -875,10 +875,10 @@ impl CerfonEquilibrium {
         let eps = self.shape.epsilon;
         let kappa = self.shape.kappa;
         let delta = self.shape.delta;
-        let x_xpt = 1.0 - 1.05 * eps * delta;
+        let x_xpt = 1.0 - 1.01 * eps * delta;
         let r_xpt = x_xpt * self.r0;
-        let z_lower = -1.05 * eps * kappa * self.r0;
-        let z_upper = 1.05 * eps * kappa * self.r0;
+        let z_lower = -1.01 * eps * kappa * self.r0;
+        let z_upper = 1.01 * eps * kappa * self.r0;
         match self.shape.config {
             MagneticConfig::Limited => (None, None),
             MagneticConfig::LowerSingleNull => (Some((r_xpt, z_lower)), None),
