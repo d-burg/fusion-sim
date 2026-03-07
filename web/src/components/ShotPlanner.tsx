@@ -50,6 +50,14 @@ const SCALAR_PARAMS: ScalarParam[] = [
   { key: 'delta', label: 'Triangularity δ', unit: '', waveformKey: 'delta', min: 0.0, max: 0.8, step: 0.05, precision: 2 },
 ]
 
+/* ─── Per-device duration limits ───────────────────────── */
+
+const DURATION_MAX: Record<string, number> = {
+  diiid: 10,
+  jet:   60,
+  iter:  400,
+}
+
 /* ─── Helpers ───────────────────────────────────────────── */
 
 /** Find the flat-top value of a waveform (the maximum value). */
@@ -286,8 +294,8 @@ export default function ShotPlanner({
             <input
               type="range"
               min={1}
-              max={30}
-              step={0.5}
+              max={DURATION_MAX[deviceId] ?? 30}
+              step={DURATION_MAX[deviceId] && DURATION_MAX[deviceId] > 30 ? 5 : 0.5}
               value={effectiveDuration}
               onChange={(e) => onDurationChange(parseFloat(e.target.value))}
               className="flex-1 accent-cyan-500"
@@ -295,8 +303,8 @@ export default function ShotPlanner({
             <input
               type="number"
               min={1}
-              max={30}
-              step={0.5}
+              max={DURATION_MAX[deviceId] ?? 30}
+              step={DURATION_MAX[deviceId] && DURATION_MAX[deviceId] > 30 ? 5 : 0.5}
               value={effectiveDuration}
               onChange={(e) => onDurationChange(parseFloat(e.target.value) || baseProgram.duration)}
               className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs

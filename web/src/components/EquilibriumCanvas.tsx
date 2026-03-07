@@ -102,6 +102,15 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       ctx.closePath()
     }
 
+    // Compute jump threshold for contour rendering.  The Rust contour
+    // extraction uses a 48×72 marching-squares grid whose cell size scales
+    // with the device.  Adjacent contour points are at most one cell
+    // diagonal apart, so the threshold must exceed √(dr²+dz²).  We use
+    // 3× the estimated diagonal to be safe.
+    const estDr = dataW / 47
+    const estDz = dataH / 71
+    const jumpThresh = 3.0 * Math.sqrt(estDr * estDr + estDz * estDz)
+
     // --- Draw flux surfaces (clipped to wall) ---
     if (snapshot && snapshot.flux_surfaces && snapshot.flux_surfaces.length > 0) {
       ctx.save()
@@ -118,7 +127,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
         ctx.strokeStyle = fluxColor(t)
         ctx.lineWidth = 1.2
         ctx.globalAlpha = 0.7
-        drawContour(ctx, contour, toX, toY)
+        drawContour(ctx, contour, toX, toY, jumpThresh)
       }
       ctx.globalAlpha = 1.0
       ctx.restore()
@@ -134,7 +143,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       ctx.lineWidth = 2
       ctx.shadowColor = '#facc15'
       ctx.shadowBlur = 6
-      drawContour(ctx, snapshot.separatrix, toX, toY)
+      drawContour(ctx, snapshot.separatrix, toX, toY, jumpThresh)
       ctx.shadowBlur = 0
       ctx.restore()
     }
@@ -289,6 +298,9 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
         ctx.fillStyle = '#9ca3af'
         ctx.fillText('L-mode', labelX, labelY)
       }
+      labelY -= 16
+      ctx.fillStyle = '#9ca3af'
+      ctx.fillText(`Bt = ${snapshot.bt.toFixed(2)} T`, labelX, labelY)
       labelY -= 16
       if (snapshot.is_limited) {
         ctx.fillStyle = '#f59e0b'

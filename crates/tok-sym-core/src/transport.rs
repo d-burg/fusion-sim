@@ -202,8 +202,14 @@ impl TransportModel {
         self.impurity_fraction = self.impurity_fraction.clamp(0.0, 0.1); // max 10% impurity fraction
 
         // ── q95 ──
-        // Cylindrical safety factor with shape correction
-        self.q95 = 5.0 * a * a * bt * (1.0 + kappa * kappa) / (2.0 * r0 * ip);
+        // Cylindrical safety factor with elongation + triangularity correction.
+        // Standard shape factor: f_s = (1 + κ²·(1 + 2δ² − 1.2δ³)) / 2
+        // Without the δ correction, highly shaped plasmas (ITER: κ=2.1, δ=0.55)
+        // get unrealistically low q95 values.
+        let delta = prog.delta;
+        let shape_factor =
+            (1.0 + kappa * kappa * (1.0 + 2.0 * delta * delta - 1.2 * delta.powi(3))) / 2.0;
+        self.q95 = 5.0 * a * a * bt * shape_factor / (r0 * ip);
         self.q95 = self.q95.max(1.0);
 
         // ── Internal inductance ──
@@ -254,14 +260,24 @@ impl TransportModel {
 
         // ── L-H transition threshold ──
         // Martin 2008 scaling: P_LH = 0.0488 * ne20^0.717 * Bt^0.803 * S^0.941
+        // Device-specific p_lh_factor corrects for isotope effects (D-T ≈ 0.8×)
+        // and known overestimation at large surface areas (ITER).
         self.p_lh_threshold =
-            0.0488 * self.ne_bar.powf(0.717) * bt.powf(0.803) * surface.powf(0.941);
+            0.0488 * self.ne_bar.powf(0.717) * bt.powf(0.803) * surface.powf(0.941)
+            * device.p_lh_factor;
 
         // ── H-mode logic ──
         let net_heating = self.p_input - self.p_rad;
+        // Minimum density for H-mode access (low-density branch protection).
+        // Martin scaling → 0 at ne → 0, but real plasmas need sufficient density
+        // and sufficient current for proper edge transport barrier formation.
+        let ne_gw = device.greenwald_density(ip);
+        let min_ne_for_hmode = 0.20 * ne_gw.max(0.5); // require ≥ 20% Greenwald (floor 0.5 for safety)
         if !self.in_hmode {
-            // L → H transition
-            if net_heating > self.p_lh_threshold && self.q95 > 2.5 && ip > 0.3 {
+            // L → H transition: require sufficient power, q95, current, and density
+            if net_heating > self.p_lh_threshold && self.q95 > 2.5
+                && ip >= 0.3 * device.ip_max
+                && self.ne_bar > min_ne_for_hmode {
                 self.in_hmode = true;
                 self.h_factor = 1.0;
                 self.elm_timer = 0.0;
@@ -361,9 +377,9 @@ impl TransportModel {
             // Pre-compute jittered period for the next ELM cycle if needed
             if self.elm_next_period <= 0.0 {
                 let (mean_freq, jitter_frac) = if elm_regime == 1 {
-                    // Type I: 5–25 Hz, ±30% timing jitter
+                    // Type I: 5–25 Hz, ±15% timing jitter
                     // Impurity seeding degrades pedestal → lengthens inter-ELM period
-                    ((5.0 + 20.0 * power_excess.min(1.0)) * impurity_degradation, 0.3)
+                    ((5.0 + 20.0 * power_excess.min(1.0)) * impurity_degradation, 0.15)
                 } else {
                     // Type II: 80–200 Hz, ±50% timing jitter
                     (80.0 + 120.0 * power_excess.min(1.0), 0.5)
@@ -386,7 +402,7 @@ impl TransportModel {
                     self.elm_type = 1;
                     self.elm_cooldown = 0.010;
                     let elm_fraction = (0.05 + 0.08 * power_excess.min(1.0))
-                        * (0.8 + 0.4 * rng_amp); // ±20% amplitude variation
+                        * (0.9 + 0.2 * rng_amp); // ±10% amplitude variation
                     self.elm_energy_loss = elm_fraction * self.w_th;
                     self.elm_ped_crash_frac = elm_fraction * 2.5; // amplified for pedestal
                     self.w_th *= 1.0 - elm_fraction;

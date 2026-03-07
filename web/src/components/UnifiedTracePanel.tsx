@@ -13,13 +13,14 @@ interface TraceConfig {
   color: string
   targetKey?: 'ip' | 'beta_n'
   clampToTarget?: boolean
+  yMin?: number // hard floor for y-axis (e.g. li ≥ 0)
   yMax?: number // hard ceiling for y-axis (e.g. q95 ≤ 10)
 }
 
 const ALL_TRACES: TraceConfig[] = [
   { key: 'ip',               label: 'Iₚ',      unit: 'MA',       color: '#22d3ee', targetKey: 'ip' },
   { key: 'beta_n',           label: 'βN',       unit: '',         color: '#fbbf24', targetKey: 'beta_n', clampToTarget: true },
-  { key: 'li',               label: 'li',       unit: '',         color: '#38bdf8' },
+  { key: 'li',               label: 'li',       unit: '',         color: '#38bdf8', yMin: 0, yMax: 1.5 },
   { key: 'd_alpha',          label: 'Dα',       unit: 'a.u.',     color: '#fb7185' },
   { key: 'q95',              label: 'q95',      unit: '',         color: '#a78bfa', yMax: 10 },
   { key: 'h_factor',         label: 'H98',      unit: '',         color: '#34d399' },
@@ -53,8 +54,8 @@ interface Props {
   deviceId: string
   duration: number
   finished: boolean
-  scrubIndex: number | null
-  onScrub: (index: number | null) => void
+  scrubTime: number | null
+  onScrub: (time: number | null) => void
   elmActive: boolean
 }
 
@@ -64,7 +65,7 @@ export default function UnifiedTracePanel({
   deviceId,
   duration,
   finished,
-  scrubIndex,
+  scrubTime,
   onScrub,
   elmActive,
 }: Props) {
@@ -208,14 +209,17 @@ export default function UnifiedTracePanel({
         vMin -= 0.5
         vMax += 0.5
       }
-      // Apply hard y-axis ceiling if configured (e.g. q95 ≤ 10)
-      if (cfg.yMax !== undefined && vMax > cfg.yMax) {
+      // Apply hard y-axis floor/ceiling if configured
+      if (cfg.yMin !== undefined) {
+        vMin = cfg.yMin
+      }
+      if (cfg.yMax !== undefined) {
         vMax = cfg.yMax
       }
-      // Add 10% padding
+      // Add 10% padding (only on sides that don't have a hard limit)
       const range = vMax - vMin
-      vMin -= range * 0.1
-      vMax += range * 0.1
+      if (cfg.yMin === undefined) vMin -= range * 0.1
+      if (cfg.yMax === undefined) vMax += range * 0.1
 
       const toY = (v: number) => y0 + h - ((v - vMin) / (vMax - vMin)) * h
 
@@ -270,7 +274,20 @@ export default function UnifiedTracePanel({
       ctx.fillText(cfg.label, MARGIN_LEFT - 8, y0 + h / 2)
 
       // ── Current / scrubbed value readout ──
-      const displayIdx = scrubIndex !== null ? scrubIndex : history.length - 1
+      // When scrubbing, binary search for closest time in history
+      let displayIdx = history.length - 1
+      if (scrubTime !== null && history.length > 0) {
+        let lo = 0, hi = history.length - 1
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1
+          if (history[mid].t < scrubTime) lo = mid + 1
+          else hi = mid
+        }
+        displayIdx = lo
+        if (lo > 0 && Math.abs(history[lo - 1].t - scrubTime) < Math.abs(history[lo].t - scrubTime)) {
+          displayIdx = lo - 1
+        }
+      }
       if (displayIdx >= 0 && displayIdx < history.length) {
         const val = vals[displayIdx]
         ctx.fillStyle = cfg.color
@@ -315,10 +332,9 @@ export default function UnifiedTracePanel({
 
     // ── "Now" line or scrub line ──
     const totalH = numTraces * ROW_H
-    if (scrubIndex !== null && scrubIndex >= 0 && scrubIndex < history.length) {
-      // Scrub cursor line
-      const scrubT = history[scrubIndex].t
-      const sx = toX(scrubT)
+    if (scrubTime !== null) {
+      // Scrub cursor line — use time directly
+      const sx = toX(scrubTime)
       ctx.strokeStyle = '#ffffff'
       ctx.lineWidth = 1.5
       ctx.globalAlpha = 0.8
@@ -332,7 +348,7 @@ export default function UnifiedTracePanel({
       ctx.fillStyle = '#ffffff'
       ctx.font = '10px monospace'
       ctx.textAlign = 'center'
-      ctx.fillText(`${scrubT.toFixed(2)}s`, sx, 12)
+      ctx.fillText(`${scrubTime.toFixed(2)}s`, sx, 12)
     } else if (history.length > 0) {
       // "Now" line (dashed white)
       const nowX = toX(history[history.length - 1].t)
@@ -360,7 +376,7 @@ export default function UnifiedTracePanel({
       const x = toX(t)
       ctx.fillText(`${t.toFixed(0)}`, x, totalH - 12)
     }
-  }, [history, duration, targets, scrubIndex, elmActive, activeTraces])
+  }, [history, duration, targets, scrubTime, elmActive, activeTraces])
 
   // Redraw on data changes
   useEffect(() => {
@@ -395,19 +411,10 @@ export default function UnifiedTracePanel({
         return
       }
 
-      // Find nearest history index by time
-      let bestIdx = 0
-      let bestDist = Infinity
-      for (let i = 0; i < history.length; i++) {
-        const dist = Math.abs(history[i].t - t)
-        if (dist < bestDist) {
-          bestDist = dist
-          bestIdx = i
-        }
-      }
-      onScrub(bestIdx)
+      // Pass time directly — useSimulation handles snapshot lookup
+      onScrub(t)
     },
-    [finished, history, duration, onScrub],
+    [finished, history.length, duration, onScrub],
   )
 
   const handleMouseLeave = useCallback(() => {

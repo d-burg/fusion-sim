@@ -174,9 +174,9 @@ function getPortConfig(deviceId?: string, r0?: number, a?: number): PortConfig {
 // more tenuous and physically correct (optically thinner at higher Te).
 const DEVICE_OPACITY_SCALE: Record<string, number> = {
   diiid:   0.45,   // medium-size — keep plasma subtle / tenuous
-  iter:    0.55,   // very large, very hot → more transparent than DIII-D
+  iter:    0.04,   // basically invisible bulk — strike points dominate
   sparc:   0.55,   // compact but high-field / high-Te
-  jet:     0.60,   // large conventional tokamak
+  jet:     0.06,   // basically invisible bulk — strike points dominate
 }
 const DEFAULT_OPACITY_SCALE = 0.65
 
@@ -184,9 +184,9 @@ const DEFAULT_OPACITY_SCALE = 0.65
 // Higher-power devices produce brighter divertor strike-point emission.
 const DEVICE_POWER_SCALE: Record<string, number> = {
   diiid:   0.18,  // ~5–15 MW NBI — very subtle hint
-  iter:    1.0,   // ~50 MW — very bright strike points
+  iter:    1.8,   // ~50 MW — very bright deep red strike rings
   sparc:   0.8,   // ~25 MW in compact device
-  jet:     0.6,   // ~25 MW conventional
+  jet:     1.3,   // ~25 MW — bright red, slightly less than ITER
 }
 const DEFAULT_POWER_SCALE = 0.5
 
@@ -1022,9 +1022,9 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     wallGlowSprite.width = 32; wallGlowSprite.height = 32
     const wgCtx = wallGlowSprite.getContext('2d')!
     const wgGrad = wgCtx.createRadialGradient(16, 16, 0, 16, 16, 16)
-    wgGrad.addColorStop(0, 'rgba(255,190,120,1.0)')
-    wgGrad.addColorStop(0.4, 'rgba(220,120,50,0.4)')
-    wgGrad.addColorStop(1, 'rgba(140,60,20,0)')
+    wgGrad.addColorStop(0, 'rgba(255,40,20,1.0)')
+    wgGrad.addColorStop(0.4, 'rgba(200,20,10,0.5)')
+    wgGrad.addColorStop(1, 'rgba(140,10,5,0)')
     wgCtx.fillStyle = wgGrad
     wgCtx.fillRect(0, 0, 32, 32)
 
@@ -1032,10 +1032,10 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     strikeGlowSprite.width = 32; strikeGlowSprite.height = 32
     const sgCtx = strikeGlowSprite.getContext('2d')!
     const sgGrad = sgCtx.createRadialGradient(16, 16, 0, 16, 16, 16)
-    sgGrad.addColorStop(0, 'rgba(255,220,170,1.0)')      // alpha /2 (was 2.0×)
-    sgGrad.addColorStop(0.3, 'rgba(255,160,90,0.6)')     // alpha /2 (was 1.2×)
-    sgGrad.addColorStop(0.6, 'rgba(230,100,40,0.2)')     // alpha /2 (was 0.4×)
-    sgGrad.addColorStop(1, 'rgba(160,50,15,0)')
+    sgGrad.addColorStop(0, 'rgba(255,60,30,1.0)')         // bright red-hot core
+    sgGrad.addColorStop(0.3, 'rgba(255,30,15,0.7)')      // intense red
+    sgGrad.addColorStop(0.6, 'rgba(200,15,5,0.25)')      // deep red
+    sgGrad.addColorStop(1, 'rgba(140,5,0,0)')
     sgCtx.fillStyle = sgGrad
     sgCtx.fillRect(0, 0, 32, 32)
 
@@ -1072,7 +1072,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     // Brighter than before, but tightly confined to the plate region.
     if (strikePointRZ.length > 0 && strikeFade > 0.001) {
       const powerScale = (deviceId && DEVICE_POWER_SCALE[deviceId]) ?? DEFAULT_POWER_SCALE
-      const illumAlpha = 0.10 * powerScale * strikeFade  // brighter than before (was 0.06)
+      const illumAlpha = 0.18 * powerScale * strikeFade  // brighter for deep red glow
 
       if (illumAlpha > 0.001) {
         ctx.save()
@@ -1088,8 +1088,8 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
             const gAlpha = illumAlpha * (0.4 + depthFrac * 0.6)
             if (gAlpha < 0.001) continue
 
-            // Tight glow radius — comparable to divertor leg width on screen
-            const glowR = 5 + depthFrac * 7
+            // Broad glow radius for deep red wall illumination
+            const glowR = 8 + depthFrac * 12
             ctx.globalAlpha = gAlpha
             ctx.drawImage(wallGlowSprite, 0, 0, 32, 32,
               sx - glowR, sy - glowR, glowR * 2, glowR * 2)
@@ -1104,7 +1104,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     // comparable in width to the divertor legs — no wider.
     if (strikePointRZ.length > 0 && strikeFade > 0.001) {
       const powerScale = (deviceId && DEVICE_POWER_SCALE[deviceId]) ?? DEFAULT_POWER_SCALE
-      const strikeAlpha = 0.20 * powerScale * opacityScale * strikeFade  // brighter (was 0.12)
+      const strikeAlpha = 0.35 * powerScale * strikeFade  // decoupled from opacityScale for bright strikes
 
       ctx.save()
       ctx.globalCompositeOperation = 'lighter'
@@ -1119,8 +1119,8 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
           const gAlpha = strikeAlpha * (0.85 + depthFrac * 0.15)
           if (gAlpha < 0.001) continue
 
-          // Tight glow — matches divertor leg width on screen
-          const glowR = 6 + depthFrac * 8
+          // Broad deep red strike glow
+          const glowR = 10 + depthFrac * 14
           // Sprite was rendered with alphas normalized by /2.0, so multiply back
           ctx.globalAlpha = gAlpha * 2.0
           ctx.drawImage(strikeGlowSprite, 0, 0, 32, 32,

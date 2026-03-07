@@ -12,6 +12,10 @@ const DEVICE_META: Record<string, { location: string; desc: string }> = {
     location: 'Cadarache, France',
     desc: "The world's largest tokamak — designed to demonstrate 500 MW of fusion power (Q ≥ 10).",
   },
+  jet: {
+    location: 'Culham, UK',
+    desc: "Europe's largest tokamak — holds the world record for fusion energy with its ITER-Like Wall.",
+  },
 }
 
 /** Tiny SVG cross-section silhouette from the wall outline. */
@@ -77,7 +81,7 @@ export default function DeviceSelect() {
       </div>
 
       {/* Device cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full">
         {devices.map((d) => {
           const meta = DEVICE_META[d.id] ?? { location: '', desc: '' }
           return (

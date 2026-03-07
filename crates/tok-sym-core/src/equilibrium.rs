@@ -64,6 +64,9 @@ pub struct CerfonEquilibrium {
     pub a_param: f64,
     /// Major radius R₀ (m) for denormalization
     pub r0: f64,
+    /// Vertical offset of plasma center (m).
+    /// Z_physical = z0 + y * R₀  (y is the normalized vertical coordinate)
+    pub z0: f64,
     /// Shape parameters used
     pub shape: ShapeParams,
     /// Magnetic axis location (x_axis, y_axis) in normalized coords
@@ -678,7 +681,7 @@ fn solve_12x12(mat: &[f64; 144], rhs: &[f64; 12]) -> Option<[f64; 12]> {
 
 impl CerfonEquilibrium {
     /// Solve for the equilibrium coefficients given shape parameters.
-    pub fn solve(shape: &ShapeParams, r0: f64) -> Option<Self> {
+    pub fn solve(shape: &ShapeParams, r0: f64, z0: f64) -> Option<Self> {
         let (mat, rhs) = match shape.config {
             MagneticConfig::LowerSingleNull | MagneticConfig::Limited => {
                 assemble_lsn_system(shape)
@@ -693,6 +696,7 @@ impl CerfonEquilibrium {
             coeffs,
             a_param: shape.a_param,
             r0,
+            z0,
             shape: shape.clone(),
             axis: (1.0, 0.0), // initial guess
             psi_axis: 0.0,
@@ -708,7 +712,7 @@ impl CerfonEquilibrium {
     /// Solve equilibrium for a given device with default shape.
     pub fn from_device(device: &Device) -> Option<Self> {
         let shape = ShapeParams::from_device(device);
-        Self::solve(&shape, device.r0)
+        Self::solve(&shape, device.r0, device.z0)
     }
 
     /// Evaluate ψ at normalized coordinates (x, y).
@@ -726,9 +730,11 @@ impl CerfonEquilibrium {
     }
 
     /// Evaluate ψ at physical coordinates (R, Z) in meters.
+    /// The z0 offset is subtracted so the equilibrium "sees" coordinates
+    /// relative to the plasma center.
     #[inline]
     pub fn psi(&self, r: f64, z: f64) -> f64 {
-        self.psi_normalized(r / self.r0, z / self.r0)
+        self.psi_normalized(r / self.r0, (z - self.z0) / self.r0)
     }
 
     /// Evaluate normalized poloidal flux ψ_N ∈ [0, 1] where 0 = axis, 1 = separatrix.
@@ -847,7 +853,7 @@ impl CerfonEquilibrium {
 
     /// Get the magnetic axis in physical coordinates (R, Z) in meters.
     pub fn axis_physical(&self) -> (f64, f64) {
-        (self.axis.0 * self.r0, self.axis.1 * self.r0)
+        (self.axis.0 * self.r0, self.axis.1 * self.r0 + self.z0)
     }
 
     /// Get the primary X-point location in physical coordinates.
@@ -860,11 +866,11 @@ impl CerfonEquilibrium {
         match self.shape.config {
             MagneticConfig::UpperSingleNull => {
                 let y_xpt = 1.01 * eps * kappa;
-                (x_xpt * self.r0, y_xpt * self.r0)
+                (x_xpt * self.r0, y_xpt * self.r0 + self.z0)
             }
             _ => {
                 let y_xpt = -1.01 * eps * kappa;
-                (x_xpt * self.r0, y_xpt * self.r0)
+                (x_xpt * self.r0, y_xpt * self.r0 + self.z0)
             }
         }
     }
@@ -877,8 +883,8 @@ impl CerfonEquilibrium {
         let delta = self.shape.delta;
         let x_xpt = 1.0 - 1.01 * eps * delta;
         let r_xpt = x_xpt * self.r0;
-        let z_lower = -1.01 * eps * kappa * self.r0;
-        let z_upper = 1.01 * eps * kappa * self.r0;
+        let z_lower = -1.01 * eps * kappa * self.r0 + self.z0;
+        let z_upper = 1.01 * eps * kappa * self.r0 + self.z0;
         match self.shape.config {
             MagneticConfig::Limited => (None, None),
             MagneticConfig::LowerSingleNull => (Some((r_xpt, z_lower)), None),
@@ -896,8 +902,8 @@ impl CerfonEquilibrium {
         let margin = 0.15;
         let r_min = self.r0 * (1.0 - eps - margin);
         let r_max = self.r0 * (1.0 + eps + margin);
-        let z_min = self.r0 * (-eps * kappa - margin);
-        let z_max = self.r0 * (eps * kappa + margin);
+        let z_min = self.z0 + self.r0 * (-eps * kappa - margin);
+        let z_max = self.z0 + self.r0 * (eps * kappa + margin);
         (r_min, r_max, z_min, z_max)
     }
 

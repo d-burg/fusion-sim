@@ -8,6 +8,14 @@ import StatusPanel from '../components/StatusPanel'
 import ShotPlanner from '../components/ShotPlanner'
 import PortView from '../components/PortView'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
+import { JET_LIMITER } from '../lib/jet-geometry'
+import { ITER_LIMITER } from '../lib/iter-geometry'
+
+const DEVICE_LIMITERS: Record<string, [number, number][]> = {
+  diiid: DIIID_LIMITER,
+  jet: JET_LIMITER,
+  iter: ITER_LIMITER,
+}
 
 const PRESETS: { id: PresetId; label: string }[] = [
   { id: 'hmode', label: 'H-mode' },
@@ -42,7 +50,7 @@ export default function ControlRoom() {
     running,
     wallJson,
     programJson,
-    scrubIndex,
+    scrubTime,
     finished,
   } = state
 
@@ -70,10 +78,10 @@ export default function ControlRoom() {
   }
 
   // PlasmaGlow gets null when scrubbing → dark viewport
-  const plasmaSnapshot = scrubIndex !== null ? null : displaySnapshot
+  const plasmaSnapshot = scrubTime !== null ? null : displaySnapshot
 
   // Limiter geometry — only for DIII-D (other devices fall back to wallJson)
-  const limiterPoints = activeDevice === 'diiid' ? DIIID_LIMITER : undefined
+  const limiterPoints = DEVICE_LIMITERS[activeDevice]
 
   const handleSpeedChange = (speed: number) => {
     setActiveSpeed(speed)
@@ -197,7 +205,7 @@ export default function ControlRoom() {
           t={time.toFixed(3)}s / {duration.toFixed(1)}s
           {finished && (
             <span className="ml-1 text-[10px] text-gray-600">
-              {scrubIndex !== null ? '(scrub)' : '(done)'}
+              {scrubTime !== null ? '(scrub)' : '(done)'}
             </span>
           )}
         </div>
@@ -218,8 +226,8 @@ export default function ControlRoom() {
             deviceId={activeDevice}
             duration={duration}
             finished={finished}
-            scrubIndex={scrubIndex}
-            onScrub={controls.setScrubIndex}
+            scrubTime={scrubTime}
+            onScrub={controls.setScrubTime}
             elmActive={displaySnapshot?.elm_active ?? false}
           />
         </div>

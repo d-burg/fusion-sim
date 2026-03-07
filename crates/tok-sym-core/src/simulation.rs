@@ -93,67 +93,109 @@ impl DischargeProgram {
     }
 
     /// Create a standard H-mode discharge program for a given device.
+    /// Parameters based on real operating scenarios:
+    ///   DIII-D: 1.2 MA, 5 MW NBI, 10s
+    ///   ITER:  15 MA, 33 MW NBI + 20 MW ECH, 100s
+    ///   JET:   2.5 MA, 25 MW NBI + 4 MW ICRH, 20s
     pub fn standard_hmode(device: &Device) -> Self {
-        let ip_max = device.ip_max * 0.4; // 40% of max current (DIII-D: ~1.2 MA, q95 ≈ 3.6)
-        let bt = device.bt_max * 0.9;
-        let duration = 10.0;
-
-        // Compute a reasonable NBI power for H-mode
-        // Need to exceed L-H threshold
-        let p_nbi = match device.id.as_str() {
-            "diiid" => 5.0,
-            "iter" => 33.0,
-            _ => 5.0,
+        // Per-device H-mode parameters (Ip, duration, heating, density fraction)
+        let (ip_flat, duration, p_nbi, p_ech, p_ich, ne_frac) = match device.id.as_str() {
+            "iter" => (device.ip_max, 100.0, 33.0, 20.0, 0.0, 0.80),
+            "jet"  => (2.5,           20.0,  25.0,  0.0, 4.0, 0.70),
+            _      => (device.ip_max * 0.4, 10.0, 5.0, 0.0, 0.0, 0.60),
         };
+        // ITER baseline uses full toroidal field; other devices typically
+        // run slightly below max.
+        let bt = match device.id.as_str() {
+            "iter" => device.bt_max,
+            _      => device.bt_max * 0.9,
+        };
+        let ne_target = device.greenwald_density(ip_flat) * ne_frac;
 
-        let ne_target = device.greenwald_density(ip_max) * 0.6;
+        // Per-device waveform timing fractions of duration.
+        // ITER: fast ramp (most of 100s is flat-top/burn phase)
+        // JET/DIII-D: standard ramp fractions
+        let (f_ramp0, f_ramp1, f_end, f_down) = match device.id.as_str() {
+            "iter" => (0.01, 0.08, 0.88, 0.95),
+            _      => (0.05, 0.15, 0.80, 0.90),
+        };
+        let (f_heat_on, f_heat_full, f_heat_off0, f_heat_off) = match device.id.as_str() {
+            "iter" => (0.10, 0.12, 0.85, 0.88),
+            _      => (0.20, 0.25, 0.75, 0.80),
+        };
+        let (f_ne0, f_ne1, f_ne_end, f_ne_off) = match device.id.as_str() {
+            "iter" => (0.06, 0.12, 0.88, 0.95),
+            _      => (0.10, 0.20, 0.80, 0.90),
+        };
 
         DischargeProgram {
             ip: vec![
                 (0.0, 0.0),
-                (0.5, ip_max * 0.3),
-                (1.5, ip_max),
-                (8.0, ip_max),
-                (9.0, ip_max * 0.5),
+                (duration * f_ramp0, ip_flat * 0.3),
+                (duration * f_ramp1, ip_flat),
+                (duration * f_end, ip_flat),
+                (duration * f_down, ip_flat * 0.5),
                 (duration, 0.0),
             ],
             bt: vec![(0.0, bt), (duration, bt)],
             ne_target: vec![
                 (0.0, 0.05),
-                (1.0, ne_target * 0.5),
-                (2.0, ne_target),
-                (8.0, ne_target),
-                (9.0, ne_target * 0.3),
+                (duration * f_ne0, ne_target * 0.5),
+                (duration * f_ne1, ne_target),
+                (duration * f_ne_end, ne_target),
+                (duration * f_ne_off, ne_target * 0.3),
                 (duration, 0.05),
             ],
             p_nbi: vec![
                 (0.0, 0.0),
-                (2.0, 0.0),
-                (2.5, p_nbi),
-                (7.5, p_nbi),
-                (8.0, 0.0),
+                (duration * f_heat_on, 0.0),
+                (duration * f_heat_full, p_nbi),
+                (duration * f_heat_off0, p_nbi),
+                (duration * f_heat_off, 0.0),
                 (duration, 0.0),
             ],
-            p_ech: vec![(0.0, 0.0), (duration, 0.0)],
-            p_ich: vec![(0.0, 0.0), (duration, 0.0)],
+            p_ech: if p_ech > 0.0 {
+                vec![
+                    (0.0, 0.0),
+                    (duration * (f_heat_on - 0.02), 0.0),
+                    (duration * f_heat_on, p_ech),
+                    (duration * f_heat_off0, p_ech),
+                    (duration * f_heat_off, 0.0),
+                    (duration, 0.0),
+                ]
+            } else {
+                vec![(0.0, 0.0), (duration, 0.0)]
+            },
+            p_ich: if p_ich > 0.0 {
+                vec![
+                    (0.0, 0.0),
+                    (duration * (f_heat_on - 0.02), 0.0),
+                    (duration * f_heat_on, p_ich),
+                    (duration * f_heat_off0, p_ich),
+                    (duration * f_heat_off, 0.0),
+                    (duration, 0.0),
+                ]
+            } else {
+                vec![(0.0, 0.0), (duration, 0.0)]
+            },
             kappa: vec![
                 (0.0, 1.0),
-                (1.0, device.kappa),
-                (duration - 1.0, device.kappa),
+                (duration * f_ramp1, device.kappa),
+                (duration * f_end, device.kappa),
                 (duration, 1.0),
             ],
             delta: vec![
                 (0.0, 0.0),
-                (1.0, device.delta_lower),
-                (duration - 1.0, device.delta_lower),
+                (duration * f_ramp1, device.delta_lower),
+                (duration * f_end, device.delta_lower),
                 (duration, 0.0),
             ],
             d2_puff: vec![
                 (0.0, 0.0),
-                (0.3, 2.0),  // Gas puff during ramp-up
-                (2.0, 1.0),  // Reduce for H-mode pedestal fueling
-                (7.5, 1.0),
-                (8.5, 0.0),
+                (duration * 0.03, 2.0),
+                (duration * f_ne1, 1.0),
+                (duration * f_heat_off0, 1.0),
+                (duration * f_ne_off, 0.0),
                 (duration, 0.0),
             ],
             neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
@@ -379,12 +421,13 @@ fn point_in_polygon(r: f64, z: f64, outline: &[(f64, f64)]) -> bool {
 
 /// Sample LCFS boundary points using Miller parameterization.
 /// Returns Vec<(R, Z, theta)> in physical coordinates.
-fn sample_lcfs(r0: f64, a: f64, kappa: f64, delta: f64, n: usize) -> Vec<(f64, f64, f64)> {
+/// `z0` is the vertical offset of the plasma center.
+fn sample_lcfs(r0: f64, a: f64, kappa: f64, delta: f64, z0: f64, n: usize) -> Vec<(f64, f64, f64)> {
     let mut points = Vec::with_capacity(n);
     for i in 0..n {
         let theta = 2.0 * std::f64::consts::PI * (i as f64) / (n as f64);
         let r = r0 + a * (theta + delta.asin() * theta.sin()).cos();
-        let z = kappa * a * theta.sin();
+        let z = z0 + kappa * a * theta.sin();
         points.push((r, z, theta));
     }
     points
@@ -520,7 +563,11 @@ impl Simulation {
         self.smoothed_f_greenwald += (self.transport.f_greenwald - self.smoothed_f_greenwald) * alpha;
         self.smoothed_p_rad_frac += (p_rad_frac - self.smoothed_p_rad_frac) * alpha;
 
-        if !self.disruption.disrupted && self.actual_ip > 0.1 {
+        // Scale threshold with ip_max — avoids spurious Greenwald violations
+        // during very early ramp-up in large-bore machines (ITER: n_GW ∝ Ip/a²
+        // is tiny at low Ip when a is large).
+        let ip_threshold = (0.05 * self.device.ip_max).max(0.1);
+        if !self.disruption.disrupted && self.actual_ip > ip_threshold {
             self.disruption.update_risk(
                 self.smoothed_f_greenwald,
                 self.smoothed_beta_n,
@@ -663,7 +710,7 @@ impl Simulation {
             && self.actual_ip > 0.1
         {
             let a = epsilon * self.device.r0; // physical minor radius
-            let lcfs_points = sample_lcfs(self.device.r0, a, prog.kappa, delta_eff, 24);
+            let lcfs_points = sample_lcfs(self.device.r0, a, prog.kappa, delta_eff, self.device.z0, 24);
 
             // X-point(s) for bulk/leg discrimination
             let (xp_lower, xp_upper) = self.equilibrium.x_points_physical();
@@ -699,8 +746,8 @@ impl Simulation {
         let margin = 0.15;
         let mut grid_r_min = self.device.r0 * (1.0 - full_eps - margin);
         let mut grid_r_max = self.device.r0 * (1.0 + full_eps + margin);
-        let mut grid_z_min = self.device.r0 * (-full_eps * full_kappa - margin);
-        let mut grid_z_max = self.device.r0 * (full_eps * full_kappa + margin);
+        let mut grid_z_min = self.device.z0 + self.device.r0 * (-full_eps * full_kappa - margin);
+        let mut grid_z_max = self.device.z0 + self.device.r0 * (full_eps * full_kappa + margin);
 
         // Extend grid bounds to cover the device wall outline so separatrix
         // divertor legs can be traced all the way to the wall/divertor targets.
@@ -1020,7 +1067,7 @@ mod tests {
         let a = 0.56;
         let kappa = 1.75;
         let delta = 0.35;
-        let points = sample_lcfs(r0, a, kappa, delta, 24);
+        let points = sample_lcfs(r0, a, kappa, delta, 0.0, 24);
         assert_eq!(points.len(), 24);
 
         // Check that points span reasonable R and Z ranges
@@ -1148,6 +1195,72 @@ mod tests {
         assert!(
             disrupted,
             "Extreme κ=2.5 should cause wall contact disruption"
+        );
+    }
+
+    #[test]
+    fn test_iter_hmode_transition() {
+        let device = devices::iter();
+        let program = DischargeProgram::standard_hmode(&device);
+        let duration = program.duration;
+        let bt_max = device.bt_max;
+        let surface_area = device.surface_area;
+        let plh_factor = device.p_lh_factor;
+        let mut sim = Simulation::new(device, program);
+        sim.start();
+
+        let dt = 0.005;
+        let mut entered_hmode = false;
+        let mut hmode_time = 0.0;
+        let mut max_p_input = 0.0f64;
+        let mut plh_at_max_heat = 0.0f64;
+        let mut ne_at_max_heat = 0.0f64;
+        let mut prad_at_max_heat = 0.0f64;
+        let mut elm_count = 0u32;
+
+        for _ in 0..(duration / dt) as usize + 10 {
+            let snap = sim.step(dt);
+
+            if snap.p_input > max_p_input {
+                max_p_input = snap.p_input;
+                ne_at_max_heat = snap.ne_bar;
+                prad_at_max_heat = snap.p_rad;
+                // Compute P_LH from Martin 2008 scaling with device factor
+                plh_at_max_heat = 0.0488
+                    * snap.ne_bar.powf(0.717)
+                    * bt_max.powf(0.803)
+                    * surface_area.powf(0.941)
+                    * plh_factor;
+            }
+
+            if snap.in_hmode && !entered_hmode {
+                entered_hmode = true;
+                hmode_time = snap.time;
+                eprintln!("  H-mode onset: t={:.2}s, Pin={:.1} MW, Prad={:.1} MW, ne={:.3}, net={:.1} MW",
+                    snap.time, snap.p_input, snap.p_rad, snap.ne_bar, snap.p_input - snap.p_rad);
+            }
+
+            if snap.elm_active {
+                elm_count += 1;
+            }
+
+            if snap.status == SimulationStatus::Complete
+                || snap.status == SimulationStatus::Disrupted
+            {
+                eprintln!(
+                    "ITER ended at t={:.1}s status={:?}. Max P_input={:.1} MW, P_LH={:.1} MW, ne_bar={:.3}, P_rad={:.1} MW",
+                    snap.time, snap.status, max_p_input, plh_at_max_heat, ne_at_max_heat, prad_at_max_heat
+                );
+                eprintln!("  H-mode entered={} at t={:.1}s, ELM frames={}", entered_hmode, hmode_time, elm_count);
+                break;
+            }
+        }
+
+        assert!(
+            entered_hmode,
+            "ITER H-mode preset should transition to H-mode. Max Pin={:.1} MW, P_LH={:.1} MW, ne={:.3}, Prad={:.1} MW, net={:.1} MW",
+            max_p_input, plh_at_max_heat, ne_at_max_heat, prad_at_max_heat,
+            max_p_input - prad_at_max_heat
         );
     }
 }

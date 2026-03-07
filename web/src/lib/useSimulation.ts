@@ -4,7 +4,13 @@ import type { Snapshot, TracePoint, ProfileFrame, ProcessedProfile } from './typ
 import { processProfileFrames } from './profileUtils'
 
 const DT = 0.005 // 5 ms physics timestep
-const MAX_HISTORY = 2000 // ring buffer length (~10 s at 200 Hz display)
+// Trace history (lightweight: ~200 bytes/entry) — large buffer for full-discharge coverage.
+// 30,000 entries ≈ 500s at 60fps (enough for ITER 400s shots at 1x speed). ~6 MB.
+const MAX_TRACE_HISTORY = 30000
+// Snapshot history (heavy: ~50 KB/entry with equilibrium contours) — moderate buffer.
+// 2,000 entries ≈ 33s at 60fps. Post-discharge scrubbing uses time-based lookup,
+// so sparser snapshots just mean slightly less smooth equilibrium scrubbing.  ~100 MB max.
+const MAX_SNAPSHOT_HISTORY = 2000
 
 export interface SimState {
   snapshot: Snapshot | null            // live (latest) snapshot
@@ -14,7 +20,7 @@ export interface SimState {
   running: boolean
   wallJson: string
   programJson: string                  // current discharge program JSON for target traces
-  scrubIndex: number | null            // null = live, number = index into snapshotHistory
+  scrubTime: number | null             // null = live, number = sim time for scrub position
   finished: boolean                    // true when status is Complete or Disrupted
   processedProfiles: ProcessedProfile[] | null  // null while running, populated post-discharge
   profileTeMax: number
@@ -28,7 +34,7 @@ export interface SimControls {
   reset: () => void
   switchPreset: (deviceId: string, preset: PresetId) => void
   runProgram: (deviceId: string, programJson: string) => void
-  setScrubIndex: (index: number | null) => void
+  setScrubTime: (time: number | null) => void
   setSpeed: (speed: number) => void
 }
 
@@ -56,7 +62,7 @@ export function useSimulation(
     running: false,
     wallJson: '[]',
     programJson: '{}',
-    scrubIndex: null,
+    scrubTime: null,
     finished: false,
     processedProfiles: null,
     profileTeMax: 0,
@@ -91,7 +97,7 @@ export function useSimulation(
       running: false,
       wallJson: wallJsonRef.current,
       programJson: programJsonRef.current,
-      scrubIndex: null,
+      scrubTime: null,
       finished: false,
       processedProfiles: null,
       profileTeMax: 0,
@@ -124,7 +130,7 @@ export function useSimulation(
       running: false,
       wallJson: wallJsonRef.current,
       programJson: programJsonRef.current,
-      scrubIndex: null,
+      scrubTime: null,
       finished: false,
       processedProfiles: null,
       profileTeMax: 0,
@@ -179,7 +185,7 @@ export function useSimulation(
     }
 
     if (snap) {
-      // Append to trace history ring buffer
+      // Append to trace history ring buffer (lightweight — large limit)
       // Use peak d_alpha and any-ELM flag from all sub-steps for reliable display
       const pt: TracePoint = {
         t: snap.time,
@@ -205,14 +211,14 @@ export function useSimulation(
         elm_suppressed: snap.elm_suppressed,
       }
       historyRef.current.push(pt)
-      if (historyRef.current.length > MAX_HISTORY) {
-        historyRef.current = historyRef.current.slice(-MAX_HISTORY)
+      if (historyRef.current.length > MAX_TRACE_HISTORY) {
+        historyRef.current = historyRef.current.slice(-MAX_TRACE_HISTORY)
       }
 
-      // Append to full snapshot history (for scrubbing)
+      // Append to full snapshot history (for scrubbing) — separate, smaller limit
       snapshotHistoryRef.current.push(snap)
-      if (snapshotHistoryRef.current.length > MAX_HISTORY) {
-        snapshotHistoryRef.current = snapshotHistoryRef.current.slice(-MAX_HISTORY)
+      if (snapshotHistoryRef.current.length > MAX_SNAPSHOT_HISTORY) {
+        snapshotHistoryRef.current = snapshotHistoryRef.current.slice(-MAX_SNAPSHOT_HISTORY)
       }
 
       // Capture profile frame every 50ms for post-discharge viewing
@@ -250,7 +256,7 @@ export function useSimulation(
           running: runningRef.current,
           wallJson: wallJsonRef.current,
           programJson: programJsonRef.current,
-          scrubIndex: null,
+          scrubTime: null,
           finished: isFinished,
           processedProfiles,
           profileTeMax,
@@ -295,7 +301,7 @@ export function useSimulation(
       history: [],
       snapshotHistory: [],
       running: false,
-      scrubIndex: null,
+      scrubTime: null,
       finished: false,
       processedProfiles: null,
       profileTeMax: 0,
@@ -325,24 +331,46 @@ export function useSimulation(
     stepAccRef.current = 0
   }, [])
 
-  const setScrubIndex = useCallback((index: number | null) => {
+  // Time-based scrubbing: find the closest snapshot by time for equilibrium display.
+  // Trace panel uses scrubTime directly for cursor and value readout.
+  const setScrubTime = useCallback((time: number | null) => {
     setState((prev) => {
-      const displaySnapshot =
-        index !== null && prev.snapshotHistory[index]
-          ? prev.snapshotHistory[index]
-          : prev.snapshot
+      if (time === null) {
+        return {
+          ...prev,
+          scrubTime: null,
+          displaySnapshot: prev.snapshot,
+        }
+      }
+      // Binary search snapshotHistory for closest time
+      const snaps = prev.snapshotHistory
+      if (snaps.length === 0) {
+        return { ...prev, scrubTime: time, displaySnapshot: prev.snapshot }
+      }
+      let lo = 0
+      let hi = snaps.length - 1
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if (snaps[mid].time < time) lo = mid + 1
+        else hi = mid
+      }
+      // Check which of lo and lo-1 is closer
+      let bestIdx = lo
+      if (lo > 0 && Math.abs(snaps[lo - 1].time - time) < Math.abs(snaps[lo].time - time)) {
+        bestIdx = lo - 1
+      }
       return {
         ...prev,
-        scrubIndex: index,
-        displaySnapshot,
+        scrubTime: time,
+        displaySnapshot: snaps[bestIdx],
       }
     })
   }, [])
 
   // Memoize controls to keep a stable reference
   const controls = useMemo<SimControls>(
-    () => ({ start, pause, reset, switchPreset, runProgram, setScrubIndex, setSpeed }),
-    [start, pause, reset, switchPreset, runProgram, setScrubIndex, setSpeed],
+    () => ({ start, pause, reset, switchPreset, runProgram, setScrubTime, setSpeed }),
+    [start, pause, reset, switchPreset, runProgram, setScrubTime, setSpeed],
   )
 
   return [state, controls]

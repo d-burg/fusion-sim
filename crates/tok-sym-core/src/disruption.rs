@@ -106,8 +106,9 @@ impl DisruptionModel {
         p_rad_frac: f64,
         _ip: f64,
     ) {
-        // Greenwald density limit: risk increases sharply above fGW ~ 0.85
-        self.risk_greenwald = sigmoid(f_greenwald, 0.85, 0.06);
+        // Greenwald density limit: the empirical limit is at fGW = 1.0.
+        // Risk rises steeply as the plasma approaches the limit.
+        self.risk_greenwald = sigmoid(f_greenwald, 1.0, 0.08);
 
         // Troyon beta limit: βN_limit ≈ 2.8 (no-wall limit)
         let beta_n_limit = 2.8;
