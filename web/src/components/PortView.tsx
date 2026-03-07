@@ -28,7 +28,7 @@ interface PortConfig {
   lookPhi: number       // look-at toroidal angle
   fov: number           // field of view (degrees)
   tileColor: [number, number, number]  // base RGB for wall tiles
-  tileGridSpacing: { poloidal: number; toroidal: number }
+  tileGridSpacing: { poloidal: number; toroidal: number }  // default/outboard spacing
   tileGridDarken: number  // brightness reduction on grid lines (0–1)
   phiMin: number        // wall toroidal sweep range (full 360°)
   phiMax: number
@@ -36,6 +36,16 @@ interface PortConfig {
   plasmaPhiMax: number
   nWallSlices: number
   nPlasmaSlices: number
+  // Per-region tile sizing
+  tileRegions?: {
+    inboardGridSpacing: { poloidal: number; toroidal: number }   // center stack — small square tiles
+    limiterGridSpacing: { poloidal: number; toroidal: number }   // top/bottom — wider rectangular tiles
+    limiterZThreshold: number                                     // |Z| above this = limiter region
+  }
+  // Extra diagnostic ports on outboard wall (dark circular openings)
+  extraPorts?: { r: number; z: number; phi: number; radius: number }[]
+  // Antenna structures on outboard wall (louvered Faraday screens)
+  antennae?: { r: number; zMin: number; zMax: number; phiMin: number; phiMax: number }[]
 }
 
 function defaultPortConfig(r0: number, a: number): PortConfig {
@@ -84,7 +94,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     lookPhi: 0.28,        // turned right — more toroidal angle
     fov: 80,              // wide-angle ~18mm — fits wall vertically
     tileColor: [28, 28, 30],       // dark matte carbon
-    tileGridSpacing: { poloidal: 0.10, toroidal: 0.08 },
+    tileGridSpacing: { poloidal: 0.10, toroidal: 0.08 },    // outboard wall default
     tileGridDarken: 0.30,
     phiMin: -Math.PI,
     phiMax: Math.PI,
@@ -92,6 +102,21 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     plasmaPhiMax: 1.40,
     nWallSlices: 100,
     nPlasmaSlices: 140,
+    tileRegions: {
+      inboardGridSpacing: { poloidal: 0.10, toroidal: 0.10 },  // ~4"×4" center stack tiles
+      limiterGridSpacing: { poloidal: 0.10, toroidal: 0.20 },  // ~4"×8" wider limiter tiles
+      limiterZThreshold: 0.80,
+    },
+    extraPorts: [
+      { r: 2.35, z: 0.42, phi: 0.18, radius: 0.09 },    // upper diagnostic port
+      { r: 2.35, z: -0.48, phi: -0.12, radius: 0.08 },   // lower diagnostic port
+      { r: 2.35, z: 0.12, phi: -0.32, radius: 0.07 },    // near-midplane port
+      { r: 2.35, z: -0.15, phi: 0.42, radius: 0.06 },    // small port
+    ],
+    antennae: [
+      { r: 2.35, zMin: -0.28, zMax: 0.28, phiMin: 0.55, phiMax: 0.72 },   // ICRH antenna
+      { r: 2.35, zMin: -0.12, zMax: 0.12, phiMin: -0.60, phiMax: -0.48 },  // ECH launcher
+    ],
   },
   iter: {
     portR: 8.30,
@@ -115,6 +140,19 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     plasmaPhiMax: 1.40,
     nWallSlices: 100,
     nPlasmaSlices: 140,
+    tileRegions: {
+      inboardGridSpacing: { poloidal: 0.18, toroidal: 0.18 },  // larger tiles for bigger machine
+      limiterGridSpacing: { poloidal: 0.15, toroidal: 0.30 },
+      limiterZThreshold: 2.5,
+    },
+    extraPorts: [
+      { r: 8.30, z: 1.2, phi: 0.12, radius: 0.22 },
+      { r: 8.30, z: -1.4, phi: -0.08, radius: 0.20 },
+      { r: 8.30, z: 0.3, phi: -0.25, radius: 0.18 },
+    ],
+    antennae: [
+      { r: 8.30, zMin: -0.8, zMax: 0.8, phiMin: 0.35, phiMax: 0.55 },
+    ],
   },
   sparc: {
     portR: 2.10,
@@ -138,6 +176,15 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     plasmaPhiMax: 1.40,
     nWallSlices: 100,
     nPlasmaSlices: 140,
+    tileRegions: {
+      inboardGridSpacing: { poloidal: 0.08, toroidal: 0.08 },
+      limiterGridSpacing: { poloidal: 0.08, toroidal: 0.14 },
+      limiterZThreshold: 0.55,
+    },
+    extraPorts: [
+      { r: 2.10, z: 0.30, phi: 0.15, radius: 0.06 },
+      { r: 2.10, z: -0.25, phi: -0.20, radius: 0.05 },
+    ],
   },
   jet: {
     portR: 3.80,
@@ -161,6 +208,19 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     plasmaPhiMax: 1.40,
     nWallSlices: 100,
     nPlasmaSlices: 140,
+    tileRegions: {
+      inboardGridSpacing: { poloidal: 0.12, toroidal: 0.12 },
+      limiterGridSpacing: { poloidal: 0.12, toroidal: 0.22 },
+      limiterZThreshold: 1.2,
+    },
+    extraPorts: [
+      { r: 3.80, z: 0.55, phi: 0.14, radius: 0.12 },
+      { r: 3.80, z: -0.60, phi: -0.10, radius: 0.11 },
+      { r: 3.80, z: 0.15, phi: -0.28, radius: 0.09 },
+    ],
+    antennae: [
+      { r: 3.80, zMin: -0.40, zMax: 0.40, phiMin: 0.40, phiMax: 0.58 },
+    ],
   },
 }
 
@@ -1054,9 +1114,11 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height, 0, 0, W, H)
     ctx.restore()
 
-    // ── Step 3b: Wall illumination from strike points ──
-    // When strike points are active, nearby wall tiles glow with warm orange
-    // light — visible mostly on the divertor region.
+    // ── Step 3a: Volumetric divertor glow ──
+    // Diffuse Dα/Hα light scattering fills the vacuum vessel volume when
+    // strike points are active.  Large radial gradient centered at the
+    // screen-space centroid of the strike points — simulates scattered
+    // light washing across the far wall and vacuum region.
     const wantStrikeGlow = snapshot.in_hmode && !disrupted
     // dt and prevTimeRef already updated above (before early returns)
     const fadeStep = STRIKE_FADE_RATE > 0 ? Math.min(dt / STRIKE_FADE_RATE, 1) : 1
@@ -1066,6 +1128,49 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       strikeGlowRef.current = Math.max(strikeGlowRef.current - fadeStep, 0)
     }
     const strikeFade = strikeGlowRef.current
+
+    if (strikePointRZ.length > 0 && strikeFade > 0.01) {
+      const powerScale = (deviceId && DEVICE_POWER_SCALE[deviceId]) ?? DEFAULT_POWER_SCALE
+
+      // Compute screen-space centroid of all strike points
+      let strikeCx = 0, strikeCy = 0, strikeCount = 0
+      for (let sp = 0; sp < nStrike; sp++) {
+        for (let s = 0; s < nSlicesPlasma; s++) {
+          const off = (sp * nSlicesPlasma + s) * 2
+          const sx = strikeXY[off]
+          if (sx !== sx) continue  // NaN
+          strikeCx += sx
+          strikeCy += strikeXY[off + 1]
+          strikeCount++
+        }
+      }
+      if (strikeCount > 0) {
+        strikeCx /= strikeCount
+        strikeCy /= strikeCount
+
+        const volumeAlpha = 0.10 * powerScale * strikeFade
+        if (volumeAlpha > 0.005) {
+          const glowRadius = W * 0.38
+          ctx.save()
+          ctx.globalCompositeOperation = 'lighter'
+          const volGrad = ctx.createRadialGradient(
+            strikeCx, strikeCy, 0,
+            strikeCx, strikeCy, glowRadius
+          )
+          volGrad.addColorStop(0, `rgba(180, 30, 10, ${(volumeAlpha * 1.0).toFixed(3)})`)
+          volGrad.addColorStop(0.25, `rgba(140, 20, 5, ${(volumeAlpha * 0.7).toFixed(3)})`)
+          volGrad.addColorStop(0.55, `rgba(100, 12, 3, ${(volumeAlpha * 0.35).toFixed(3)})`)
+          volGrad.addColorStop(1, 'rgba(60, 5, 0, 0)')
+          ctx.fillStyle = volGrad
+          ctx.fillRect(0, 0, W, H)
+          ctx.restore()
+        }
+      }
+    }
+
+    // ── Step 3b: Wall illumination from strike points ──
+    // When strike points are active, nearby wall tiles glow with warm
+    // red light — visible mostly on the divertor region.
 
     // Wall illumination: localized warm glow on divertor tiles near strike points.
     // Small radius — should not extend much beyond the divertor leg width.
@@ -1089,10 +1194,43 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
             if (gAlpha < 0.001) continue
 
             // Broad glow radius for deep red wall illumination
-            const glowR = 8 + depthFrac * 12
+            const glowR = 14 + depthFrac * 18
             ctx.globalAlpha = gAlpha
             ctx.drawImage(wallGlowSprite, 0, 0, 32, 32,
               sx - glowR, sy - glowR, glowR * 2, glowR * 2)
+          }
+        }
+        ctx.restore()
+      }
+
+      // ── Step 3c: Extended divertor floor glow ──
+      // Interpolate additional glow sources between inner & outer strike points
+      // so the emission looks like it comes from the entire divertor plate.
+      if (nStrike >= 2 && strikeFade > 0.01) {
+        const FLOOR_INTERP = 4  // number of interpolated points between strike pairs
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        // For lower X-point: inner strike = index 0, outer strike = index 1
+        // For upper X-point (if present): inner = index 2, outer = index 3
+        for (let pair = 0; pair < nStrike - 1; pair += 2) {
+          const r0 = strikePointRZ[pair][0], z0 = strikePointRZ[pair][1]
+          const r1 = strikePointRZ[pair + 1][0], z1 = strikePointRZ[pair + 1][1]
+          for (let fi = 1; fi <= FLOOR_INTERP; fi++) {
+            const t = fi / (FLOOR_INTERP + 1)
+            const iR = r0 + (r1 - r0) * t
+            const iZ = z0 + (z1 - z0) * t
+            for (const s of sliceOrder) {
+              tmpV.x = iR * cosPhis[s]; tmpV.y = iR * sinPhis[s]; tmpV.z = iZ
+              const p2d = cam.project(tmpV)
+              if (!p2d) continue
+              const depthFrac = 1 - (sliceDepths[s] - minDepth) / depthRange
+              const gAlpha = illumAlpha * 0.6 * (0.3 + depthFrac * 0.7)  // dimmer than actual strike glow
+              if (gAlpha < 0.001) continue
+              const glowR = 10 + depthFrac * 14
+              ctx.globalAlpha = gAlpha
+              ctx.drawImage(wallGlowSprite, 0, 0, 32, 32,
+                p2d.sx - glowR, p2d.sy - glowR, glowR * 2, glowR * 2)
+            }
           }
         }
         ctx.restore()
@@ -1224,8 +1362,6 @@ function drawLimiterWall(
   const axisR = (rMin + rMax) * 0.5
 
   // Compute depth threshold at magnetic axis for near/far splitting.
-  // Quads closer than this are "near" (outboard wall, between camera and plasma).
-  // Quads farther than this are "far" (inboard wall, behind plasma).
   let axisDepth = Infinity
   if (depthFilter !== 'all') {
     const axisPt3d = toroidal(axisR, 0, cfg.portPhi)
@@ -1242,6 +1378,9 @@ function drawLimiterWall(
   }
 
   const [tr, tg, tb] = cfg.tileColor
+  const regions = cfg.tileRegions
+  const extraPorts = cfg.extraPorts
+  const antennae = cfg.antennae
 
   // Build 3D grid: grid3D[slice][pointIdx] = Vec3
   const grid3D: Vec3[][] = []
@@ -1266,10 +1405,16 @@ function drawLimiterWall(
   }
 
   // Build individual quad faces with backface culling
+  // Extended quad type: includes region classification for per-region rendering
+  const enum WallRegion { Outboard, Inboard, Limiter, ExtraPort, Antenna }
   interface WallQuad {
     corners: (ScreenPt | null)[]
     depth: number
-    isGridEdge: boolean  // tile boundary
+    isGridEdge: boolean
+    region: WallRegion
+    qZ: number           // Z position for antenna louver pattern
+    viewDot: number       // view angle for Fresnel-like specular
+    tileHash: number      // per-tile brightness variation (0–1)
   }
   const quads: WallQuad[] = []
 
@@ -1277,12 +1422,9 @@ function drawLimiterWall(
     const phiMid = (phis[s] + phis[s + 1]) * 0.5
     const axisPt = toroidal(axisR, 0, phiMid)
 
-    // Toroidal grid: check if this phi boundary crosses a tile edge
-    const toroidalArc0 = phis[s] * axisR  // approximate arc length
+    // Toroidal arc lengths for grid spacing
+    const toroidalArc0 = phis[s] * axisR
     const toroidalArc1 = phis[s + 1] * axisR
-    const tGrid = cfg.tileGridSpacing.toroidal
-    const crossesToroidalGrid = tGrid > 0 &&
-      Math.floor(toroidalArc0 / tGrid) !== Math.floor(toroidalArc1 / tGrid)
 
     for (let j = 0; j < nPts; j++) {
       const jn = (j + 1) % nPts
@@ -1309,8 +1451,7 @@ function drawLimiterWall(
       }
       if (dot(inward, viewDir) <= 0) continue
 
-      // Port hole punching — skip quads inside port opening
-      // Compute quad center in cylindrical coords
+      // Port hole punching — skip quads inside main port opening
       const qR = Math.sqrt(qcx * qcx + qcy * qcy)
       const qPhi = Math.atan2(qcy, qcx)
       const dPhi = Math.abs(qPhi - cfg.portPhi)
@@ -1339,15 +1480,87 @@ function drawLimiterWall(
       if (depthFilter === 'near' && avgDepth > axisDepth) continue
       if (depthFilter === 'far'  && avgDepth <= axisDepth) continue
 
-      // Poloidal grid: check if this segment crosses a tile boundary
-      const pGrid = cfg.tileGridSpacing.poloidal
+      // ── Region classification ──
+      let region = WallRegion.Outboard
+
+      // Check extra ports first (dark openings on outboard wall)
+      let inExtraPort = false
+      if (extraPorts) {
+        for (const ep of extraPorts) {
+          const epDPhi = Math.abs(qPhi - ep.phi)
+          const epAngR = ep.radius / ep.r
+          if (epDPhi < epAngR * 1.3) {
+            const dr = qR - ep.r
+            const dz = qcz - ep.z
+            if (dr * dr + dz * dz < ep.radius * ep.radius * 1.2) {
+              inExtraPort = true
+              break
+            }
+          }
+        }
+      }
+
+      // Check antennae (louvered structures on outboard wall)
+      let inAntenna = false
+      if (!inExtraPort && antennae) {
+        for (const ant of antennae) {
+          if (qcz >= ant.zMin && qcz <= ant.zMax &&
+              qPhi >= ant.phiMin && qPhi <= ant.phiMax &&
+              qR > axisR) {
+            inAntenna = true
+            break
+          }
+        }
+      }
+
+      if (inExtraPort) {
+        region = WallRegion.ExtraPort
+      } else if (inAntenna) {
+        region = WallRegion.Antenna
+      } else if (qR < axisR * 0.85) {
+        region = WallRegion.Inboard
+      } else if (regions && Math.abs(qcz) > regions.limiterZThreshold) {
+        region = WallRegion.Limiter
+      }
+
+      // ── Per-region tile grid spacing ──
+      let pGrid: number, tGrid: number
+      if (region === WallRegion.Inboard && regions) {
+        pGrid = regions.inboardGridSpacing.poloidal
+        tGrid = regions.inboardGridSpacing.toroidal
+      } else if (region === WallRegion.Limiter && regions) {
+        pGrid = regions.limiterGridSpacing.poloidal
+        tGrid = regions.limiterGridSpacing.toroidal
+      } else {
+        pGrid = cfg.tileGridSpacing.poloidal
+        tGrid = cfg.tileGridSpacing.toroidal
+      }
+
+      // Grid edge detection with region-appropriate spacing
+      const crossesToroidalGrid = tGrid > 0 &&
+        Math.floor(toroidalArc0 / tGrid) !== Math.floor(toroidalArc1 / tGrid)
       const crossesPoloidalGrid = pGrid > 0 &&
         Math.floor(poloidalArc[j] / pGrid) !== Math.floor(poloidalArc[jn < nPts ? jn : 0] / pGrid)
+
+      // ── View angle for Fresnel-like specular ──
+      const inLen = Math.sqrt(inward.x * inward.x + inward.y * inward.y + inward.z * inward.z)
+      const vLen = Math.sqrt(viewDir.x * viewDir.x + viewDir.y * viewDir.y + viewDir.z * viewDir.z)
+      const viewDot = (inLen > 0.01 && vLen > 0.01)
+        ? dot(inward, viewDir) / (inLen * vLen) : 0.5
+
+      // ── Per-tile deterministic hash for brightness variation ──
+      const cellP = pGrid > 0 ? Math.floor(poloidalArc[j] / pGrid) : j
+      const cellT = tGrid > 0 ? Math.floor(toroidalArc0 / tGrid) : s
+      const tileHash = (((cellP * 7919 + cellT * 104729) & 0xFFFF) / 65536)
 
       quads.push({
         corners: [sa, sb, sc, sd],
         depth: avgDepth,
         isGridEdge: crossesToroidalGrid || crossesPoloidalGrid,
+        region,
+        qZ: qcz,
+        viewDot,
+        tileHash,
       })
     }
   }
@@ -1365,17 +1578,56 @@ function drawLimiterWall(
   }
   const dRange = maxD - minD + 0.01
 
-  // Draw all quads
+  // Draw all quads with per-region appearance
   ctx.save()
   for (const q of quads) {
     const df = 1 - (q.depth - minD) / dRange // 0=far, 1=near
-    // Tile color: device-specific base modulated by depth and grid pattern
-    const depthMod = 0.45 + df * 0.55
-    const gridDim = q.isGridEdge ? (1 - cfg.tileGridDarken) : 1.0
-    const r = Math.round(tr * depthMod * gridDim)
-    const g = Math.round(tg * depthMod * gridDim)
-    const b = Math.round(tb * depthMod * gridDim)
-    const alpha = 0.80 + df * 0.18
+
+    let r: number, g: number, b: number, alpha: number
+
+    if (q.region === WallRegion.ExtraPort) {
+      // Extra diagnostic ports: very dark (deep opening into vessel wall)
+      r = 6; g = 6; b = 8
+      alpha = 0.92 + df * 0.08
+    } else if (q.region === WallRegion.Antenna) {
+      // Antenna Faraday screen: brighter metallic with horizontal louver pattern
+      const louverSpacing = 0.028  // ~1.1" louver pitch
+      const louverPhase = q.qZ / louverSpacing
+      const isLouverGap = (louverPhase - Math.floor(louverPhase)) < 0.35
+      const depthMod = 0.50 + df * 0.50
+      if (isLouverGap) {
+        // Dark gap between louver slats
+        r = Math.round(12 * depthMod)
+        g = Math.round(12 * depthMod)
+        b = Math.round(14 * depthMod)
+      } else {
+        // Bright metallic louver slat
+        const fresnel = 1.0 + (1.0 - q.viewDot) * 0.4
+        r = Math.round(62 * depthMod * fresnel)
+        g = Math.round(58 * depthMod * fresnel)
+        b = Math.round(52 * depthMod * fresnel)
+      }
+      alpha = 0.85 + df * 0.14
+    } else {
+      // Normal tile regions (inboard, outboard, limiter)
+      const depthMod = 0.45 + df * 0.55
+
+      // Semi-reflective: per-tile brightness variation + Fresnel edge brightening
+      const tileVariation = 0.93 + q.tileHash * 0.14  // ±7% per-tile brightness
+      const fresnel = 1.0 + (1.0 - q.viewDot) * 0.25  // up to 25% brighter at grazing angles
+      const gridDim = q.isGridEdge ? (1 - cfg.tileGridDarken) : 1.0
+
+      const mod = depthMod * gridDim * tileVariation * fresnel
+      r = Math.round(tr * mod)
+      g = Math.round(tg * mod)
+      b = Math.round(tb * mod)
+      alpha = 0.80 + df * 0.18
+    }
+
+    // Clamp color values
+    r = Math.min(r, 255)
+    g = Math.min(g, 255)
+    b = Math.min(b, 255)
 
     ctx.beginPath()
     let started = false
