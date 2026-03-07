@@ -607,10 +607,38 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
             ibProfile.reverse()
           }
 
+          // Trim profile to the center stack column only.
+          // The raw ibProfile may include divertor channel / shelf points where
+          // the wall curves away from vertical. Those points have small R and
+          // produce overly wide tangent angles, clipping glow in the divertor.
+          // Strategy: remove segments from both ends that are more horizontal
+          // than vertical (wall curving into divertor or upper shelf).
+          let trimTop = 0
+          for (let i = 1; i < ibProfile.length; i++) {
+            const dR = Math.abs(ibProfile[i][0] - ibProfile[i - 1][0])
+            const dZ = Math.abs(ibProfile[i][1] - ibProfile[i - 1][1])
+            if (dZ < 0.001 || dR / dZ > 0.6) {
+              trimTop = i  // this segment is mostly horizontal, trim it
+            } else {
+              break  // hit a vertical segment — start of center stack column
+            }
+          }
+          let trimBot = ibProfile.length
+          for (let i = ibProfile.length - 1; i >= 1; i--) {
+            const dR = Math.abs(ibProfile[i][0] - ibProfile[i - 1][0])
+            const dZ = Math.abs(ibProfile[i][1] - ibProfile[i - 1][1])
+            if (dZ < 0.001 || dR / dZ > 0.6) {
+              trimBot = i  // horizontal segment at bottom, trim it
+            } else {
+              break  // vertical segment — bottom of center stack column
+            }
+          }
+          const csProfile = ibProfile.slice(trimTop, trimBot)
+
           const leftEdge: { sx: number; sy: number }[] = []
           const rightEdge: { sx: number; sy: number }[] = []
 
-          for (const [Rw, Zw] of ibProfile) {
+          for (const [Rw, Zw] of csProfile) {
             const ratio = Math.min(Rw / camR_cs, 0.9999)
             const cosPhiT = ratio
             const sinPhiT = Math.sqrt(1 - ratio * ratio)
