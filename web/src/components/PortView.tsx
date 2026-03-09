@@ -470,6 +470,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     farCanvas: HTMLCanvasElement   // inboard wall — drawn BEHIND plasma
     nearCanvas: HTMLCanvasElement  // outboard wall + port — drawn IN FRONT of plasma
     csClipPath: Path2D | null      // center stack silhouette clip (evenodd: renders OUTSIDE silhouette)
+    csTangentPhi: number           // toroidal angle where glow transitions from in-front to behind CS
     w: number; h: number; key: string
   } | null>(null)
   const strikeGlowRef = useRef(0)       // current fade level 0–1
@@ -661,7 +662,14 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
           }
         }
 
-        wallCacheRef.current = { farCanvas, nearCanvas, csClipPath, w: canvas.width, h: canvas.height, key: wallKey }
+        // Compute the tangent angle where glow transitions from in-front to behind
+        // the center stack.  φ_t = arccos(minR / camR).  Slices with |φ| < φ_t
+        // pass in front of the CS (visible); |φ| >= φ_t pass behind (occluded).
+        const csTangentPhi = csClipPath
+          ? Math.acos(Math.min(minR / camR_cs, 0.9999))
+          : Math.PI  // no clip → everything is "in front" (never clipped)
+
+        wallCacheRef.current = { farCanvas, nearCanvas, csClipPath, csTangentPhi, w: canvas.width, h: canvas.height, key: wallKey }
       }
 
       // Draw far wall immediately (behind plasma)
@@ -1346,6 +1354,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     // projection of the inboard wall profile.  The evenodd Path2D clips
     // rendering to OUTSIDE the center stack silhouette.
     const csClip = wallCacheRef.current?.csClipPath ?? null
+    const csTanPhi = wallCacheRef.current?.csTangentPhi ?? Math.PI
 
     // ── Step 4: Strike point glow on divertor plates ──
     // Localized, bright glow at the strike-point locations.  Should be
@@ -1353,8 +1362,6 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     // SOL-like turbulent fluctuations: fast position jitter + brightness flicker
     // simulates the filamentary, turbulent scrape-off layer seen in real tokamak cameras.
     if (strikePointRZ.length > 0 && strikeFade > 0.001) {
-      // Apply center stack occlusion clip
-      if (csClip) { ctx.save(); ctx.clip(csClip, 'evenodd') }
       const powerScale = (deviceId && DEVICE_POWER_SCALE[deviceId]) ?? DEFAULT_POWER_SCALE
       const strikeAlpha = 0.35 * powerScale * strikeFade  // decoupled from opacityScale for bright strikes
 
@@ -1367,36 +1374,53 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         return (h & 0xFFFF) / 65536  // 0..1
       }
 
-      ctx.save()
-      ctx.globalCompositeOperation = 'lighter'
-      for (let sp = 0; sp < nStrike; sp++) {
-        for (let s = 0; s < nGlowSlices; s++) {
-          const off = (sp * nGlowSlices + s) * 2
-          const sx = strikeGlowXY[off]
-          if (sx !== sx) continue  // NaN = off-screen
-          const sy = strikeGlowXY[off + 1]
+      // Helper to draw strike glow for a given slice range predicate
+      const drawStrikeSlices = (slicePred: (s: number) => boolean) => {
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        for (let sp = 0; sp < nStrike; sp++) {
+          for (let s = 0; s < nGlowSlices; s++) {
+            if (!slicePred(s)) continue
+            const off = (sp * nGlowSlices + s) * 2
+            const sx = strikeGlowXY[off]
+            if (sx !== sx) continue  // NaN = off-screen
+            const sy = strikeGlowXY[off + 1]
 
-          const depthFrac = 1 - (glowSliceDepths[s] - glowMinDepth) / glowDepthRange
+            const depthFrac = 1 - (glowSliceDepths[s] - glowMinDepth) / glowDepthRange
 
-          // SOL fluctuations: per-slice position jitter + brightness flicker
-          // Changes rapidly (~60-120 Hz) to simulate turbulent filaments
-          const tSeed = Math.floor(tNow * 0.12) // ~120 Hz update rate
-          const posJitter = (solHash(tSeed + s * 137 + sp * 9371) - 0.5) * 3.5  // ±1.75px lateral wobble
-          const brightFlicker = 0.75 + solHash(tSeed * 3 + s * 241 + sp * 6173) * 0.50  // 75–125% brightness
+            // SOL fluctuations: per-slice position jitter + brightness flicker
+            // Changes rapidly (~60-120 Hz) to simulate turbulent filaments
+            const tSeed = Math.floor(tNow * 0.12) // ~120 Hz update rate
+            const posJitter = (solHash(tSeed + s * 137 + sp * 9371) - 0.5) * 3.5  // ±1.75px lateral wobble
+            const brightFlicker = 0.75 + solHash(tSeed * 3 + s * 241 + sp * 6173) * 0.50  // 75–125% brightness
 
-          const gAlpha = strikeAlpha * (0.85 + depthFrac * 0.15) * brightFlicker
-          if (gAlpha < 0.001) continue
+            const gAlpha = strikeAlpha * (0.85 + depthFrac * 0.15) * brightFlicker
+            if (gAlpha < 0.001) continue
 
-          // Broad deep red strike glow
-          const glowR = 10 + depthFrac * 14
-          // Sprite was rendered with alphas normalized by /2.0, so multiply back
-          ctx.globalAlpha = gAlpha * 2.0
-          ctx.drawImage(strikeGlowSprite, 0, 0, 32, 32,
-            sx - glowR + posJitter, sy - glowR, glowR * 2, glowR * 2)
+            // Broad deep red strike glow
+            const glowR = 10 + depthFrac * 14
+            // Sprite was rendered with alphas normalized by /2.0, so multiply back
+            ctx.globalAlpha = gAlpha * 2.0
+            ctx.drawImage(strikeGlowSprite, 0, 0, 32, 32,
+              sx - glowR + posJitter, sy - glowR, glowR * 2, glowR * 2)
+          }
         }
+        ctx.restore()
       }
-      ctx.restore()
-      if (csClip) ctx.restore()  // remove center stack clip
+
+      // Two-pass rendering: front slices (in front of center stack) are drawn
+      // without the clip mask so they remain visible.  Behind slices are drawn
+      // with the csClip evenodd mask to occlude glow behind the center stack.
+      // csTanPhi = arccos(minR / camR): the toroidal angle where the line of
+      // sight is tangent to the center stack cylinder.
+
+      // Pass 1: behind-CS slices — draw WITH clip mask
+      if (csClip) { ctx.save(); ctx.clip(csClip, 'evenodd') }
+      drawStrikeSlices(s => Math.abs(glowPhis[s]) >= csTanPhi)
+      if (csClip) ctx.restore()
+
+      // Pass 2: front-of-CS slices — draw WITHOUT clip mask (visible in front)
+      drawStrikeSlices(s => Math.abs(glowPhis[s]) < csTanPhi)
     }
 
     // ── Step 4a: Draw NEAR wall on top of plasma + glow ──
@@ -1412,77 +1436,88 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     // tiles (both far and near), producing the red reflected glow from
     // divertor emission onto nearby wall surfaces.
     if (strikePointRZ.length > 0 && strikeFade > 0.001) {
-      // Apply center stack occlusion clip for wall illumination + floor glow
-      if (csClip) { ctx.save(); ctx.clip(csClip, 'evenodd') }
-      const powerScale = (deviceId && DEVICE_POWER_SCALE[deviceId]) ?? DEFAULT_POWER_SCALE
-      const illumAlpha = 0.18 * powerScale * strikeFade
+      const powerScale4b = (deviceId && DEVICE_POWER_SCALE[deviceId]) ?? DEFAULT_POWER_SCALE
+      const illumAlpha = 0.18 * powerScale4b * strikeFade
 
-      if (illumAlpha > 0.001) {
-        // SOL turbulence for wall illumination (matches Step 4 fluctuations)
-        const tNow4b = performance.now()
-        const solHash4b = (seed: number) => {
-          let h = (seed * 2654435761) >>> 0
-          h = ((h ^ (h >>> 16)) * 0x45d9f3b) >>> 0
-          return (h & 0xFFFF) / 65536
-        }
-        const tSeed4b = Math.floor(tNow4b * 0.12)  // ~120 Hz
-
-        ctx.save()
-        ctx.globalCompositeOperation = 'lighter'
-        for (let sp = 0; sp < nStrike; sp++) {
-          for (let s = 0; s < nGlowSlices; s++) {
-            const off = (sp * nGlowSlices + s) * 2
-            const sx = strikeGlowXY[off]
-            if (sx !== sx) continue  // NaN = off-screen
-            const sy = strikeGlowXY[off + 1]
-
-            const depthFrac = 1 - (glowSliceDepths[s] - glowMinDepth) / glowDepthRange
-
-            // Correlated SOL fluctuations: position + brightness jitter
-            const posJitter = (solHash4b(tSeed4b + s * 137 + sp * 9371) - 0.5) * 3.5
-            const brightFlicker = 0.80 + solHash4b(tSeed4b * 3 + s * 241 + sp * 6173) * 0.40
-
-            const gAlpha = illumAlpha * (0.4 + depthFrac * 0.6) * brightFlicker
-            if (gAlpha < 0.001) continue
-
-            const glowR = 14 + depthFrac * 18
-            ctx.globalAlpha = gAlpha
-            ctx.drawImage(wallGlowSprite, 0, 0, 32, 32,
-              sx - glowR + posJitter, sy - glowR, glowR * 2, glowR * 2)
-          }
-        }
-        ctx.restore()
+      // SOL turbulence for wall illumination (matches Step 4 fluctuations)
+      const tNow4b = performance.now()
+      const solHash4b = (seed: number) => {
+        let h = (seed * 2654435761) >>> 0
+        h = ((h ^ (h >>> 16)) * 0x45d9f3b) >>> 0
+        return (h & 0xFFFF) / 65536
       }
+      const tSeed4b = Math.floor(tNow4b * 0.12)  // ~120 Hz
 
-      // Extended divertor floor glow: interpolated sources between strike pairs
-      if (nStrike >= 2 && strikeFade > 0.01) {
-        const FLOOR_INTERP = 4
-        ctx.save()
-        ctx.globalCompositeOperation = 'lighter'
-        for (let pair = 0; pair < nStrike - 1; pair += 2) {
-          const r0 = strikePointRZ[pair][0], z0 = strikePointRZ[pair][1]
-          const r1 = strikePointRZ[pair + 1][0], z1 = strikePointRZ[pair + 1][1]
-          for (let fi = 1; fi <= FLOOR_INTERP; fi++) {
-            const t = fi / (FLOOR_INTERP + 1)
-            const iR = r0 + (r1 - r0) * t
-            const iZ = z0 + (z1 - z0) * t
+      // Helper to draw wall illumination slices for a given predicate
+      const drawWallIllumSlices = (slicePred: (s: number) => boolean) => {
+        if (illumAlpha > 0.001) {
+          ctx.save()
+          ctx.globalCompositeOperation = 'lighter'
+          for (let sp = 0; sp < nStrike; sp++) {
             for (let s = 0; s < nGlowSlices; s++) {
-              tmpV.x = iR * cosGlowPhis[s]; tmpV.y = iR * sinGlowPhis[s]; tmpV.z = iZ
-              const p2d = cam.project(tmpV)
-              if (!p2d) continue
+              if (!slicePred(s)) continue
+              const off = (sp * nGlowSlices + s) * 2
+              const sx = strikeGlowXY[off]
+              if (sx !== sx) continue  // NaN = off-screen
+              const sy = strikeGlowXY[off + 1]
+
               const depthFrac = 1 - (glowSliceDepths[s] - glowMinDepth) / glowDepthRange
-              const gAlpha = illumAlpha * 0.6 * (0.3 + depthFrac * 0.7)
+
+              // Correlated SOL fluctuations: position + brightness jitter
+              const posJitter = (solHash4b(tSeed4b + s * 137 + sp * 9371) - 0.5) * 3.5
+              const brightFlicker = 0.80 + solHash4b(tSeed4b * 3 + s * 241 + sp * 6173) * 0.40
+
+              const gAlpha = illumAlpha * (0.4 + depthFrac * 0.6) * brightFlicker
               if (gAlpha < 0.001) continue
-              const glowR = 10 + depthFrac * 14
+
+              const glowR = 14 + depthFrac * 18
               ctx.globalAlpha = gAlpha
               ctx.drawImage(wallGlowSprite, 0, 0, 32, 32,
-                p2d.sx - glowR, p2d.sy - glowR, glowR * 2, glowR * 2)
+                sx - glowR + posJitter, sy - glowR, glowR * 2, glowR * 2)
             }
           }
+          ctx.restore()
         }
-        ctx.restore()
+
+        // Extended divertor floor glow: interpolated sources between strike pairs
+        if (nStrike >= 2 && strikeFade > 0.01 && illumAlpha > 0.001) {
+          const FLOOR_INTERP = 4
+          ctx.save()
+          ctx.globalCompositeOperation = 'lighter'
+          for (let pair = 0; pair < nStrike - 1; pair += 2) {
+            const r0 = strikePointRZ[pair][0], z0 = strikePointRZ[pair][1]
+            const r1 = strikePointRZ[pair + 1][0], z1 = strikePointRZ[pair + 1][1]
+            for (let fi = 1; fi <= FLOOR_INTERP; fi++) {
+              const t = fi / (FLOOR_INTERP + 1)
+              const iR = r0 + (r1 - r0) * t
+              const iZ = z0 + (z1 - z0) * t
+              for (let s = 0; s < nGlowSlices; s++) {
+                if (!slicePred(s)) continue
+                tmpV.x = iR * cosGlowPhis[s]; tmpV.y = iR * sinGlowPhis[s]; tmpV.z = iZ
+                const p2d = cam.project(tmpV)
+                if (!p2d) continue
+                const depthFrac = 1 - (glowSliceDepths[s] - glowMinDepth) / glowDepthRange
+                const gAlpha = illumAlpha * 0.6 * (0.3 + depthFrac * 0.7)
+                if (gAlpha < 0.001) continue
+                const glowR = 10 + depthFrac * 14
+                ctx.globalAlpha = gAlpha
+                ctx.drawImage(wallGlowSprite, 0, 0, 32, 32,
+                  p2d.sx - glowR, p2d.sy - glowR, glowR * 2, glowR * 2)
+              }
+            }
+          }
+          ctx.restore()
+        }
       }
-      if (csClip) ctx.restore()  // remove center stack clip
+
+      // Two-pass wall illumination: same front/behind split as Step 4.
+      // Pass 1: behind-CS slices — draw WITH clip mask
+      if (csClip) { ctx.save(); ctx.clip(csClip, 'evenodd') }
+      drawWallIllumSlices(s => Math.abs(glowPhis[s]) >= csTanPhi)
+      if (csClip) ctx.restore()
+
+      // Pass 2: front-of-CS slices — draw WITHOUT clip mask
+      drawWallIllumSlices(s => Math.abs(glowPhis[s]) < csTanPhi)
     }
 
     // Step 4c removed — center stack occlusion now handled by silhouette clip
