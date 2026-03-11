@@ -39,18 +39,26 @@ export function buildWallGeometry(
   }
   const totalArc = arcLengths[nPts]
 
-  // Port hole test helper
+  // Port hole test helper — only removes tiles near the correct R.
+  // Uses a small margin (1.15×) beyond the port radius to remove quads
+  // whose centers are just outside the port boundary but whose extent
+  // partially overlaps the viewport (prevents tile occlusion at edges).
+  const portMargin = 1.15
   const portTest = (R: number, Z: number, phi: number): boolean => {
-    // Main port
-    const dz = Z - cfg.portZ
-    const dp = phi - cfg.portPhi
-    if (Math.sqrt(dz * dz + dp * dp * R * R) < cfg.portRadius) return true
+    // Main port — must be near the outboard wall (portR)
+    if (Math.abs(R - cfg.portR) < cfg.portRadius * 1.5) {
+      const dz = Z - cfg.portZ
+      const dp = phi - cfg.portPhi
+      if (Math.sqrt(dz * dz + dp * dp * R * R) < cfg.portRadius * portMargin) return true
+    }
     // Extra ports
     if (cfg.extraPorts) {
       for (const ep of cfg.extraPorts) {
-        const edz = Z - ep.z
-        const edp = phi - ep.phi
-        if (Math.sqrt(edz * edz + edp * edp * ep.r * ep.r) < ep.radius) return true
+        if (Math.abs(R - ep.r) < ep.radius * 1.5) {
+          const edz = Z - ep.z
+          const edp = phi - ep.phi
+          if (Math.sqrt(edz * edz + edp * edp * ep.r * ep.r) < ep.radius) return true
+        }
       }
     }
     return false
@@ -58,10 +66,13 @@ export function buildWallGeometry(
 
   // Region classification
   const classifyRegion = (R: number, Z: number, phi: number): WallRegion => {
-    // Antenna regions
+    // Antenna regions — must also check R to avoid classifying center stack
+    // quads in the same Z/phi range as outboard antennae
     if (cfg.antennae) {
       for (const ant of cfg.antennae) {
-        if (Z >= ant.zMin && Z <= ant.zMax && phi >= ant.phiMin && phi <= ant.phiMax) {
+        if (Math.abs(R - ant.r) < ant.r * 0.15 &&
+            Z >= ant.zMin && Z <= ant.zMax &&
+            phi >= ant.phiMin && phi <= ant.phiMax) {
           return WallRegion.Antenna
         }
       }

@@ -1,12 +1,12 @@
 import { useRef, useEffect, useCallback } from 'react'
 import * as THREE from 'three'
 import type { Snapshot } from '../../lib/types'
-import { getPortConfig, DEVICE_OPACITY_SCALE, DEFAULT_OPACITY_SCALE, DEVICE_POWER_SCALE, DEFAULT_POWER_SCALE } from './config'
+import { getPortConfig, DEVICE_OPACITY_SCALE, DEFAULT_OPACITY_SCALE, DEVICE_POWER_SCALE, DEFAULT_POWER_SCALE, DEVICE_GLOW_TUNING, DEFAULT_GLOW_TUNING } from './config'
 import { createCamera, updateCamera } from './camera'
 import { buildWallGeometry, buildPortGeometry } from './geometry'
 import { createWallMaterial, createPortMaterial, updateStrikePoints } from './wallMaterial'
 import { createPlasmaGroup } from './plasma'
-import { createGlowGroup, findStrikePoints } from './glow'
+import { createGlowGroup, findStrikePoints, type StrikePoint } from './glow'
 import { createPostProcessing } from './postprocessing'
 import { toroidal } from './types'
 
@@ -38,6 +38,8 @@ interface SceneState {
 export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, deviceR0, deviceA }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<SceneState | null>(null)
+  const glowIntensityRef = useRef(0)
+  const frozenStrikePointsRef = useRef<StrikePoint[]>([])
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 0.85
-    renderer.setClearColor(0x0a0a0c, 1)
+    renderer.setClearColor(0x050507, 1)
 
     const rect = container.getBoundingClientRect()
     renderer.setSize(rect.width, rect.height)
@@ -62,8 +64,8 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     const cfg = getPortConfig(deviceId, deviceR0, deviceA)
     const camera = createCamera(cfg, rect.width / rect.height)
 
-    // Ambient light for base illumination
-    const ambient = new THREE.AmbientLight(0x222222)
+    // Ambient light — very dim, divertor glow is the primary illumination
+    const ambient = new THREE.AmbientLight(0x0a0a0a)
     scene.add(ambient)
 
     // Post-processing
@@ -188,8 +190,9 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     state.scene.add(plasma.group)
     state.plasmaGroup = plasma
 
-    // Create glow group
-    const glow = createGlowGroup(cfg)
+    // Create glow group with per-device tuning
+    const glowTuning = DEVICE_GLOW_TUNING[deviceId ?? ''] ?? DEFAULT_GLOW_TUNING
+    const glow = createGlowGroup(cfg, glowTuning)
     glow.pixelRatio = Math.min(window.devicePixelRatio, 2)
     state.scene.add(glow.group)
     state.glowGroup = glow
@@ -218,6 +221,13 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     const cfg = getPortConfig(deviceId, deviceR0, deviceA)
     const opacityScale = DEVICE_OPACITY_SCALE[deviceId ?? ''] ?? DEFAULT_OPACITY_SCALE
     const powerScale = DEVICE_POWER_SCALE[deviceId ?? ''] ?? DEFAULT_POWER_SCALE
+    const glowTuning = DEVICE_GLOW_TUNING[deviceId ?? ''] ?? DEFAULT_GLOW_TUNING
+
+    // Set per-device strike illumination color on wall material
+    if (state.wallMaterial) {
+      const sc = glowTuning.color
+      state.wallMaterial.uniforms.u_strikeColor.value.set(sc.r, sc.g * 0.5, sc.b)
+    }
 
     // Parse limiter points for strike detection
     let pts = limiterPoints
@@ -248,29 +258,50 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       })
     }
 
-    // Update glow
+    // Update glow with smooth fade in/out
     if (state.glowGroup && pts) {
-      const strikePoints = snapshot.in_hmode
-        ? findStrikePoints(
-            snapshot.separatrix.points,
-            pts,
-            snapshot.xpoint_r,
-            snapshot.xpoint_z,
-            snapshot.axis_r,
-          )
-        : []
+      // Smooth glow intensity — fade in slowly, fade out quickly at ramp-down
+      const targetGlow = snapshot.in_hmode ? 0.8 : 0
+      const glowLerpRate = snapshot.in_hmode ? 0.04 : 0.25
+      glowIntensityRef.current += (targetGlow - glowIntensityRef.current) * glowLerpRate
+      // Snap to zero when very small to avoid lingering traces
+      if (glowIntensityRef.current < 0.005) glowIntensityRef.current = 0
+      const glowIntensity = glowIntensityRef.current
+
+      // Strike point position logic:
+      // - In H-mode: compute from current separatrix and save as frozen reference
+      // - Fading out: use frozen positions so glow doesn't follow moving equilibrium
+      let strikePoints: StrikePoint[]
+      if (snapshot.in_hmode) {
+        strikePoints = findStrikePoints(
+          snapshot.separatrix.points,
+          pts,
+          snapshot.xpoint_r,
+          snapshot.xpoint_z,
+          snapshot.axis_r,
+        )
+        // Save current positions — these become the frozen fade-out positions
+        frozenStrikePointsRef.current = strikePoints
+      } else if (glowIntensity > 0.01) {
+        // Fading out — use the last known H-mode strike positions
+        strikePoints = frozenStrikePointsRef.current
+      } else {
+        strikePoints = []
+        frozenStrikePointsRef.current = []
+      }
 
       state.glowGroup.update({
         strikePoints,
-        intensity: snapshot.in_hmode ? 0.8 : 0,
+        intensity: glowIntensity,
         powerScale,
         axisR: snapshot.axis_r,
         time: state.clock.getElapsedTime(),
       })
 
       // Update wall illumination from strike points
-      // Place at multiple phi positions so glow wraps toroidally around the full torus
-      if (state.wallMaterial && strikePoints.length > 0) {
+      // Scale wall illumination proportionally with glow intensity
+      const wallGlowFactor = glowIntensity / 0.8
+      if (state.wallMaterial && strikePoints.length > 0 && wallGlowFactor > 0.01) {
         const spUniforms: { x: number; y: number; z: number; intensity: number }[] = []
         const phis = [-1.2, -0.6, 0, 0.6, 1.2]
         for (const sp of strikePoints) {
@@ -278,7 +309,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
             if (spUniforms.length >= 8) break
             const v = toroidal(sp.r, sp.z, phi)
             const fadeFactor = Math.exp(-Math.abs(phi) * 0.5)
-            spUniforms.push({ x: v.x, y: v.y, z: v.z, intensity: powerScale * 0.5 * fadeFactor })
+            spUniforms.push({ x: v.x, y: v.y, z: v.z, intensity: powerScale * 0.5 * fadeFactor * wallGlowFactor })
           }
         }
         updateStrikePoints(state.wallMaterial, spUniforms)
@@ -289,11 +320,11 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
 
     // ELM flash — brief white overlay
     if (snapshot.elm_active) {
-      state.renderer.setClearColor(0x151518, 1)
+      state.renderer.setClearColor(0x0c0c0e, 1)
     } else if (snapshot.disrupted) {
-      state.renderer.setClearColor(0x1a0808, 1)
+      state.renderer.setClearColor(0x100505, 1)
     } else {
-      state.renderer.setClearColor(0x0a0a0c, 1)
+      state.renderer.setClearColor(0x050507, 1)
     }
   }, [snapshot, deviceId, deviceR0, deviceA, limiterPoints, wallJson, rebuildGeometry])
 

@@ -1,19 +1,14 @@
 import * as THREE from 'three'
 import type { PortConfig } from './types'
 import { toroidal } from './types'
-import { STRIKE_FADE_RATE } from './config'
+import { STRIKE_FADE_RATE, DEFAULT_GLOW_TUNING } from './config'
+import type { GlowTuning } from './config'
 
 const GLOW_SLICES = 600
 const POINTS_PER_STRIKE = GLOW_SLICES
 
-// Glow color — warm orange
-const GLOW_COLOR = { r: 1.0, g: 0.45, b: 0.15 }
-
 // Base glow intensity multiplier
 const GLOW_INTENSITY = 2.0
-
-// Point size — large enough that adjacent points overlap into a continuous band
-const BASE_POINT_SIZE = 0.30
 
 // Max strike points we'll ever render (generous upper bound)
 const MAX_STRIKE_POINTS = 8
@@ -21,12 +16,8 @@ const MAX_GLOW_POINTS = MAX_STRIKE_POINTS * POINTS_PER_STRIKE
 
 // ═══ STOCHASTIC JITTER PARAMETERS ═══
 // Subtle R/Z position jitter amplitude (meters) — keeps the band alive
-const JITTER_AMPLITUDE = 0.006
-// Fast jitter time rate — how quickly position noise evolves
-const JITTER_RATE = 18.0
-// Brightness flicker depth (0 = uniform, 1 = full range)
-const FLICKER_DEPTH = 0.35
-// Flicker time rate — how fast brightness changes (Hz-like seed rate)
+const JITTER_RATE = 18.0          // fast jitter time rate
+// Brightness flicker time rate — how fast brightness changes (Hz-like seed rate)
 const FLICKER_RATE = 25.0
 // Slow brightness modulation rate — broad undulations along the ring
 const MODULATION_RATE = 3.0
@@ -105,7 +96,8 @@ function createGlowTexture(size = 64): THREE.CanvasTexture {
  * Performance: pre-allocates a single Points object and buffers (4800 points max).
  * Position jitter + color update every frame (~0.1ms CPU cost).
  */
-export function createGlowGroup(cfg: PortConfig): GlowGroup {
+export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup {
+  const t = tuning ?? DEFAULT_GLOW_TUNING
   const group = new THREE.Group()
   group.renderOrder = 3
 
@@ -120,7 +112,7 @@ export function createGlowGroup(cfg: PortConfig): GlowGroup {
     depthTest: true,
     blending: THREE.AdditiveBlending,
     sizeAttenuation: true,
-    size: BASE_POINT_SIZE,
+    size: t.pointSize,
   })
 
   let storedPixelRatio = 1
@@ -168,7 +160,7 @@ export function createGlowGroup(cfg: PortConfig): GlowGroup {
     const time = params.time
     const intensityBase = params.intensity * params.powerScale * GLOW_INTENSITY
 
-    // Strike point fingerprint for change detection
+    // Strike point fingerprint — detect when strikes appear/disappear
     const fp = params.strikePoints
       .map(sp => `${sp.r.toFixed(4)},${sp.z.toFixed(4)}`)
       .join(':')
@@ -191,10 +183,13 @@ export function createGlowGroup(cfg: PortConfig): GlowGroup {
     }
 
     // ═══ PER-FRAME UPDATE: position jitter + stochastic brightness ═══
+    const jitAmp = t.jitterAmplitude
+    const glowR = t.color.r, glowG = t.color.g, glowB = t.color.b
+
     for (let vi = 0; vi < activeCount; vi++) {
       // Subtle R/Z position jitter — fast-evolving for heat-shimmer effect
-      const jitR = JITTER_AMPLITUDE * (pseudoRandom(vi * 127.1 + time * JITTER_RATE) - 0.5)
-      const jitZ = JITTER_AMPLITUDE * (pseudoRandom(vi * 269.5 + time * JITTER_RATE) - 0.5)
+      const jitR = jitAmp * (pseudoRandom(vi * 127.1 + time * JITTER_RATE) - 0.5)
+      const jitZ = jitAmp * (pseudoRandom(vi * 269.5 + time * JITTER_RATE) - 0.5)
 
       const v = toroidal(basePosR[vi] + jitR, basePosZ[vi] + jitZ, basePhi[vi])
       posBuffer[vi * 3] = v.x
@@ -205,13 +200,13 @@ export function createGlowGroup(cfg: PortConfig): GlowGroup {
       // Multiple overlapping noise frequencies for natural turbulent appearance
       const fastNoise = pseudoRandom(vi * 43.7 + Math.floor(time * FLICKER_RATE))
       const slowWave = 0.5 + 0.5 * Math.sin(basePhi[vi] * 3.0 + time * MODULATION_RATE)
-      const flicker = 1.0 - FLICKER_DEPTH * fastNoise * (0.6 + 0.4 * slowWave)
+      const flicker = 1.0 - t.flickerDepth * fastNoise * (0.6 + 0.4 * slowWave)
 
       const brightness = intensityBase * cachedFade[vi] * flicker
 
-      colBuffer[vi * 3] = GLOW_COLOR.r * brightness
-      colBuffer[vi * 3 + 1] = GLOW_COLOR.g * brightness
-      colBuffer[vi * 3 + 2] = GLOW_COLOR.b * brightness
+      colBuffer[vi * 3] = glowR * brightness
+      colBuffer[vi * 3 + 1] = glowG * brightness
+      colBuffer[vi * 3 + 2] = glowB * brightness
     }
 
     posAttr.needsUpdate = true

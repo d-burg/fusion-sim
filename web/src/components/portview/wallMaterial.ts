@@ -39,6 +39,7 @@ export function createWallMaterial(cfg: PortConfig, totalArc: number): THREE.Sha
       u_bandWidth: { value: cfg.bandWidth ?? 0.06 },
       u_strikePoints: { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0)) },
       u_nStrikePoints: { value: 0 },
+      u_strikeColor: { value: new THREE.Vector3(1.0, 0.4, 0.15) },  // default warm orange, overridden per-device
     },
   })
 }

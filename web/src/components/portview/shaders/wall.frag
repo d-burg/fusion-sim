@@ -22,6 +22,7 @@ uniform float u_bandWidth;
 // Strike point illumination
 uniform vec4 u_strikePoints[8];   // (x, y, z, intensity) — up to 8
 uniform int u_nStrikePoints;
+uniform vec3 u_strikeColor;       // per-device glow color for wall illumination
 
 varying vec2 v_uv;
 varying vec3 v_normal;
@@ -55,8 +56,9 @@ void main() {
   } else if (region == 5 && u_hasDivertor > 0.5) { // Divertor
     spacing = u_divertorGridSpacing;
     baseColor = u_divertorColor;
-  } else if (region == 4) { // Antenna
-    baseColor = vec3(0.28, 0.26, 0.24);
+  } else if (region == 4) { // Antenna — metallic Faraday screen look
+    baseColor = vec3(52.0, 50.0, 48.0);
+    spacing = u_gridSpacing * 0.6;
   }
 
   // Poloidal/toroidal position in metres
@@ -79,8 +81,9 @@ void main() {
   float tileVar = 0.92 + v_tileHash * 0.16; // range 0.92 — 1.08
 
   // Depth-based ambient (darker tiles further from camera)
+  // Much darker interior — divertor glow should be the primary light source
   float df = clamp(v_depth / u_maxDepth, 0.0, 1.0);
-  float depthMod = 0.15 + (1.0 - df) * 0.85;
+  float depthMod = 0.04 + (1.0 - df) * 0.36;
 
   // Fresnel (grazing angle brightening)
   // Use abs() so both normal orientations work correctly
@@ -104,7 +107,7 @@ void main() {
     float intensity = u_strikePoints[i].w;
     float dist = length(v_worldPos - sp);
     float falloff = intensity / (1.0 + dist * dist * 12.0);
-    color += vec3(1.0, 0.4, 0.15) * falloff * 0.35;
+    color += u_strikeColor * falloff * 0.35;
   }
 
   gl_FragColor = vec4(color, 1.0);

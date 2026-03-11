@@ -23,7 +23,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     portR: 2.35, portZ: 0, portRadius: 0.42, portLength: 0.25, portPhi: 0,
     camR: 2.60, camZ: 0.04, camPhi: 0,
     lookR: 1.10, lookZ: -0.02, lookPhi: 0.28, fov: 80,
-    tileColor: [58, 58, 62],
+    tileColor: [38, 38, 42],
     tileGridSpacing: { poloidal: 0.10, toroidal: 0.10 },
     tileGridDarken: 0.30,
     phiMin: -Math.PI, phiMax: Math.PI,
@@ -131,23 +131,70 @@ export function getPortConfig(deviceId?: string, r0?: number, a?: number): PortC
   return defaultPortConfig(r0 ?? 1.7, a ?? 0.6)
 }
 
-// Per-machine opacity tuning
+// Per-machine separatrix opacity tuning
+// DIII-D visible, JET/ITER nearly invisible except during ELMs
 export const DEVICE_OPACITY_SCALE: Record<string, number> = {
   diiid: 0.08,
-  iter: 0.04,
+  iter: 0.012,
   sparc: 0.10,
-  jet: 0.06,
+  jet: 0.020,
 }
 export const DEFAULT_OPACITY_SCALE = 0.10
 
 // Per-machine power scaling for strike point glow
 export const DEVICE_POWER_SCALE: Record<string, number> = {
-  diiid: 0.6,
-  iter: 1.8,
+  diiid: 0.08,
+  iter: 3.8,
   sparc: 0.8,
-  jet: 1.3,
+  jet: 1.0,
 }
 export const DEFAULT_POWER_SCALE = 0.5
+
+// ═══ Per-device glow tuning ═══
+export interface GlowTuning {
+  color: { r: number; g: number; b: number }
+  jitterAmplitude: number   // R/Z position jitter (metres)
+  flickerDepth: number      // 0 = uniform, 1 = full range
+  pointSize: number         // sprite size in world units
+}
+
+export const DEVICE_GLOW_TUNING: Record<string, GlowTuning> = {
+  // DIII-D: dimmest, smallest, least jittery — barely visible
+  diiid: {
+    color: { r: 1.0, g: 0.45, b: 0.15 },      // warm orange
+    jitterAmplitude: 0.003,
+    flickerDepth: 0.15,
+    pointSize: 0.20,
+  },
+  // ITER: brightest, largest, most jittery/fluctuating — wide diffuse glow
+  iter: {
+    color: { r: 1.0, g: 0.18, b: 0.05 },       // deep red
+    jitterAmplitude: 0.018,
+    flickerDepth: 0.50,
+    pointSize: 0.60,
+  },
+  // SPARC: moderate
+  sparc: {
+    color: { r: 1.0, g: 0.35, b: 0.10 },       // reddish orange
+    jitterAmplitude: 0.006,
+    flickerDepth: 0.30,
+    pointSize: 0.28,
+  },
+  // JET: moderate — less intense than ITER
+  jet: {
+    color: { r: 1.0, g: 0.22, b: 0.06 },       // deep red
+    jitterAmplitude: 0.007,
+    flickerDepth: 0.30,
+    pointSize: 0.30,
+  },
+}
+
+export const DEFAULT_GLOW_TUNING: GlowTuning = {
+  color: { r: 1.0, g: 0.45, b: 0.15 },
+  jitterAmplitude: 0.006,
+  flickerDepth: 0.35,
+  pointSize: 0.30,
+}
 
 // Rendering constants
 export const STRIKE_FADE_RATE = 0.5

@@ -52,14 +52,21 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t)
 }
 
-// ── Divertor legs: line-based ──
-const LEG_LINE_SLICES = 240
-const LEG_INTENSITY = 2.0
+// ── Divertor legs: mesh-based volumetric rendering (same approach as separatrix) ──
+// Fewer toroidal slices than the separatrix since legs are small features.
+const LEG_MESH_SLICES = 120
+// Max poloidal points per leg after densify + subsample
+const LEG_CONTOUR_MAX = 25
+// Narrower shell offsets than separatrix — legs are thinner ribbon-like features
+const LEG_SHELL_OFFSETS = [-0.015, -0.006, 0.006, 0.015]
+const N_LEG_SHELLS = LEG_SHELL_OFFSETS.length
+const LEG_FRESNEL_EXPONENT = 2.0
+const LEG_BASE_INTENSITY = 0.12
 
 export interface PlasmaGroup {
   group: THREE.Group
   sepMaterial: THREE.MeshBasicMaterial
-  legMaterial: THREE.LineBasicMaterial
+  legMaterial: THREE.MeshBasicMaterial
   update: (params: PlasmaUpdateParams) => void
 }
 
@@ -90,9 +97,9 @@ const SEP_MAX_VERTS = N_SHELLS * SEP_MESH_SLICES * SEP_CONTOUR_PTS
 // nQuadsPol can be up to nPts (closed contour)
 const SEP_MAX_INDICES = N_SHELLS * (SEP_MESH_SLICES - 1) * SEP_CONTOUR_PTS * 6
 
-// Divertor legs: generous upper bound (4 legs × 60 pts × 240 slices)
-const LEG_MAX_VERTS = 120_000
-const LEG_MAX_INDICES = 240_000
+// Divertor legs: generous upper bound (4 legs × 25 pts × 4 shells × 120 slices)
+const LEG_MAX_VERTS = 200_000
+const LEG_MAX_INDICES = 400_000
 
 // ═══════════════════════════════════════════════════════════════════
 // Contour fingerprint for change detection
@@ -393,12 +400,36 @@ function rebuildSepGeometry(
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * Rebuild divertor leg positions and per-vertex baseBrightness into
- * pre-allocated buffers.  Returns the active vertex/index counts.
+ * Densify an open contour (no wraparound from last→first).
+ * Inserts intermediate points wherever adjacent spacing exceeds maxGap.
+ */
+function densifyOpen(pts: [number, number][], maxGap: number): [number, number][] {
+  if (pts.length < 2) return pts
+  const result: [number, number][] = [pts[0]]
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1][0] - pts[i][0]
+    const dy = pts[i + 1][1] - pts[i][1]
+    const d = Math.sqrt(dx * dx + dy * dy)
+    const n = Math.ceil(d / maxGap)
+    for (let j = 1; j < n; j++) {
+      const t = j / n
+      result.push([pts[i][0] + dx * t, pts[i][1] + dy * t])
+    }
+    result.push(pts[i + 1])
+  }
+  return result
+}
+
+/**
+ * Rebuild divertor leg mesh positions and per-vertex baseBrightness into
+ * pre-allocated buffers.  Uses the same volumetric shell + Fresnel approach
+ * as the separatrix for a smooth, misty appearance instead of discrete lines.
+ * Returns the active vertex/index counts.
  */
 function rebuildLegGeometry(
   cfg: PortConfig,
   params: PlasmaUpdateParams,
+  camPos: THREE.Vector3,
   positions: Float32Array,
   baseBright: Float32Array,
   indices: Uint32Array,
@@ -461,45 +492,126 @@ function rebuildLegGeometry(
 
   if (allLegs.length === 0) return { vertCount: 0, idxCount: 0 }
 
-  const nSlices = LEG_LINE_SLICES
+  const nSlices = LEG_MESH_SLICES
   const phiMin = cfg.phiMin
   const phiMax = cfg.phiMax
 
+  // Average R for depth fade computation
   let rSum = 0, rCount = 0
   for (const leg of allLegs) {
     for (const [R] of leg) { rSum += R; rCount++ }
   }
   const rGeo = rCount > 0 ? rSum / rCount : params.axisR
-
-  const pathFactors = computePathFactors(cfg, rGeo, nSlices, phiMin, phiMax)
   const depthFades = computeDepthFades(cfg, rGeo, nSlices, phiMin, phiMax)
+
+  const phiStep = (phiMax - phiMin) / (nSlices - 1)
 
   let vi = 0
   let ii = 0
 
-  for (let si = 0; si < nSlices; si++) {
-    const phi = phiMin + (si / (nSlices - 1)) * (phiMax - phiMin)
-    const brightness = LEG_INTENSITY * pathFactors[si] * depthFades[si]
+  for (const rawLeg of allLegs) {
+    if (rawLeg.length < 2) continue
 
-    for (const leg of allLegs) {
-      const legBase = vi
+    // Densify for smooth quads (open contour — no wraparound)
+    const densified = densifyOpen(rawLeg, 0.02)
+    // Subsample to reasonable count
+    const sampled = subsample(densified, LEG_CONTOUR_MAX)
+    // Smooth to eliminate jagged polygon edges
+    const smoothed = smoothContour(sampled, 2)
+    const nPts = smoothed.length
+    if (nPts < 2) continue
+
+    // Compute contour normals (perpendicular to tangent in R-Z plane)
+    const cNormals: [number, number][] = []
+    for (let i = 0; i < nPts; i++) {
+      const prev = Math.max(0, i - 1)
+      const next = Math.min(nPts - 1, i + 1)
+      const dR = smoothed[next][0] - smoothed[prev][0]
+      const dZ = smoothed[next][1] - smoothed[prev][1]
+      const len = Math.sqrt(dR * dR + dZ * dZ) || 1
+      cNormals.push([-dZ / len, dR / len])
+    }
+
+    const nQuadsPol = nPts - 1  // open contour
+
+    for (let sh = 0; sh < N_LEG_SHELLS; sh++) {
+      const shellBase = vi
+      const offset = LEG_SHELL_OFFSETS[sh]
+      // Golden-ratio-based stagger so no two shells align
+      const phiStagger = phiStep * ((sh * 0.618) % 1.0)
+
+      // Offset contour along normals to create shell
+      const shellPts: [number, number][] = smoothed.map((pt, i) => [
+        pt[0] + offset * cNormals[i][0],
+        pt[1] + offset * cNormals[i][1],
+      ])
 
       // Safety: don't exceed pre-allocated buffer
-      if (vi + leg.length > LEG_MAX_VERTS) break
+      if (vi + nSlices * nPts > LEG_MAX_VERTS) break
 
-      for (let pi = 0; pi < leg.length; pi++) {
-        const v = toroidal(leg[pi][0], leg[pi][1], phi)
-        positions[vi * 3] = v.x
-        positions[vi * 3 + 1] = v.y
-        positions[vi * 3 + 2] = v.z
-        baseBright[vi] = brightness
-        vi++
+      for (let si = 0; si < nSlices; si++) {
+        const phi = phiMin + (si / (nSlices - 1)) * (phiMax - phiMin) + phiStagger
+        const cosPhi = Math.cos(phi)
+        const sinPhi = Math.sin(phi)
+        const dFade = depthFades[si]
+
+        for (let pi = 0; pi < nPts; pi++) {
+          const R = shellPts[pi][0]
+          const Z = shellPts[pi][1]
+
+          // 3D position (toroidal coordinates)
+          const px = R * cosPhi
+          const py = R * sinPhi
+          const pz = Z
+          positions[vi * 3] = px
+          positions[vi * 3 + 1] = py
+          positions[vi * 3 + 2] = pz
+
+          // Surface normal = cross(poloidalTangent, toroidalTangent)
+          const prev = Math.max(0, pi - 1)
+          const next = Math.min(nPts - 1, pi + 1)
+          const dR = shellPts[next][0] - shellPts[prev][0]
+          const dZ = shellPts[next][1] - shellPts[prev][1]
+
+          let nx = -dZ * cosPhi
+          let ny = -dZ * sinPhi
+          let nz = dR
+          const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz)
+          if (nLen > 1e-10) { nx /= nLen; ny /= nLen; nz /= nLen }
+
+          // View direction (camera → vertex)
+          const vx = camPos.x - px
+          const vy = camPos.y - py
+          const vz = camPos.z - pz
+          const vLen = Math.sqrt(vx * vx + vy * vy + vz * vz)
+          const NdotV = Math.abs((nx * vx + ny * vy + nz * vz) / vLen)
+
+          // Fresnel: transparent face-on (NdotV≈1), bright edge-on (NdotV≈0)
+          let fresnel = Math.pow(Math.max(0, 1.0 - NdotV), LEG_FRESNEL_EXPONENT)
+          fresnel *= smoothstep(0.08, 0.35, fresnel)
+
+          // Cache geometry-dependent brightness (without opacity/ELM which change per-frame)
+          baseBright[vi] = LEG_BASE_INTENSITY * fresnel * dFade
+
+          vi++
+        }
       }
 
-      for (let pi = 0; pi < leg.length - 1; pi++) {
-        if (ii + 2 > LEG_MAX_INDICES) break
-        indices[ii++] = legBase + pi
-        indices[ii++] = legBase + pi + 1
+      // Triangle indices for this shell's quad grid (open contour)
+      for (let si = 0; si < nSlices - 1; si++) {
+        for (let pi = 0; pi < nQuadsPol; pi++) {
+          if (ii + 6 > LEG_MAX_INDICES) break
+          const a = shellBase + si * nPts + pi
+          const b = shellBase + (si + 1) * nPts + pi
+          const c = shellBase + (si + 1) * nPts + pi + 1
+          const d = shellBase + si * nPts + pi + 1
+          indices[ii++] = a
+          indices[ii++] = b
+          indices[ii++] = c
+          indices[ii++] = a
+          indices[ii++] = c
+          indices[ii++] = d
+        }
       }
     }
   }
@@ -515,7 +627,7 @@ function rebuildLegGeometry(
 /**
  * Create the plasma rendering group.
  * Separatrix: mesh-based volumetric shells with Fresnel limb brightening.
- * Divertor legs: line-based (same as before).
+ * Divertor legs: mesh-based volumetric shells (same technique as separatrix).
  *
  * PERFORMANCE: All geometry is pre-allocated once.  The update() function
  * detects contour changes via fingerprinting and uses two code paths:
@@ -536,17 +648,18 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     side: THREE.DoubleSide,
   })
 
-  // Divertor leg material: lines with additive blending
-  const legMaterial = new THREE.LineBasicMaterial({
+  // Divertor leg material: mesh with additive blending (same as separatrix)
+  const legMaterial = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
     depthWrite: false,
     depthTest: true,
     blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
   })
 
-  const baseColor = { r: 0.4, g: 0.7, b: 1.0 }
-  const legColor = { r: 0.55, g: 0.82, b: 1.0 }
+  const baseColor = { r: 0.85, g: 0.20, b: 0.55 }   // fuchsia — ionized deuterium
+  const legColor = { r: 0.90, g: 0.30, b: 0.60 }
 
   // Camera position (constant for a given device config)
   const camPos = new THREE.Vector3(
@@ -599,11 +712,11 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   legGeom.setAttribute('color', legColAttr)
   legGeom.setIndex(legIdxAttr)
 
-  const legLines = new THREE.LineSegments(legGeom, legMaterial)
-  legLines.renderOrder = 1
-  legLines.frustumCulled = false
-  legLines.visible = false
-  group.add(legLines)
+  const legMesh = new THREE.Mesh(legGeom, legMaterial)
+  legMesh.renderOrder = 1
+  legMesh.frustumCulled = false
+  legMesh.visible = false
+  group.add(legMesh)
 
   let legVertCount = 0
   let legIdxCount = 0
@@ -614,15 +727,15 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     const sepPts = params.separatrix.points
     if (sepPts.length < 4) {
       sepMesh.visible = false
-      legLines.visible = false
+      legMesh.visible = false
       return
     }
 
-    // Plasma color from temperature — cyan-blue base
+    // Plasma color from temperature — fuchsia (ionized deuterium) base
     const tempFrac = Math.min(params.te0 / 12, 1)
-    baseColor.r = 0.30 + tempFrac * 0.15
-    baseColor.g = 0.60 + tempFrac * 0.15
-    baseColor.b = 0.90 + tempFrac * 0.10
+    baseColor.r = 0.75 + tempFrac * 0.15   // 0.75 → 0.90
+    baseColor.g = 0.15 + tempFrac * 0.10   // 0.15 → 0.25
+    baseColor.b = 0.45 + tempFrac * 0.15   // 0.45 → 0.60
 
     const elmMult = params.elmActive ? ELM_FLASH_MULT : 1.0
     const elmW = params.elmActive ? ELM_WHITE_SHIFT : 0.0
@@ -673,7 +786,7 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       // Legs share the same fingerprint (if contour changed, legs change too)
       if (newFP !== legFP) {
         const result = rebuildLegGeometry(
-          cfg, params,
+          cfg, params, camPos,
           legPositions, legBaseBright, legIdxBuf,
         )
         legVertCount = result.vertCount
@@ -684,21 +797,25 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       }
 
       if (legVertCount > 0) {
-        const lScale = opacity
+        // Apply ELM flash to leg colors (same as separatrix)
+        const lr = (legColor.r + elmW)
+        const lg = (legColor.g + elmW)
+        const lb = (legColor.b + elmW)
+        const lScale = opacity * elmMult
         for (let i = 0; i < legVertCount; i++) {
           const b = legBaseBright[i] * lScale
-          legColors[i * 3] = legColor.r * b
-          legColors[i * 3 + 1] = legColor.g * b
-          legColors[i * 3 + 2] = legColor.b * b
+          legColors[i * 3] = lr * b
+          legColors[i * 3 + 1] = lg * b
+          legColors[i * 3 + 2] = lb * b
         }
         legColAttr.needsUpdate = true
         legGeom.setDrawRange(0, legIdxCount)
-        legLines.visible = true
+        legMesh.visible = true
       } else {
-        legLines.visible = false
+        legMesh.visible = false
       }
     } else {
-      legLines.visible = false
+      legMesh.visible = false
     }
   }
 
