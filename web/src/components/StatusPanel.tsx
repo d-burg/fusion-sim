@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import type { Snapshot } from '../lib/types'
 import type { ProcessedProfile } from '../lib/types'
 import ProfilePanel from './ProfilePanel'
+import InfoPopup from './InfoPopup'
+import { plasmaParamsInfo, stabilityInfo, powerBalanceInfo } from './infoContent'
 
 interface Props {
   snapshot: Snapshot | null
@@ -143,7 +145,10 @@ export default function StatusPanel({
       <div className="grid grid-cols-2 gap-x-4 mb-1">
         {/* Column 1: Key parameters */}
         <div>
-          <div className="text-[10px] text-gray-500 mb-0.5">Plasma parameters</div>
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            Plasma parameters
+            <InfoPopup title="Plasma Parameters" position="right">{plasmaParamsInfo}</InfoPopup>
+          </div>
           <Param label={<>I<sub>p</sub></>} value={s.ip} unit="MA" />
           <Param label={<>B<sub>t</sub></>} value={s.bt} unit="T" />
           <Param label={<>T<sub>e0</sub></>} value={s.te0} unit="keV" />
@@ -154,7 +159,10 @@ export default function StatusPanel({
 
         {/* Column 2: Stability & confinement */}
         <div>
-          <div className="text-[10px] text-gray-500 mb-0.5">Stability</div>
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            Stability
+            <InfoPopup title="Stability Limits" position="left">{stabilityInfo}</InfoPopup>
+          </div>
           <Param label={<>q<sub>95</sub></>} value={s.q95} unit="" warn={s.q95 < 2.5} danger={s.q95 < 2.0} />
           <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} />
           <Param label={<>f<sub>GW</sub></>} value={s.f_greenwald} unit="" warn={s.f_greenwald > 0.8} danger={s.f_greenwald > 0.9} />
@@ -167,7 +175,10 @@ export default function StatusPanel({
       {/* Power balance: compact 2×2 grid below params/stability */}
       <div className="border-t border-gray-800 pt-1">
         <div className="flex items-center justify-between mb-0.5">
-          <span className="text-[10px] text-gray-500">Power balance</span>
+          <span className="text-[10px] text-gray-500 flex items-center gap-1">
+            Power balance
+            <InfoPopup title="Power Balance" position="right">{powerBalanceInfo}</InfoPopup>
+          </span>
           <span className="text-[10px] text-gray-500">
             Pin={s.p_input.toFixed(1)} Ploss={s.p_loss.toFixed(1)} MW
           </span>

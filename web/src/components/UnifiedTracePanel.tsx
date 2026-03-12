@@ -3,6 +3,8 @@ import type { TracePoint } from '../lib/types'
 import type { DischargeProgram } from '../lib/wasm'
 import { getDevice } from '../lib/wasm'
 import { computeTargetTraces, type TargetTraces } from '../lib/targetTraces'
+import InfoPopup from './InfoPopup'
+import { traceInfoContent } from './infoContent'
 
 /* ─── Full trace catalogue ───────────────────────────────── */
 
@@ -433,7 +435,10 @@ export default function UnifiedTracePanel({
         style={{ cursor: finished && history.length > 0 ? 'crosshair' : 'default' }}
       />
       {/* ── Trace selector dropdown ── */}
-      <div ref={dropdownRef} className="absolute top-1 right-1 z-10">
+      <div ref={dropdownRef} className="absolute top-1 right-1 z-10 flex items-center gap-1">
+        <InfoPopup title="Trace Reference" position="left">
+          {traceInfoContent(ALL_TRACES)}
+        </InfoPopup>
         <button
           onClick={() => setDropdownOpen((v) => !v)}
           className="px-2 py-0.5 text-[10px] font-mono rounded

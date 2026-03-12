@@ -1,5 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react'
 import type { Snapshot, Contour } from '../lib/types'
+import InfoPopup from './InfoPopup'
+import { equilibriumInfo } from './infoContent'
 
 interface Props {
   snapshot: Snapshot | null
@@ -330,8 +332,11 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     <div ref={containerRef} className="w-full h-full relative">
       <canvas ref={canvasRef} className="absolute inset-0" />
       {/* Title overlay */}
-      <div className="absolute top-2 left-3 text-xs text-gray-500 font-mono pointer-events-none">
-        Equilibrium
+      <div className="absolute top-2 left-3 text-xs text-gray-500 font-mono flex items-center gap-1.5">
+        <span className="pointer-events-none">Equilibrium</span>
+        <InfoPopup title="Magnetic Equilibrium" position="right">
+          {equilibriumInfo}
+        </InfoPopup>
       </div>
     </div>
   )
