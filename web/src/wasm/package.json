@@ -1,0 +1,17 @@
+{
+  "name": "tok-sym-core",
+  "type": "module",
+  "description": "Real-time tokamak physics engine for the Tok-Sym simulator",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "tok_sym_core_bg.wasm",
+    "tok_sym_core.js",
+    "tok_sym_core.d.ts"
+  ],
+  "main": "tok_sym_core.js",
+  "types": "tok_sym_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

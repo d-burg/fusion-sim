@@ -25,6 +25,8 @@ pub enum DisruptionPhase {
         remaining: f64,
         /// Initial Ip at start of CQ (MA)
         ip_start: f64,
+        /// Total duration of CQ phase (s) — used to compute elapsed time for Ip spike
+        total_duration: f64,
     },
     /// Disruption complete, plasma terminated
     Complete,
@@ -214,6 +216,7 @@ impl DisruptionModel {
                     self.phase = Some(DisruptionPhase::CurrentQuench {
                         remaining: cq_duration,
                         ip_start: ip,
+                        total_duration: cq_duration,
                     });
                     DisruptionEffects {
                         ip_multiplier: 1.0,
@@ -240,6 +243,7 @@ impl DisruptionModel {
             Some(DisruptionPhase::CurrentQuench {
                 remaining,
                 ip_start,
+                total_duration,
             }) => {
                 let new_remaining = remaining - dt;
                 if new_remaining <= 0.0 {
@@ -255,13 +259,33 @@ impl DisruptionModel {
                     self.phase = Some(DisruptionPhase::CurrentQuench {
                         remaining: new_remaining,
                         ip_start,
+                        total_duration,
                     });
-                    // Exponential Ip decay
-                    let total_cq = new_remaining + dt; // approximate
-                    let tau_cq = total_cq / 3.0; // e-folding ~ 1/3 of total CQ
-                    let decay = (-dt / tau_cq).exp();
+
+                    // Transient Ip spike (current quench overshoot) followed by
+                    // exponential L/R decay.  In real disruptions the sudden loss
+                    // of thermal energy increases plasma resistivity, causing a
+                    // brief inductive Ip overshoot before the L/R decay dominates.
+                    let spike_dur = 0.002_f64.min(total_duration * 0.3); // 2ms spike
+                    let elapsed = total_duration - remaining;
+                    let new_elapsed = elapsed + dt;
+
+                    // Envelope: sine-shaped 5% spike then exponential decay
+                    let envelope = |t: f64| -> f64 {
+                        if t < spike_dur {
+                            1.0 + 0.05 * (std::f64::consts::PI * t / spike_dur).sin()
+                        } else {
+                            let tau = (total_duration - spike_dur).max(1e-6) / 3.0;
+                            (-(t - spike_dur) / tau).exp()
+                        }
+                    };
+
+                    let ip_mult = (envelope(new_elapsed)
+                        / envelope(elapsed).max(1e-10))
+                        .clamp(0.0, 1.5);
+
                     DisruptionEffects {
-                        ip_multiplier: decay,
+                        ip_multiplier: ip_mult,
                         te_multiplier: 0.01,
                         locked_mode_amplitude: 1.0,
                         is_thermal_quench: false,

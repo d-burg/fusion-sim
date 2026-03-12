@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
-/* Dark control-room palette */
+/* ═══════════════════════════════════════════════════════════════════
+   CLASSIC THEME (default)
+   ═══════════════════════════════════════════════════════════════════ */
+
 :root {
   --bg-primary: #0a0e17;
   --bg-panel: #111827;
@@ -23,4 +26,353 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   MODERN THEME — KALDERA-inspired monochrome
+   Activated via [data-theme="modern"] on <html>
+
+   Design language: near-black backgrounds, thin white/gray borders,
+   angular panels, sans-serif uppercase typography, minimal chrome.
+   Inspired by kaldera.desy.de — monochrome with subtle gray accents.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ---------- Colour palette ---------- */
+[data-theme="modern"] {
+  --bg-primary: #08080a;
+  --bg-panel: #0c0c0f;
+  --bg-card: #131316;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-bright: rgba(255, 255, 255, 0.22);
+  --border-glow: rgba(255, 255, 255, 0.03);
+  --accent: #22d3ee;
+  --accent-warm: #f59e0b;
+  --text-primary: #d4d4d8;
+  --text-secondary: #71717a;
+}
+
+/* ---------- Typography: sans-serif ---------- */
+[data-theme="modern"] body {
+  font-family: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-primary);
+  letter-spacing: 0.02em;
+}
+
+[data-theme="modern"] .font-mono {
+  font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+  letter-spacing: 0.025em;
+}
+[data-theme="modern"] .tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Page background ---------- */
+[data-theme="modern"] .bg-\[\#0a0e17\] {
+  background-color: var(--bg-primary);
+}
+
+/* ── PANEL CARDS ─────────────────────────────────────────────── */
+[data-theme="modern"] .bg-gray-900.border.border-gray-700.rounded-lg {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  box-shadow: none;
+  position: relative;
+}
+
+/* Corner accent brackets — subtle white */
+[data-theme="modern"] .bg-gray-900.border.border-gray-700.rounded-lg::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  border-radius: 2px;
+  z-index: 1;
+  background:
+    /* ── top-left ── */
+    linear-gradient(to right, var(--border-bright), transparent 20px) no-repeat top left / 20px 1px,
+    linear-gradient(to bottom, var(--border-bright), transparent 20px) no-repeat top left / 1px 20px,
+    /* ── top-right ── */
+    linear-gradient(to left, var(--border-bright), transparent 20px) no-repeat top right / 20px 1px,
+    linear-gradient(to bottom, var(--border-bright), transparent 20px) no-repeat top right / 1px 20px,
+    /* ── bottom-left ── */
+    linear-gradient(to right, rgba(255, 255, 255, 0.12), transparent 20px) no-repeat bottom left / 20px 1px,
+    linear-gradient(to top, rgba(255, 255, 255, 0.12), transparent 20px) no-repeat bottom left / 1px 20px,
+    /* ── bottom-right ── */
+    linear-gradient(to left, rgba(255, 255, 255, 0.12), transparent 20px) no-repeat bottom right / 20px 1px,
+    linear-gradient(to top, rgba(255, 255, 255, 0.12), transparent 20px) no-repeat bottom right / 1px 20px;
+}
+
+/* Subtle scan-line overlay — white tint */
+[data-theme="modern"] .bg-gray-900.border.border-gray-700.rounded-lg::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  border-radius: 2px;
+  z-index: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 255, 255, 0.008) 3px,
+    rgba(255, 255, 255, 0.008) 4px
+  );
+}
+
+/* Panel content above pseudo-elements */
+[data-theme="modern"] .bg-gray-900.border.border-gray-700.rounded-lg > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ── TOP BAR ─────────────────────────────────────────────────── */
+[data-theme="modern"] .border-b.border-gray-800 {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(10, 10, 12, 0.95);
+  box-shadow: none;
+}
+
+/* ── SECTION DIVIDERS inside panels ──────────────────────────── */
+[data-theme="modern"] .border-t.border-gray-800 {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+[data-theme="modern"] .border-gray-800\/50 {
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ── BUTTONS ─────────────────────────────────────────────────── */
+/* Start / primary action — keep cyan but more muted */
+[data-theme="modern"] button.bg-cyan-600 {
+  background: rgba(8, 145, 178, 0.6);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  box-shadow: none;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+[data-theme="modern"] button.bg-cyan-600:hover {
+  background: rgba(8, 145, 178, 0.8);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.15);
+}
+
+/* Pause */
+[data-theme="modern"] button.bg-amber-600 {
+  background: rgba(180, 83, 9, 0.5);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: none;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Reset / secondary */
+[data-theme="modern"] button.bg-gray-700 {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+[data-theme="modern"] button.bg-gray-700:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+}
+
+/* Edit */
+[data-theme="modern"] button.bg-purple-700 {
+  background: rgba(109, 40, 217, 0.4);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  box-shadow: none;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ── SELECT DROPDOWNS ────────────────────────────────────────── */
+[data-theme="modern"] select.bg-gray-800 {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── BUTTON GROUPS (presets, speed) ──────────────────────────── */
+[data-theme="modern"] .flex.rounded.overflow-hidden.border.border-gray-700 {
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+[data-theme="modern"] .flex.rounded.overflow-hidden.border.border-gray-700 button.bg-gray-800 {
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+[data-theme="modern"] .flex.rounded.overflow-hidden.border.border-gray-700 button.bg-gray-800:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+[data-theme="modern"] .flex.rounded.overflow-hidden.border.border-gray-700 button.bg-amber-600,
+[data-theme="modern"] .flex.rounded.overflow-hidden.border.border-gray-700 button.bg-gray-600 {
+  box-shadow: none;
+}
+
+/* ── PROGRESS BAR ────────────────────────────────────────────── */
+[data-theme="modern"] .h-1\.5.bg-gray-900 {
+  background: rgba(0, 0, 0, 0.8);
+}
+[data-theme="modern"] .bg-cyan-500 {
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+}
+
+/* ── POWER BARS (StatusPanel) ────────────────────────────────── */
+[data-theme="modern"] .bg-gray-800.rounded-full {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+}
+[data-theme="modern"] .bg-gray-800.rounded-full .rounded-full {
+  border-radius: 2px;
+}
+
+/* ── SIGNAL BARS (neutron diagnostic) ────────────────────────── */
+[data-theme="modern"] .rounded-sm {
+  border-radius: 1px;
+}
+
+/* ── SETTINGS DROPDOWN ───────────────────────────────────────── */
+[data-theme="modern"] .settings-panel {
+  background: rgba(14, 14, 16, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.7);
+  border-radius: 2px;
+  backdrop-filter: blur(16px);
+}
+[data-theme="modern"] .settings-panel .flex.rounded.overflow-hidden.border.border-gray-700 {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+[data-theme="modern"] .settings-btn:hover {
+  text-shadow: none;
+  color: #e4e4e7;
+}
+
+/* ── Q DISPLAY / NEUTRON CARDS ───────────────────────────────── */
+[data-theme="modern"] .border-gray-700\/50 {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="modern"] .bg-gray-800\/30 {
+  background: rgba(255, 255, 255, 0.02);
+}
+[data-theme="modern"] .bg-gray-800\/50 {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Q glow states — keep color accents for data, but subdued */
+[data-theme="modern"] .border-emerald-500\/40 {
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: none;
+}
+[data-theme="modern"] .border-cyan-500\/40 {
+  border-color: rgba(34, 211, 238, 0.3);
+  box-shadow: none;
+}
+
+/* ── INFO POPUP ──────────────────────────────────────────────── */
+[data-theme="modern"] .bg-gray-900.border-gray-700 {
+  background: rgba(14, 14, 16, 0.97);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+/* ── TEXT REFINEMENTS ────────────────────────────────────────── */
+[data-theme="modern"] .text-gray-500 {
+  color: #52525b;
+}
+[data-theme="modern"] .text-gray-600 {
+  color: #3f3f46;
+}
+
+/* Wider tracking on small labels */
+[data-theme="modern"] .text-\[11px\] {
+  letter-spacing: 0.06em;
+}
+[data-theme="modern"] .text-\[10px\] {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+[data-theme="modern"] .text-\[9px\] {
+  letter-spacing: 0.04em;
+}
+
+/* Mode badge refinement — monochrome */
+[data-theme="modern"] .bg-cyan-900 {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+[data-theme="modern"] .bg-gray-800.text-gray-300 {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+[data-theme="modern"] .bg-red-900 {
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* ── TOP ACCENT LINE — subtle white ──────────────────────────── */
+[data-theme="modern"]::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.12) 15%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.12) 85%,
+    transparent 100%
+  );
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* ── BOTTOM ACCENT LINE ──────────────────────────────────────── */
+[data-theme="modern"]::before {
+  content: '';
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 20%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.06) 80%,
+    transparent 100%
+  );
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* ── DISRUPTION RISK BAR ─────────────────────────────────────── */
+[data-theme="modern"] .w-24.h-2\.5.bg-gray-800.rounded-full {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+}
+
+/* ── CYAN ACCENT OVERRIDES — mute Tailwind cyan for monochrome ── */
+[data-theme="modern"] .text-cyan-400 {
+  color: #a1a1aa;
+}
+[data-theme="modern"] .border-cyan-600 {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+[data-theme="modern"] .hover\:border-cyan-600:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+[data-theme="modern"] .focus\:border-cyan-500:focus {
+  border-color: rgba(255, 255, 255, 0.35);
 }

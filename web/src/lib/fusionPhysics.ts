@@ -232,6 +232,98 @@ export function computeFusion(snapshot: Snapshot, device: Device): FusionState {
   }
 }
 
+// ── Divertor heat flux ──────────────────────────────────────────────
+
+export interface DivertorState {
+  q_peak: number       // Peak heat flux (MW/m²)
+  lambda_q: number     // SOL power width (mm)
+  p_sol: number        // Power to SOL (MW)
+  f_detach: number     // Detachment fraction (0–1)
+  t_surface: number    // Estimated divertor surface temperature (°C)
+  wall_material: 'W' | 'C'  // Tungsten or Carbon wall
+}
+
+/**
+ * Estimate divertor peak heat flux using Eich scaling for the SOL
+ * power width and a simple detachment model based on Greenwald fraction.
+ *
+ * Reference: T. Eich et al., Nucl. Fusion 53, 093031 (2013).
+ */
+export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): DivertorState {
+  const MU0 = 4 * Math.PI * 1e-7
+  const ip_A = snapshot.ip * 1e6  // MA → A
+  const a = device.a              // minor radius (m)
+  const kappa = device.kappa
+  const R0 = device.r0            // major radius (m)
+
+  // Poloidal magnetic field at the outboard midplane
+  const B_pol = MU0 * ip_A / (2 * Math.PI * a * Math.sqrt(kappa))
+
+  // Eich scaling: λ_q ≈ 1.35 / B_pol^0.9 (mm), with minimum 0.5 mm
+  const lambda_q_m = Math.max(1.35e-3 / Math.pow(B_pol, 0.9), 0.5e-3) // metres
+
+  // Flux expansion at the divertor target (typical value ~5–10)
+  const f_x = 8.0
+
+  // Wetted area: toroidal ring at major radius times SOL width times expansion
+  const A_wet = 2 * Math.PI * R0 * lambda_q_m * f_x  // m²
+
+  // Power crossing the separatrix into the SOL
+  const p_sol = Math.max(snapshot.p_loss, 0)  // MW
+  const p_sol_W = p_sol * 1e6                 // W
+
+  // Attached heat flux (Loarte-like factor 2/3 for inner/outer sharing)
+  const q_attached = A_wet > 0 ? 0.67 * p_sol_W / A_wet : 0  // W/m²
+
+  // Detachment correction: higher Greenwald fraction → more radiative
+  // divertor → lower target heat flux.  Simple sigmoid model.
+  const f_GW = snapshot.f_greenwald
+  const f_detach = Math.min(1 - 1 / (1 + Math.pow(f_GW / 0.7, 6)), 0.97)
+
+  // Peak heat flux at the divertor target
+  const q_peak = q_attached * (1 - f_detach) / 1e6  // W/m² → MW/m²
+
+  // Wall material: DIII-D is carbon; JET (ILW) and ITER are tungsten divertors
+  // DIII-D uses carbon/graphite PFCs; JET (ILW) and ITER use tungsten divertors
+  const wall_material: 'W' | 'C' = device.id === 'diiid' ? 'C' : 'W'
+
+  // Estimate divertor surface temperature from heat flux.
+  // Simplified 1D thermal model: T_surface ≈ T_coolant + q_peak · (L / k)
+  // where L is the armor thickness and k is thermal conductivity.
+  //
+  // For tungsten monoblock (ITER-like):
+  //   k_W ≈ 110 W/(m·K) at 500°C, L ≈ 6 mm, T_coolant ≈ 150°C
+  //   T_surface ≈ 150 + q(MW/m²) × 6e-3 / 110 × 1e6 ≈ 150 + 54.5 × q
+  //
+  // For carbon (DIII-D): k_C ≈ 80 W/(m·K), L ≈ 20 mm, T_coolant ≈ 25°C
+  //   T_surface ≈ 25 + q(MW/m²) × 20e-3 / 80 × 1e6 ≈ 25 + 250 × q
+  //
+  // Add a radiation background of ~200°C during H-mode from divertor recycling.
+  const q_MW = Math.max(q_peak, 0)
+  let t_surface: number
+  if (wall_material === 'W') {
+    const T_coolant = 150  // °C (pressurised water)
+    const thermal_resistance = 55  // °C per MW/m² (6mm W armor)
+    t_surface = T_coolant + thermal_resistance * q_MW
+    // Add radiative/recycling background during active plasma
+    if (snapshot.ip > 0.01) t_surface += 150
+  } else {
+    const T_coolant = 25  // °C (room-temp water for DIII-D)
+    const thermal_resistance = 250  // °C per MW/m² (thicker carbon tiles)
+    t_surface = T_coolant + thermal_resistance * q_MW
+    if (snapshot.ip > 0.01) t_surface += 100
+  }
+
+  return {
+    q_peak: Math.max(q_peak, 0),
+    lambda_q: lambda_q_m * 1000,  // m → mm
+    p_sol,
+    f_detach,
+    t_surface,
+    wall_material,
+  }
+}
+
 // ── Formatting helpers ──────────────────────────────────────────────
 
 /**

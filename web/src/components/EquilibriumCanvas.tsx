@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import type { Snapshot, Contour } from '../lib/types'
 import InfoPopup from './InfoPopup'
 import { equilibriumInfo } from './infoContent'
+import { useSettings } from '../lib/settingsContext'
 
 interface Props {
   snapshot: Snapshot | null
@@ -21,6 +22,8 @@ function fluxColor(normalizedLevel: number): string {
 export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const { theme } = useSettings()
+  const isModern = theme === 'modern'
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -43,7 +46,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     const H = rect.height
 
     // Clear
-    ctx.fillStyle = '#0a0e17'
+    ctx.fillStyle = isModern ? '#08080a' : '#0a0e17'
     ctx.fillRect(0, 0, W, H)
 
     // Use limiter as wall boundary when provided, otherwise parse wallJson
@@ -312,7 +315,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
         ctx.fillText('DIVERTED', labelX, labelY)
       }
     }
-  }, [snapshot, wallJson, limiterPoints])
+  }, [snapshot, wallJson, limiterPoints, isModern])
 
   // Redraw on data change
   useEffect(() => {

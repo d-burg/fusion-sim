@@ -23,6 +23,11 @@ export default function InfoPopup({ children, title, position = 'right' }: InfoP
       if (left + popupWidth > window.innerWidth - 8) left = window.innerWidth - popupWidth - 8
       if (left < 8) left = 8
       let top = rect.top - 4
+      // Clamp vertically: estimate popup height (max 70vh) and keep within viewport
+      const maxPopupHeight = window.innerHeight * 0.7
+      if (top + maxPopupHeight > window.innerHeight - 8) {
+        top = Math.max(8, window.innerHeight - maxPopupHeight - 8)
+      }
       setCoords({ top, left })
     }
     setOpen(v => !v)
@@ -67,6 +72,10 @@ export default function InfoPopup({ children, title, position = 'right' }: InfoP
         if (left + popupWidth > window.innerWidth - 8) left = window.innerWidth - popupWidth - 8
         if (left < 8) left = 8
         let top = rect.top - 4
+        const maxPopupHeight = window.innerHeight * 0.7
+        if (top + maxPopupHeight > window.innerHeight - 8) {
+          top = Math.max(8, window.innerHeight - maxPopupHeight - 8)
+        }
         setCoords({ top, left })
       }
     }

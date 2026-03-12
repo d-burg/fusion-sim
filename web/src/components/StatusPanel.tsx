@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Snapshot } from '../lib/types'
 import type { ProcessedProfile } from '../lib/types'
 import ProfilePanel from './ProfilePanel'
 import InfoPopup from './InfoPopup'
-import { plasmaParamsInfo, stabilityInfo, powerBalanceInfo } from './infoContent'
+import { plasmaParamsInfo, stabilityInfo, powerBalanceInfo, divertorInfo, neutronDiagnosticInfo } from './infoContent'
 import { getDevice } from '../lib/wasm'
-import { computeFusion, formatNeutronRate, formatQ, neutronSignalLevel, type FusionState } from '../lib/fusionPhysics'
+import { computeFusion, computeDivertorHeatFlux, formatNeutronRate, formatQ, neutronSignalLevel, type FusionState, type DivertorState } from '../lib/fusionPhysics'
 
 interface Props {
   snapshot: Snapshot | null
@@ -68,6 +68,12 @@ export default function StatusPanel({
     return computeFusion(snapshot, device)
   }, [snapshot, device])
 
+  // Divertor heat flux
+  const divertor = useMemo<DivertorState | null>(() => {
+    if (!snapshot || !device) return null
+    return computeDivertorHeatFlux(snapshot, device)
+  }, [snapshot, device])
+
   if (!snapshot) {
     return (
       <div className="p-3 font-mono text-sm text-gray-600 flex items-center justify-center h-full">
@@ -94,7 +100,7 @@ export default function StatusPanel({
           {s.disrupted ? 'DISRUPTED' : s.in_hmode ? 'H-MODE' : 'L-MODE'}
         </span>
         {/* Disruption risk bar */}
-        <DisruptionRisk risk={s.disruption_risk} snapshot={s} />
+        <DisruptionRisk risk={s.disruption_risk} />
 
         {/* Profile toggle + status */}
         <div className="flex items-center gap-1.5 ml-auto shrink-0">
@@ -176,13 +182,13 @@ export default function StatusPanel({
           <Param label={<>n̄<sub>e</sub></>} value={s.ne_bar} unit="10²⁰" />
           <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} />
 
-          <Param label={<>W<sub>th</sub></>} value={s.w_th} unit="MJ" precision={2} />
-          <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" precision={3} />
+          <Param label={<>W<sub>th</sub></>} value={s.w_th} unit="MJ" />
+          <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" />
           <Param label={<>f<sub>GW</sub></>} value={s.f_greenwald} unit="" warn={s.f_greenwald > 0.8} danger={s.f_greenwald > 0.9} />
 
           <Param label={<>H<sub>98</sub></>} value={s.h_factor} unit="" />
           <Param label={<>l<sub>i</sub></>} value={s.li} unit="" />
-          <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" precision={3} />
+          <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" />
         </div>
       </div>
 
@@ -198,6 +204,9 @@ export default function StatusPanel({
         {/* Input / Output two-column power balance */}
         <PowerBalance snapshot={s} fusion={fusion} />
       </div>
+
+      {/* Divertor thermal loading */}
+      <DivertorLoading divertor={divertor} />
 
       {/* Neutron diagnostic + Q display side by side */}
       <div className="flex gap-2 border-t border-gray-800 pt-1.5">
@@ -256,10 +265,6 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
         {inputItems.map((item, i) => (
           <PowerBar key={i} label={<>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
-        <div className="flex justify-between text-[10px] text-gray-500 border-t border-gray-800/50 pt-1 mt-1 leading-tight">
-          <span>P<sub>in</sub></span>
-          <span className="tabular-nums">{pInputTotal.toFixed(1)} MW</span>
-        </div>
       </div>
 
       {/* Output column */}
@@ -268,10 +273,12 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
         {outputItems.map((item, i) => (
           <PowerBar key={i} label={<>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
-        <div className="flex justify-between text-[10px] text-gray-500 border-t border-gray-800/50 pt-1 mt-1 leading-tight">
-          <span>P<sub>out</sub></span>
-          <span className="tabular-nums">{pOutputTotal.toFixed(1)} MW</span>
-        </div>
+      </div>
+
+      {/* Shared P_in / P_out totals row */}
+      <div className="col-span-2 flex justify-between text-[10px] text-gray-500 border-t border-gray-800/50 pt-1 mt-0.5 leading-tight">
+        <span>P<sub>in</sub> <span className="tabular-nums">{pInputTotal.toFixed(1)} MW</span></span>
+        <span>P<sub>out</sub> <span className="tabular-nums">{pOutputTotal.toFixed(1)} MW</span></span>
       </div>
     </div>
   )
@@ -280,9 +287,25 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
 // ── Q_plasma display ─────────────────────────────────────────────────
 
 function QDisplay({ fusion }: { fusion: FusionState | null }) {
-  const q = fusion?.q_plasma ?? 0
+  const rawQ = fusion?.q_plasma ?? 0
+  const rawPFus = fusion?.p_fus ?? 0
   const fuelType = fusion?.fuel_type ?? 'DD'
-  const pFus = fusion?.p_fus ?? 0
+
+  // EMA smoothing — prevents ELM-driven jitter and P_fus toggling
+  const smoothQ = useRef(0)
+  const smoothPFus = useRef(0)
+  const alpha = 0.04
+
+  if (rawQ === 0 && smoothQ.current < 1e-8) {
+    smoothQ.current = 0
+    smoothPFus.current = 0
+  } else {
+    smoothQ.current += alpha * (rawQ - smoothQ.current)
+    smoothPFus.current += alpha * (rawPFus - smoothPFus.current)
+  }
+
+  const q = smoothQ.current
+  const pFus = smoothPFus.current
 
   // Color coding for Q
   const qColor = q >= 10 ? 'text-emerald-400'
@@ -294,6 +317,11 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
     : q >= 1 ? 'border-cyan-500/40 bg-cyan-500/5'
     : 'border-gray-700/50 bg-gray-800/50'
 
+  // Format P_fus — always show to prevent layout jumps
+  const pFusStr = pFus > 0.001
+    ? (pFus < 1 ? (pFus * 1000).toFixed(0) + ' kW' : pFus.toFixed(1) + ' MW')
+    : '—'
+
   return (
     <div className={`rounded border px-2.5 py-1.5 text-center min-w-[72px] shrink-0 ${borderColor}`}>
       <div className="text-[10px] text-gray-500 leading-tight">Q<sub>plasma</sub></div>
@@ -301,11 +329,9 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
         {formatQ(q)}
       </div>
       <div className="text-[10px] text-gray-600 leading-none">{fuelType}</div>
-      {pFus > 0.001 && (
-        <div className="text-[9px] text-gray-600 leading-none mt-0.5">
-          P<sub>fus</sub> {pFus < 1 ? (pFus * 1000).toFixed(0) + ' kW' : pFus.toFixed(1) + ' MW'}
-        </div>
-      )}
+      <div className="text-[9px] text-gray-600 leading-none mt-0.5 tabular-nums">
+        P<sub>fus</sub> {pFusStr}
+      </div>
     </div>
   )
 }
@@ -313,8 +339,28 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
 // ── Neutron Diagnostic ───────────────────────────────────────────────
 
 function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
-  const rate = fusion?.neutron_rate ?? 0
-  const power = fusion?.neutron_power ?? 0
+  const rawRate = fusion?.neutron_rate ?? 0
+  const rawPower = fusion?.neutron_power ?? 0
+
+  // EMA smoothing to eliminate ELM-driven jitter.
+  // α ≈ 0.04 at ~60 fps gives a ~400ms time constant — smooths
+  // the 2ms ELM spikes and prevents text width changes.
+  const smoothRate = useRef(0)
+  const smoothPower = useRef(0)
+  const alpha = 0.04
+
+  // Update smoothed values every render
+  if (rawRate === 0 && smoothRate.current < 1e5) {
+    // Reset when plasma is off
+    smoothRate.current = 0
+    smoothPower.current = 0
+  } else {
+    smoothRate.current += alpha * (rawRate - smoothRate.current)
+    smoothPower.current += alpha * (rawPower - smoothPower.current)
+  }
+
+  const rate = smoothRate.current
+  const power = smoothPower.current
   const signal = neutronSignalLevel(rate)
 
   // Signal level bars (8 segments)
@@ -324,12 +370,18 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
   // Glow animation for active detector
   const isActive = rate > 1e10
 
+  // Format power — always show to prevent layout shifts
+  const powerStr = power > 0.0001
+    ? (power < 1 ? (power * 1000).toFixed(0) + ' kW' : power.toFixed(1) + ' MW')
+    : '—'
+
   return (
     <div className="flex-1 rounded border border-gray-700/50 bg-gray-800/30 px-2.5 py-1.5 min-w-0">
       {/* Header */}
       <div className="flex items-center gap-1 mb-1">
         <span className={`text-[11px] ${isActive ? 'text-yellow-500' : 'text-gray-600'}`}>☢</span>
         <span className="text-[10px] text-gray-500">Neutron diagnostic</span>
+        <InfoPopup title="Neutron Diagnostics" position="left">{neutronDiagnosticInfo}</InfoPopup>
         {isActive && (
           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse shrink-0" />
         )}
@@ -353,69 +405,160 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
         })}
       </div>
 
-      {/* Values */}
+      {/* Values — fixed-layout flex to prevent side-to-side jitter */}
       <div className="flex items-center justify-between">
         <span className={`text-[11px] tabular-nums ${isActive ? 'text-gray-200' : 'text-gray-500'}`}>
           {rate > 0 ? formatNeutronRate(rate) : '—'} n/s
         </span>
-        {power > 0.0001 && (
-          <span className="text-[10px] text-gray-500 tabular-nums">
-            {power < 1 ? (power * 1000).toFixed(0) + ' kW' : power.toFixed(1) + ' MW'}
-          </span>
-        )}
+        <span className="text-[10px] text-gray-500 tabular-nums">
+          {powerStr}
+        </span>
       </div>
+    </div>
+  )
+}
+
+// ── Divertor Thermal Loading ─────────────────────────────────────────
+
+/** Tungsten recrystallization temperature threshold (°C). */
+const W_RECRYST_TEMP = 1300
+
+/** Tungsten recrystallization heat flux threshold (MW/m²) — approximate steady-state limit. */
+const W_RECRYST_QFLUX = 10
+
+function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
+  const q = divertor?.q_peak ?? 0
+  const lambda = divertor?.lambda_q ?? 0
+  const fDet = divertor?.f_detach ?? 0
+  const tSurface = divertor?.t_surface ?? 0
+  const wallMat = divertor?.wall_material ?? 'W'
+  const isW = wallMat === 'W'
+
+  // ── Heat flux bar ──
+  const maxQ = 25
+  const fracQ = Math.min(q / maxQ, 1)
+  const qBarColor = q > 15 ? '#ef4444' : q > W_RECRYST_QFLUX ? '#f97316' : q > 5 ? '#eab308' : '#22c55e'
+
+  // ── Temperature bar (tungsten only) ──
+  // Scale: 0 to 2000 °C
+  const maxTemp = 2000
+  const fracT = Math.min(tSurface / maxTemp, 1)
+  const tempBarColor = tSurface > W_RECRYST_TEMP ? '#ef4444' : tSurface > 1000 ? '#f97316' : tSurface > 600 ? '#eab308' : '#22c55e'
+  const isTempWarning = isW && tSurface > W_RECRYST_TEMP
+
+  // Flash state for warning light
+  const isWarning = (isW && q > W_RECRYST_QFLUX) || isTempWarning
+  const [flashOn, setFlashOn] = useState(true)
+  useEffect(() => {
+    if (!isWarning) return
+    const id = setInterval(() => setFlashOn(v => !v), 400)
+    return () => clearInterval(id)
+  }, [isWarning])
+
+  return (
+    <div className="border-t border-gray-800 pt-1.5">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-[10px] text-gray-500 flex items-center gap-1">
+          Divertor
+          <InfoPopup title="Divertor Thermal Loading" position="right">{divertorInfo}</InfoPopup>
+        </span>
+        <span className="text-[10px] text-gray-600 tabular-nums">
+          λ<sub>q</sub>={lambda.toFixed(1)} mm
+        </span>
+        <span className="text-[10px] text-gray-600 tabular-nums ml-auto">
+          f<sub>det</sub>={fDet.toFixed(2)}
+        </span>
+      </div>
+
+      {/* Heat flux bar */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-gray-500 w-6 text-right shrink-0">q<sub>⊥</sub></span>
+        <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden relative">
+          <div
+            className="h-full rounded-full transition-all duration-200"
+            style={{ width: `${fracQ * 100}%`, backgroundColor: qBarColor }}
+          />
+          {/* Threshold marker at 10 MW/m² for tungsten machines */}
+          {isW && (
+            <div
+              className="absolute top-0 h-full w-px bg-gray-500/50"
+              style={{ left: `${(W_RECRYST_QFLUX / maxQ) * 100}%` }}
+            />
+          )}
+        </div>
+        <span className="text-[10px] tabular-nums w-12 text-right shrink-0"
+          style={{ color: qBarColor }}
+        >
+          {q.toFixed(1)}
+        </span>
+        <span className="text-[9px] text-gray-600 shrink-0">MW/m²</span>
+      </div>
+
+      {/* Surface temperature bar — tungsten machines only */}
+      {isW && (
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[10px] text-gray-500 w-6 text-right shrink-0">T<sub>s</sub></span>
+          <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden relative">
+            <div
+              className="h-full rounded-full transition-all duration-200"
+              style={{ width: `${fracT * 100}%`, backgroundColor: tempBarColor }}
+            />
+            {/* Recrystallization threshold marker */}
+            <div
+              className="absolute top-0 h-full w-px bg-gray-500/50"
+              style={{ left: `${(W_RECRYST_TEMP / maxTemp) * 100}%` }}
+            />
+          </div>
+          <span className="text-[10px] tabular-nums w-12 text-right shrink-0"
+            style={{ color: tempBarColor }}
+          >
+            {tSurface.toFixed(0)}
+          </span>
+          <span className="text-[9px] text-gray-600 shrink-0">°C</span>
+        </div>
+      )}
+
+      {/* Warning indicator for tungsten recrystallization */}
+      {isWarning && (
+        <div className="flex items-center gap-1 mt-0.5">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{
+              backgroundColor: flashOn ? '#ef4444' : '#7f1d1d',
+              boxShadow: flashOn ? '0 0 6px #ef4444' : 'none',
+              transition: 'all 0.15s',
+            }}
+          />
+          <span className="text-[9px] text-red-400/80">W recrystallization risk</span>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Existing helper components ────────────────────────────────────────
 
-/** Compact disruption risk indicator with risk factor breakdown. */
-function DisruptionRisk({ risk, snapshot }: { risk: number; snapshot: Snapshot }) {
+/** Compact disruption risk indicator. */
+function DisruptionRisk({ risk }: { risk: number }) {
   const pct = Math.min(risk * 100, 100)
   const barColor =
     pct > 80 ? '#ef4444' : pct > 60 ? '#f97316' : pct > 30 ? '#eab308' : '#22c55e'
 
-  // Risk factor values (same metrics used by the disruption model)
-  const factors: { label: React.ReactNode; value: number; warn: number; danger: number; invert?: boolean }[] = [
-    { label: <span>f<sub>GW</sub></span>, value: snapshot.f_greenwald, warn: 0.8, danger: 0.9 },
-    { label: <span>β<sub>N</sub></span>, value: snapshot.beta_n, warn: 2.5, danger: 2.8 },
-    { label: <span>q<sub>95</sub></span>, value: snapshot.q95, warn: 2.5, danger: 2.0, invert: true },
-    { label: <span>P<sub>rad</sub>/P<sub>in</sub></span>, value: snapshot.p_input > 0 ? snapshot.p_rad / snapshot.p_input : 0, warn: 0.7, danger: 0.85 },
-  ]
-
   return (
-    <div className="flex items-center gap-2 flex-1 min-w-0">
-      {/* Risk bar */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] text-gray-500">Disruption risk</span>
-        <div className="w-24 h-2.5 bg-gray-800 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{ width: `${pct}%`, backgroundColor: barColor }}
-          />
-        </div>
-        <span
-          className="text-[10px] font-bold tabular-nums w-8"
-          style={{ color: barColor }}
-        >
-          {pct.toFixed(0)}%
-        </span>
+    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+      <span className="text-[10px] text-gray-500">Disruption risk</span>
+      <div className="w-24 h-2.5 bg-gray-800 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${pct}%`, backgroundColor: barColor }}
+        />
       </div>
-
-      {/* Risk factors inline */}
-      <div className="flex items-center gap-2 text-[10px] min-w-0">
-        {factors.map((f, idx) => {
-          const isDanger = f.invert ? f.value < f.danger : f.value > f.danger
-          const isWarn = f.invert ? f.value < f.warn : f.value > f.warn
-          const color = isDanger ? 'text-red-400' : isWarn ? 'text-yellow-400' : 'text-gray-500'
-          return (
-            <span key={idx} className={`${color} whitespace-nowrap`}>
-              {f.label}={f.value.toFixed(2)}
-            </span>
-          )
-        })}
-      </div>
+      <span
+        className="text-[10px] font-bold tabular-nums w-8"
+        style={{ color: barColor }}
+      >
+        {pct.toFixed(0)}%
+      </span>
     </div>
   )
 }
@@ -436,12 +579,13 @@ function Param({
   danger?: boolean
 }) {
   const color = danger ? 'text-red-400' : warn ? 'text-yellow-400' : 'text-gray-200'
+  const formatted = value.toFixed(precision)
   return (
-    <div className="flex justify-between leading-none py-px">
+    <div className="flex justify-between items-baseline leading-none py-px">
       <span className="text-gray-500">{label}</span>
-      <span className={color}>
-        {value.toFixed(precision)}
-        {unit && <span className="text-gray-600 ml-0.5 text-[10px]">{unit}</span>}
+      <span className={`${color} tabular-nums`}>
+        <span className="inline-block min-w-[3.5em] text-right">{formatted}</span>
+        <span className="text-gray-600 ml-0.5 text-[10px] inline-block min-w-[2.5em]">{unit}</span>
       </span>
     </div>
   )

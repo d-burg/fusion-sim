@@ -7,6 +7,7 @@ import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
 import ShotPlanner from '../components/ShotPlanner'
 import PortView from '../components/portview'
+import SettingsDropdown from '../components/SettingsDropdown'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
@@ -200,14 +201,17 @@ export default function ControlRoom() {
           </button>
         </div>
 
-        {/* Time readout */}
-        <div className="font-mono text-xs text-gray-400 tabular-nums whitespace-nowrap shrink-0">
-          t={time.toFixed(3)}s / {duration.toFixed(1)}s
-          {finished && (
-            <span className="ml-1 text-[10px] text-gray-600">
-              {scrubTime !== null ? '(scrub)' : '(done)'}
-            </span>
-          )}
+        {/* Time readout + Settings */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="font-mono text-xs text-gray-400 tabular-nums whitespace-nowrap">
+            t={time.toFixed(3)}s / {duration.toFixed(1)}s
+            {finished && (
+              <span className="ml-1 text-[10px] text-gray-600">
+                {scrubTime !== null ? '(scrub)' : '(done)'}
+              </span>
+            )}
+          </div>
+          <SettingsDropdown />
         </div>
       </div>
 

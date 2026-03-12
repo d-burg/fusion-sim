@@ -5,6 +5,7 @@ import { getDevice } from '../lib/wasm'
 import { computeTargetTraces, type TargetTraces } from '../lib/targetTraces'
 import InfoPopup from './InfoPopup'
 import { traceInfoContent } from './infoContent'
+import { useSettings } from '../lib/settingsContext'
 
 /* ─── Full trace catalogue ───────────────────────────────── */
 
@@ -76,6 +77,8 @@ export default function UnifiedTracePanel({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set(DEFAULT_KEYS))
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const { theme } = useSettings()
+  const isModern = theme === 'modern'
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -141,7 +144,7 @@ export default function UnifiedTracePanel({
     const ROW_H = H / numTraces
 
     // Clear
-    ctx.fillStyle = '#0a0e17'
+    ctx.fillStyle = isModern ? '#08080a' : '#0a0e17'
     ctx.fillRect(0, 0, W, H)
 
     const plotW = W - MARGIN_LEFT - MARGIN_RIGHT
@@ -157,11 +160,13 @@ export default function UnifiedTracePanel({
       const h = ROW_H - MARGIN_TOP - MARGIN_BOTTOM
 
       // Row background
-      ctx.fillStyle = row % 2 === 0 ? '#0d1117' : '#111827'
+      ctx.fillStyle = isModern
+        ? (row % 2 === 0 ? '#0a0a0d' : '#0e0e11')
+        : (row % 2 === 0 ? '#0d1117' : '#111827')
       ctx.fillRect(0, row * ROW_H, W, ROW_H)
 
       // Row separator
-      ctx.strokeStyle = '#1f2937'
+      ctx.strokeStyle = isModern ? 'rgba(255,255,255,0.06)' : '#1f2937'
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(MARGIN_LEFT, (row + 1) * ROW_H)
@@ -378,7 +383,7 @@ export default function UnifiedTracePanel({
       const x = toX(t)
       ctx.fillText(`${t.toFixed(0)}`, x, totalH - 12)
     }
-  }, [history, duration, targets, scrubTime, elmActive, activeTraces])
+  }, [history, duration, targets, scrubTime, elmActive, activeTraces, isModern])
 
   // Redraw on data changes
   useEffect(() => {
