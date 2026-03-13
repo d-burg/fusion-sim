@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getDevices, type Device } from '../lib/wasm'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
@@ -76,6 +76,27 @@ function DeviceSilhouette({ device }: { device: Device }) {
 export default function DeviceSelect() {
   const navigate = useNavigate()
   const devices = useMemo(() => getDevices(), [])
+  const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
+
+  // Show tutorial prompt after 1 second
+  useEffect(() => {
+    // Don't show if user has already seen or dismissed the tutorial
+    const dismissed = sessionStorage.getItem('tutorial-dismissed')
+    if (dismissed) return
+    const t = setTimeout(() => setShowTutorialPrompt(true), 1000)
+    return () => clearTimeout(t)
+  }, [])
+
+  const handleStartTutorial = () => {
+    setShowTutorialPrompt(false)
+    sessionStorage.setItem('tutorial-dismissed', '1')
+    navigate('/run/diiid?preset=hmode&tutorial=true')
+  }
+
+  const handleSkipTutorial = () => {
+    setShowTutorialPrompt(false)
+    sessionStorage.setItem('tutorial-dismissed', '1')
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -140,6 +161,52 @@ export default function DeviceSelect() {
       <p className="mt-12 text-gray-600 text-xs">
         Open-source · Educational · Not for engineering use
       </p>
+
+      {/* ─── Tutorial prompt overlay ─── */}
+      {showTutorialPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm
+                        animate-[fadeIn_0.3s_ease-out]">
+          <div className="bg-gray-950 border border-cyan-500/30 rounded-lg shadow-2xl shadow-cyan-500/10
+                          max-w-md w-full mx-4 overflow-hidden animate-[slideUp_0.4s_ease-out]">
+            {/* Accent bar */}
+            <div className="h-1 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-600" />
+
+            <div className="p-6">
+              <div className="text-center mb-4">
+                <div className="text-3xl mb-2">⚛</div>
+                <h2 className="text-xl font-bold text-white mb-1">New to Fusion?</h2>
+                <p className="text-gray-400 text-sm">
+                  Take a 2-minute guided tour of the control room to learn
+                  what each panel does, how tokamaks work, and what your
+                  objectives are.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={handleStartTutorial}
+                  className="w-full px-4 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm
+                             font-semibold transition-colors cursor-pointer text-white
+                             flex items-center justify-center gap-2"
+                >
+                  Take the Guided Tour →
+                </button>
+                <button
+                  onClick={handleSkipTutorial}
+                  className="w-full px-4 py-2 text-gray-500 hover:text-gray-300 text-sm
+                             transition-colors cursor-pointer"
+                >
+                  Skip — I know what I'm doing
+                </button>
+              </div>
+
+              <p className="text-center text-gray-600 text-[10px] mt-4">
+                The tour will load DIII-D in H-mode as a reference discharge
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -382,3 +382,28 @@ body {
 [data-theme="modern"] .focus\:border-cyan-500:focus {
   border-color: rgba(255, 255, 255, 0.35);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   TUTORIAL OVERLAY
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tutorial-card {
+  animation: slideUp 0.4s ease-out;
+}
+
+/* Modern theme overrides for tutorial */
+[data-theme="modern"] .tutorial-card {
+  background: rgba(14, 14, 16, 0.97);
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}

@@ -8,6 +8,7 @@ import StatusPanel from '../components/StatusPanel'
 import ShotPlanner from '../components/ShotPlanner'
 import PortView from '../components/portview'
 import SettingsDropdown from '../components/SettingsDropdown'
+import TutorialOverlay from '../components/TutorialOverlay'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
@@ -28,8 +29,10 @@ export default function ControlRoom() {
   const { deviceId: routeDeviceId } = useParams<{ deviceId: string }>()
   const [searchParams] = useSearchParams()
   const routePreset = (searchParams.get('preset') || 'hmode') as PresetId
+  const showTutorial = searchParams.get('tutorial') === 'true'
 
   // Local state so user can switch without navigating
+  const [tutorialActive, setTutorialActive] = useState(showTutorial)
   const [activeDevice, setActiveDevice] = useState(routeDeviceId ?? 'diiid')
   const [activePreset, setActivePreset] = useState<PresetId>(routePreset)
   const [showPlanner, setShowPlanner] = useState(false)
@@ -218,12 +221,12 @@ export default function ControlRoom() {
       {/* ─── Main grid ─── */}
       <div className="flex-1 grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[1.1fr_1fr] gap-2 p-2 min-h-0">
         {/* Top-left: Equilibrium cross-section (single cell) */}
-        <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="equilibrium" className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
           <EquilibriumCanvas snapshot={displaySnapshot} wallJson={wallJson} limiterPoints={limiterPoints} />
         </div>
 
         {/* Top row, cols 2-3: Unified trace panel */}
-        <div className="col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="traces" className="col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
           <UnifiedTracePanel
             history={history}
             programJson={programJson}
@@ -237,7 +240,7 @@ export default function ControlRoom() {
         </div>
 
         {/* Bottom row, cols 1-2: Status panel (extends under equilibrium) */}
-        <div className="col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="status" className="col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
           <StatusPanel
             snapshot={displaySnapshot}
             finished={finished}
@@ -250,7 +253,7 @@ export default function ControlRoom() {
         </div>
 
         {/* Bottom-right: 3D port view */}
-        <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="portview" className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
           <PortView
             snapshot={plasmaSnapshot}
             limiterPoints={limiterPoints}
@@ -285,6 +288,11 @@ export default function ControlRoom() {
           configOverride={configOverride}
           onConfigChange={setConfigOverride}
         />
+      )}
+
+      {/* ─── Tutorial overlay ─── */}
+      {tutorialActive && (
+        <TutorialOverlay onComplete={() => setTutorialActive(false)} />
       )}
     </div>
   )
