@@ -3,8 +3,8 @@ import * as THREE from 'three'
 import type { Snapshot } from '../../lib/types'
 import { getPortConfig, DEVICE_OPACITY_SCALE, DEFAULT_OPACITY_SCALE, DEVICE_POWER_SCALE, DEFAULT_POWER_SCALE, DEVICE_GLOW_TUNING, DEFAULT_GLOW_TUNING } from './config'
 import { createCamera, updateCamera } from './camera'
-import { buildWallGeometry, buildPortGeometry } from './geometry'
-import { createWallMaterial, createPortMaterial, updateStrikePoints } from './wallMaterial'
+import { buildWallGeometry, buildPortGeometry, buildExtraPortCylinders } from './geometry'
+import { createWallMaterial, createPortMaterial, createExtraPortMaterial, updateStrikePoints } from './wallMaterial'
 import { createPlasmaGroup } from './plasma'
 import { createGlowGroup, findStrikePoints, type StrikePoint } from './glow'
 import { createPostProcessing } from './postprocessing'
@@ -25,6 +25,7 @@ interface SceneState {
   camera: THREE.PerspectiveCamera
   wallMesh: THREE.Mesh | null
   portMesh: THREE.Mesh | null
+  extraPortMesh: THREE.Mesh | null
   wallMaterial: THREE.ShaderMaterial | null
   plasmaGroup: ReturnType<typeof createPlasmaGroup> | null
   glowGroup: ReturnType<typeof createGlowGroup> | null
@@ -75,7 +76,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
 
     const state: SceneState = {
       renderer, scene, camera,
-      wallMesh: null, portMesh: null, wallMaterial: null,
+      wallMesh: null, portMesh: null, extraPortMesh: null, wallMaterial: null,
       plasmaGroup: null, glowGroup: null,
       postProcessing,
       animFrameId: 0,
@@ -152,6 +153,10 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       state.scene.remove(state.portMesh)
       state.portMesh.geometry.dispose()
     }
+    if (state.extraPortMesh) {
+      state.scene.remove(state.extraPortMesh)
+      state.extraPortMesh.geometry.dispose()
+    }
     if (state.plasmaGroup) {
       state.scene.remove(state.plasmaGroup.group)
     }
@@ -184,6 +189,18 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     portMesh.renderOrder = 4
     state.scene.add(portMesh)
     state.portMesh = portMesh
+
+    // Build extra port recess cylinders (dark inset openings)
+    const extraPortGeom = buildExtraPortCylinders(cfg)
+    if (extraPortGeom) {
+      const extraPortMat = createExtraPortMaterial()
+      const extraPortMesh = new THREE.Mesh(extraPortGeom, extraPortMat)
+      extraPortMesh.renderOrder = 0
+      state.scene.add(extraPortMesh)
+      state.extraPortMesh = extraPortMesh
+    } else {
+      state.extraPortMesh = null
+    }
 
     // Create plasma group
     const plasma = createPlasmaGroup(cfg)

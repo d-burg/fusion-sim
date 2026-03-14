@@ -64,6 +64,41 @@ export function updateStrikePoints(
 }
 
 /**
+ * Material for extra port recess cylinders — very dark with a subtle
+ * depth gradient (slightly lighter at the opening, nearly black at the back).
+ * Uses DoubleSide so port interiors are visible from any camera angle.
+ */
+export function createExtraPortMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    vertexShader: `
+      varying float v_depth;
+      varying vec3 v_normal;
+      varying vec3 v_viewDir;
+      void main() {
+        v_depth = uv.y;
+        v_normal = normalize(normalMatrix * normal);
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        v_viewDir = normalize(cameraPosition - worldPos.xyz);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      varying float v_depth;
+      varying vec3 v_normal;
+      varying vec3 v_viewDir;
+      void main() {
+        float NdotV = abs(dot(normalize(v_normal), normalize(v_viewDir)));
+        float shade = mix(0.05, 0.015, v_depth);
+        shade *= 0.6 + 0.4 * NdotV;
+        gl_FragColor = vec4(vec3(shade), 1.0);
+      }
+    `,
+    side: THREE.DoubleSide,
+  })
+}
+
+/**
  * Simple material for the port cylinder (unlit, dark grey gradient).
  */
 export function createPortMaterial(): THREE.ShaderMaterial {

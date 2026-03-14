@@ -374,6 +374,12 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
   const [visible, setVisible] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
 
+  /* Drag & viewport-clamping state */
+  const [posOverride, setPosOverride] = useState<{ top: number; left: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef({ mx: 0, my: 0, top: 0, left: 0 })
+
   const currentStep = STEPS[step]
 
   // Fade in on mount
@@ -410,6 +416,89 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
     cardRef.current?.scrollTo(0, 0)
   }, [step])
 
+  // Reset position override when step changes (so computed position is used first)
+  useEffect(() => {
+    setPosOverride(null)
+  }, [step])
+
+  // Post-render: clamp card fully within viewport if it overflows
+  useEffect(() => {
+    if (!cardRef.current || posOverride !== null) return
+    const raf = requestAnimationFrame(() => {
+      if (!cardRef.current) return
+      const rect = cardRef.current.getBoundingClientRect()
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const margin = 8
+
+      let top = rect.top
+      let left = rect.left
+      let needsClamp = false
+
+      if (rect.bottom > vh - margin) {
+        top = Math.max(margin, vh - rect.height - margin)
+        needsClamp = true
+      }
+      if (top < margin) {
+        top = margin
+        needsClamp = true
+      }
+      if (rect.right > vw - margin) {
+        left = Math.max(margin, vw - rect.width - margin)
+        needsClamp = true
+      }
+      if (left < margin) {
+        left = margin
+        needsClamp = true
+      }
+
+      if (needsClamp) {
+        setPosOverride({ top, left })
+      }
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [step, highlightRect, posOverride])
+
+  // Drag: global mousemove / mouseup listeners
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return
+      e.preventDefault()
+      const dx = e.clientX - dragStartRef.current.mx
+      const dy = e.clientY - dragStartRef.current.my
+      setPosOverride({
+        top: dragStartRef.current.top + dy,
+        left: dragStartRef.current.left + dx,
+      })
+    }
+    const onUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false
+        setDragging(false)
+      }
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  const onHeaderMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0 || !cardRef.current) return
+    e.preventDefault()
+    isDraggingRef.current = true
+    setDragging(true)
+    const rect = cardRef.current.getBoundingClientRect()
+    dragStartRef.current = {
+      mx: e.clientX,
+      my: e.clientY,
+      top: rect.top,
+      left: rect.left,
+    }
+  }, [])
+
   const next = useCallback(() => {
     if (step < STEPS.length - 1) {
       setStep(s => s + 1)
@@ -439,8 +528,11 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
     return () => document.removeEventListener('keydown', handler)
   }, [next, prev, skip])
 
-  // Compute card position
-  const cardStyle = computeCardPosition(currentStep, highlightRect)
+  // Compute card position (override if clamped or dragged)
+  const computedStyle = computeCardPosition(currentStep, highlightRect)
+  const cardStyle = posOverride
+    ? { width: 380, maxHeight: '75vh' as const, top: posOverride.top, left: posOverride.left }
+    : computedStyle
 
   // Build the overlay mask with a cutout for the highlighted panel
   const maskStyle = highlightRect
@@ -480,15 +572,20 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
       {/* Explanation card */}
       <div
         ref={cardRef}
-        className="absolute bg-gray-950/95 border border-cyan-500/30 rounded-lg shadow-2xl
+        className={`absolute bg-gray-950/95 border border-cyan-500/30 rounded-lg shadow-2xl
                    shadow-cyan-500/10 backdrop-blur-sm overflow-y-auto
-                   transition-all duration-500 tutorial-card"
+                   ${dragging ? '' : 'transition-all duration-500'} tutorial-card`}
         style={cardStyle}
       >
-        {/* Header */}
-        <div className="sticky top-0 bg-gray-950/95 backdrop-blur-sm px-4 pt-3 pb-2 border-b border-gray-800/50 z-10">
+        {/* Header (drag handle) */}
+        <div
+          className="sticky top-0 bg-gray-950/95 backdrop-blur-sm px-4 pt-3 pb-2 border-b border-gray-800/50 z-10 select-none"
+          style={{ cursor: dragging ? 'grabbing' : 'grab' }}
+          onMouseDown={onHeaderMouseDown}
+        >
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
+              <span className="text-gray-600 text-[10px] mr-0.5" title="Drag to reposition">⠿</span>
               <span className="text-[10px] text-cyan-500 font-mono">
                 {step + 1}/{STEPS.length}
               </span>

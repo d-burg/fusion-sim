@@ -51,13 +51,18 @@ export function buildWallGeometry(
       const dp = phi - cfg.portPhi
       if (Math.sqrt(dz * dz + dp * dp * R * R) < cfg.portRadius * portMargin) return true
     }
-    // Extra ports
+    // Extra ports (supports elliptical via zRadius)
     if (cfg.extraPorts) {
       for (const ep of cfg.extraPorts) {
-        if (Math.abs(R - ep.r) < ep.radius * 1.5) {
+        const zR = ep.zRadius ?? ep.radius
+        const maxR = Math.max(ep.radius, zR)
+        if (Math.abs(R - ep.r) < maxR * 1.5) {
           const edz = Z - ep.z
           const edp = phi - ep.phi
-          if (Math.sqrt(edz * edz + edp * edp * ep.r * ep.r) < ep.radius) return true
+          // Elliptical test: (dz/zR)² + (dphi*R/radius)² < 1
+          const nz = edz / zR
+          const np = edp * ep.r / ep.radius
+          if (Math.sqrt(nz * nz + np * np) < 1) return true
         }
       }
     }
@@ -283,6 +288,139 @@ export function buildPortGeometry(cfg: PortConfig): THREE.BufferGeometry {
       const d = (ri + 1) * nSegments + si
       indices[triIdx++] = a; indices[triIdx++] = b; indices[triIdx++] = c
       indices[triIdx++] = a; indices[triIdx++] = c; indices[triIdx++] = d
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1))
+
+  return geometry
+}
+
+/**
+ * Build merged cylinder + back-cap geometry for all extra port recesses.
+ * Each port gets a short radially-oriented tube so it appears as a dark
+ * inset opening on the first wall — matching the look of real diagnostic
+ * and heating ports on tokamaks like DIII-D.
+ */
+export function buildExtraPortCylinders(cfg: PortConfig): THREE.BufferGeometry | null {
+  const ports = cfg.extraPorts
+  if (!ports || ports.length === 0) return null
+
+  const nSeg = 16      // circumferential segments per cylinder
+  const nRing = 3      // rings along depth (front, mid, back)
+  const depth = 0.10   // recess depth in metres
+
+  // Per-port vertex/index budget
+  const tubeVerts = nSeg * nRing
+  const capVerts = nSeg + 1            // center + rim
+  const vertsPerPort = tubeVerts + capVerts
+  const tubeTris = nSeg * (nRing - 1) * 2
+  const capTris = nSeg
+  const trisPerPort = tubeTris + capTris
+
+  const totalVerts = ports.length * vertsPerPort
+  const totalIndices = ports.length * trisPerPort * 3
+
+  const positions = new Float32Array(totalVerts * 3)
+  const normals = new Float32Array(totalVerts * 3)
+  const uvs = new Float32Array(totalVerts * 2)
+  const indices = new Uint32Array(totalIndices)
+
+  let vi = 0   // running vertex index
+  let ii = 0   // running index index
+
+  for (const port of ports) {
+    const zR = port.zRadius ?? port.radius
+    const baseVert = vi
+
+    // ── Tube rings ──
+    for (let ri = 0; ri < nRing; ri++) {
+      const t = ri / (nRing - 1)           // 0 = wall surface, 1 = back
+      const ringR = port.r + t * depth      // extend outward from wall
+
+      for (let si = 0; si < nSeg; si++) {
+        const angle = (si / nSeg) * Math.PI * 2
+        const localZ = Math.cos(angle) * zR
+        const localPhi = Math.sin(angle) * port.radius / ringR
+
+        const v = toroidal(ringR, port.z + localZ, port.phi + localPhi)
+        positions[vi * 3]     = v.x
+        positions[vi * 3 + 1] = v.y
+        positions[vi * 3 + 2] = v.z
+
+        // Normal points inward toward cylinder axis
+        const nx = -Math.cos(port.phi + localPhi) * Math.cos(angle)
+        const ny = -Math.sin(port.phi + localPhi) * Math.cos(angle)
+        const nz = -Math.sin(angle)
+        normals[vi * 3]     = nx
+        normals[vi * 3 + 1] = ny
+        normals[vi * 3 + 2] = nz
+
+        uvs[vi * 2]     = si / nSeg
+        uvs[vi * 2 + 1] = t
+        vi++
+      }
+    }
+
+    // Tube quad indices
+    for (let ri = 0; ri < nRing - 1; ri++) {
+      for (let si = 0; si < nSeg; si++) {
+        const ns = (si + 1) % nSeg
+        const a = baseVert + ri * nSeg + si
+        const b = baseVert + ri * nSeg + ns
+        const c = baseVert + (ri + 1) * nSeg + ns
+        const d = baseVert + (ri + 1) * nSeg + si
+        indices[ii++] = a; indices[ii++] = b; indices[ii++] = c
+        indices[ii++] = a; indices[ii++] = c; indices[ii++] = d
+      }
+    }
+
+    // ── Back cap (disc at the deepest ring) ──
+    const capCenter = vi
+    const capR = port.r + depth
+    const cv = toroidal(capR, port.z, port.phi)
+    positions[vi * 3]     = cv.x
+    positions[vi * 3 + 1] = cv.y
+    positions[vi * 3 + 2] = cv.z
+
+    // Cap normal points inward (toward plasma)
+    const cnx = -Math.cos(port.phi)
+    const cny = -Math.sin(port.phi)
+    normals[vi * 3]     = cnx
+    normals[vi * 3 + 1] = cny
+    normals[vi * 3 + 2] = 0
+    uvs[vi * 2]     = 0.5
+    uvs[vi * 2 + 1] = 1.0
+    vi++
+
+    // Cap rim vertices
+    for (let si = 0; si < nSeg; si++) {
+      const angle = (si / nSeg) * Math.PI * 2
+      const localZ = Math.cos(angle) * zR
+      const localPhi = Math.sin(angle) * port.radius / capR
+
+      const v = toroidal(capR, port.z + localZ, port.phi + localPhi)
+      positions[vi * 3]     = v.x
+      positions[vi * 3 + 1] = v.y
+      positions[vi * 3 + 2] = v.z
+      normals[vi * 3]     = cnx
+      normals[vi * 3 + 1] = cny
+      normals[vi * 3 + 2] = 0
+      uvs[vi * 2]     = 0.5 + Math.cos(angle) * 0.5
+      uvs[vi * 2 + 1] = 1.0
+      vi++
+    }
+
+    // Cap triangle fan
+    for (let si = 0; si < nSeg; si++) {
+      const ns = (si + 1) % nSeg
+      indices[ii++] = capCenter
+      indices[ii++] = capCenter + 1 + si
+      indices[ii++] = capCenter + 1 + ns
     }
   }
 

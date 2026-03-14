@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Real-time tokamak physics engine for the Tok-Sym simulator"
 license = "MIT"
+authors = ["Daniel Burgess"]
+repository = "https://github.com/danielburgess/tok-sym"
+keywords = ["tokamak", "plasma", "fusion", "simulation", "wasm"]
+categories = ["simulation", "science", "wasm"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -19,4 +23,8 @@ js-sys = "0.3"
 
 [dev-dependencies]
 approx = "0.5"
+
+[package.metadata.docs.rs]
+features = ["wasm"]
+all-features = false
 

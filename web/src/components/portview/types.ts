@@ -33,7 +33,7 @@ export interface PortConfig {
     limiterGridSpacing: { poloidal: number; toroidal: number }
     limiterZThreshold: number
   }
-  extraPorts?: { r: number; z: number; phi: number; radius: number }[]
+  extraPorts?: { r: number; z: number; phi: number; radius: number; zRadius?: number }[]
   antennae?: { r: number; zMin: number; zMax: number; phiMin: number; phiMax: number }[]
   fresnelStrength?: number
   inboardStyle?: 'tiles' | 'bands'

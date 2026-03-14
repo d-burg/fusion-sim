@@ -35,14 +35,38 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
       limiterZThreshold: 0.80,
     },
     extraPorts: [
-      { r: 2.35, z: 0.42, phi: 0.18, radius: 0.09 },
-      { r: 2.35, z: -0.48, phi: -0.12, radius: 0.08 },
-      { r: 2.35, z: 0.12, phi: -0.32, radius: 0.07 },
-      { r: 2.35, z: -0.15, phi: 0.42, radius: 0.06 },
+      // ─── Upper outboard (Z > 0.35) ───
+      { r: 2.35, z: 0.55, phi: 0.18,  radius: 0.10 },
+      { r: 2.35, z: 0.72, phi: -0.28, radius: 0.09 },
+      { r: 2.35, z: 0.45, phi: 0.42,  radius: 0.07 },
+      { r: 2.35, z: 0.82, phi: 0.48,  radius: 0.08 },
+      { r: 2.35, z: 0.60, phi: -0.55, radius: 0.07 },
+      { r: 2.35, z: 0.75, phi: 0.80,  radius: 0.06 },
+      { r: 2.35, z: 0.48, phi: -0.78, radius: 0.06 },
+      { r: 2.35, z: 0.68, phi: 0.05,  radius: 0.08, zRadius: 0.12 },
+
+      // ─── Midplane (|Z| < 0.35), between antennae ───
+      { r: 2.35, z: 0.12,  phi: -0.32, radius: 0.07 },
+      { r: 2.35, z: -0.15, phi: 0.42,  radius: 0.06 },
+      { r: 2.35, z: 0.25,  phi: 0.38,  radius: 0.06 },
+      { r: 2.35, z: -0.22, phi: -0.38, radius: 0.06 },
+      { r: 2.35, z: 0.08,  phi: 0.82,  radius: 0.07 },
+      { r: 2.35, z: -0.10, phi: -0.78, radius: 0.06 },
+
+      // ─── Lower outboard (Z < -0.35) ───
+      { r: 2.35, z: -0.50, phi: 0.20,  radius: 0.09 },
+      { r: 2.35, z: -0.70, phi: -0.25, radius: 0.10 },
+      { r: 2.35, z: -0.45, phi: -0.58, radius: 0.07 },
+      { r: 2.35, z: -0.60, phi: 0.55,  radius: 0.08 },
+      { r: 2.35, z: -0.80, phi: 0.35,  radius: 0.06 },
+      { r: 2.35, z: -0.55, phi: -0.75, radius: 0.06 },
+      { r: 2.35, z: -0.65, phi: 0.80,  radius: 0.07 },
+      { r: 2.35, z: -0.75, phi: -0.45, radius: 0.08, zRadius: 0.12 },
     ],
     antennae: [
-      { r: 2.35, zMin: -0.28, zMax: 0.28, phiMin: 0.55, phiMax: 0.72 },
-      { r: 2.35, zMin: -0.12, zMax: 0.12, phiMin: -0.60, phiMax: -0.48 },
+      { r: 2.35, zMin: -0.28, zMax: 0.28, phiMin: 0.55, phiMax: 0.72 },   // ICRH
+      { r: 2.35, zMin: -0.12, zMax: 0.12, phiMin: -0.60, phiMax: -0.48 },  // LHRF
+      { r: 2.35, zMin: -0.18, zMax: 0.18, phiMin: -0.92, phiMax: -0.80 },  // ECH launcher
     ],
     fresnelStrength: 0.55,
   },
@@ -108,12 +132,38 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
       limiterZThreshold: 1.2,
     },
     extraPorts: [
-      { r: 3.80, z: 0.55, phi: 0.14, radius: 0.12 },
-      { r: 3.80, z: -0.60, phi: -0.10, radius: 0.11 },
-      { r: 3.80, z: 0.15, phi: -0.28, radius: 0.09 },
+      // ─── Upper outboard (Z > 0.55) ───
+      { r: 3.80, z: 0.80, phi: 0.15,  radius: 0.14 },
+      { r: 3.80, z: 1.00, phi: -0.35, radius: 0.12 },
+      { r: 3.80, z: 0.70, phi: 0.50,  radius: 0.10 },
+      { r: 3.80, z: 0.90, phi: 0.72,  radius: 0.09 },
+      { r: 3.80, z: 0.75, phi: -0.62, radius: 0.11 },
+      { r: 3.80, z: 1.10, phi: 0.40,  radius: 0.08 },
+      { r: 3.80, z: 0.65, phi: -0.85, radius: 0.09 },
+
+      // ─── Midplane (|Z| < 0.55), in gaps between antennae ───
+      { r: 3.80, z: 0.18,  phi: 0.22,  radius: 0.08 },
+      { r: 3.80, z: -0.20, phi: -0.20, radius: 0.08 },
+      { r: 3.80, z: 0.10,  phi: 0.60,  radius: 0.07 },
+      { r: 3.80, z: -0.15, phi: -0.60, radius: 0.07 },
+      { r: 3.80, z: 0.30,  phi: 0.98,  radius: 0.09 },
+      { r: 3.80, z: -0.25, phi: -0.98, radius: 0.08 },
+
+      // ─── Lower outboard (-1.0 < Z < -0.55) ───
+      { r: 3.80, z: -0.70, phi: 0.18,  radius: 0.13 },
+      { r: 3.80, z: -0.85, phi: -0.30, radius: 0.11 },
+      { r: 3.80, z: -0.65, phi: 0.55,  radius: 0.10 },
+      { r: 3.80, z: -0.95, phi: 0.72,  radius: 0.09 },
+      { r: 3.80, z: -0.75, phi: -0.55, radius: 0.10 },
+      { r: 3.80, z: -0.60, phi: -0.82, radius: 0.08 },
+      { r: 3.80, z: -0.90, phi: 0.42,  radius: 0.08 },
     ],
     antennae: [
-      { r: 3.80, zMin: -0.40, zMax: 0.40, phiMin: 0.40, phiMax: 0.58 },
+      // JET A2 ICRH antenna modules — 4 large Faraday screen panels
+      { r: 3.80, zMin: -0.55, zMax: 0.55, phiMin: 0.30, phiMax: 0.52 },
+      { r: 3.80, zMin: -0.55, zMax: 0.55, phiMin: 0.66, phiMax: 0.88 },
+      { r: 3.80, zMin: -0.55, zMax: 0.55, phiMin: -0.52, phiMax: -0.30 },
+      { r: 3.80, zMin: -0.55, zMax: 0.55, phiMin: -0.88, phiMax: -0.66 },
     ],
     fresnelStrength: 0.25,
     inboardStyle: 'bands',
