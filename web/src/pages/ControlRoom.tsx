@@ -9,19 +9,34 @@ import PulsePlanner from '../components/PulsePlanner'
 import PortView from '../components/portview'
 import SettingsDropdown from '../components/SettingsDropdown'
 import TutorialOverlay from '../components/TutorialOverlay'
+import MagneticsPanel from '../components/MagneticsPanel'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
 import { CENTAUR_LIMITER } from '../lib/centaur-geometry'
+import { SPARC_LIMITER } from '../lib/sparc-geometry'
 
 const DEVICE_LIMITERS: Record<string, [number, number][]> = {
   diiid: DIIID_LIMITER,
+  sparc: SPARC_LIMITER,
   centaur: CENTAUR_LIMITER,
   jet: JET_LIMITER,
   iter: ITER_LIMITER,
 }
 
 function getPresets(deviceId: string): { id: PresetId; label: string }[] {
+  if (deviceId === 'sparc') {
+    // SPARC's default is the QCE (quasi-continuous exhaust) regime, not the
+    // Type-I ELMy Primary Reference Discharge — unmitigated SPARC ELMs are
+    // projected at 1.4–2.2 MJ, which the inertially cooled divertor cannot
+    // take. Type-I ELMy H-mode is reachable from the pulse planner by raising
+    // ICRF power out of the QCE window.
+    return [
+      { id: 'hmode', label: 'QCE' },
+      { id: 'lmode', label: 'L-mode' },
+      { id: 'density_limit', label: 'Density limit' },
+    ]
+  }
   if (deviceId === 'centaur') {
     // CENTAUR operates in negative-triangularity edge mode; no conventional L-mode
     return [
@@ -54,8 +69,13 @@ export default function ControlRoom() {
   const [plannerDuration, setPlannerDuration] = useState<number | null>(null)
   const [plannerPreset, setPlannerPreset] = useState<PresetId>(routePreset)
   const [hasCustomProgram, setHasCustomProgram] = useState(false)
+  // Bottom-right cell is shared between the 3D port view and the magnetics
+  // diagnostic. Magnetics only exists for SPARC, where the QCE regime makes
+  // the quasi-coherent mode the thing worth looking at.
+  const [bottomRightTab, setBottomRightTab] = useState<'portview' | 'magnetics'>('portview')
   const [configOverride, setConfigOverride] = useState<'LowerSingleNull' | 'DoubleNull' | 'UpperSingleNull' | null>(null)
-  const defaultFuel = (id: string): 'DD' | 'DT' => (id === 'iter' || id === 'jet') ? 'DT' : 'DD'
+  const defaultFuel = (id: string): 'DD' | 'DT' =>
+    (id === 'iter' || id === 'jet' || id === 'sparc') ? 'DT' : 'DD'
   const [fuelType, setFuelType] = useState<'DD' | 'DT'>(defaultFuel(activeDevice))
 
   const devices = useMemo(() => getDevices(), [])
@@ -136,6 +156,9 @@ export default function ControlRoom() {
 
   // Limiter geometry — only for DIII-D (other devices fall back to wallJson)
   const limiterPoints = DEVICE_LIMITERS[activeDevice]
+
+  // The magnetics diagnostic is modelled only for SPARC (QCE demo)
+  const hasMagnetics = activeDevice === 'sparc'
 
   const handleSpeedChange = (speed: number) => {
     setActiveSpeed(speed)
@@ -285,7 +308,7 @@ export default function ControlRoom() {
         <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end">
           <div className="font-mono text-[10px] sm:text-xs text-gray-400 tabular-nums whitespace-nowrap">
             t={time.toFixed(3)}s / {duration.toFixed(1)}s
-            {finished && (
+            {(finished || (!running && scrubTime !== null)) && (
               <span className="ml-1 text-[9px] sm:text-[10px] text-gray-600">
                 {scrubTime !== null ? '(scrub)' : '(done)'}
               </span>
@@ -310,7 +333,7 @@ export default function ControlRoom() {
             programJson={programJson}
             deviceId={activeDevice}
             duration={duration}
-            finished={finished}
+            scrubbable={finished || !running}
             scrubTime={scrubTime}
             onScrub={controls.setScrubTime}
             elmActive={displaySnapshot?.elm_active ?? false}
@@ -331,16 +354,38 @@ export default function ControlRoom() {
           />
         </div>
 
-        {/* Bottom-right: 3D port view */}
-        <div data-tutorial="portview" className="stagger-4 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
-          <PortView
-            snapshot={plasmaSnapshot}
-            limiterPoints={limiterPoints}
-            deviceId={activeDevice}
-            wallJson={wallJson}
-            deviceR0={devices.find(d => d.id === activeDevice)?.r0}
-            deviceA={devices.find(d => d.id === activeDevice)?.a}
-          />
+        {/* Bottom-right: 3D port view, or magnetics on SPARC */}
+        <div data-tutorial="portview" className="stagger-4 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden relative flex flex-col">
+          {hasMagnetics && (
+            <div className="absolute top-2 right-2 z-10 flex rounded overflow-hidden border border-gray-700">
+              {(['portview', 'magnetics'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setBottomRightTab(tab)}
+                  className={`px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors cursor-pointer
+                    ${bottomRightTab === tab
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-gray-900/80 text-gray-400 hover:bg-gray-800'}`}
+                >
+                  {tab === 'portview' ? 'Port' : 'Magnetics'}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
+            {hasMagnetics && bottomRightTab === 'magnetics' ? (
+              <MagneticsPanel snapshot={displaySnapshot} deviceId={activeDevice} history={history} />
+            ) : (
+              <PortView
+                snapshot={plasmaSnapshot}
+                limiterPoints={limiterPoints}
+                deviceId={activeDevice}
+                wallJson={wallJson}
+                deviceR0={devices.find(d => d.id === activeDevice)?.r0}
+                deviceA={devices.find(d => d.id === activeDevice)?.a}
+              />
+            )}
+          </div>
         </div>
       </div>
       </div>

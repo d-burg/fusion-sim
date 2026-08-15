@@ -284,6 +284,7 @@ export function useSimulation(
         })(),
         elm_suppressed: snap.elm_suppressed,
         elm_active: anyElmActive,
+        in_hmode: snap.in_hmode,
       }
       historyRef.current.push(pt)
       if (historyRef.current.length > MAX_TRACE_HISTORY) {
@@ -349,7 +350,9 @@ export function useSimulation(
   const start = useCallback(() => {
     if (!simRef.current) return
     runningRef.current = true
-    setState((s) => ({ ...s, running: true }))
+    // Resuming from a paused scrub: drop the scrub so the display snaps back
+    // to the live plasma before time starts advancing again.
+    setState((s) => ({ ...s, running: true, scrubTime: null, displaySnapshot: s.snapshot }))
     rafRef.current = requestAnimationFrame(tick)
   }, [tick])
 

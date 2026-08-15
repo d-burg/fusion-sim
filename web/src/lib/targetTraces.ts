@@ -79,7 +79,9 @@ export function computeTargetTraces(
   const r0 = device.r0
   const a = device.a
   const epsilon = a / r0
-  const kappa = device.kappa
+  // IPB98(y,2) is defined with the areal elongation κ_a = S/(πa²), not the
+  // separatrix elongation — matches Device::areal_ratio in the Rust model.
+  const kappa = device.kappa_areal
   const mass = device.mass_number
   const volume = device.volume
 

@@ -760,6 +760,29 @@ fn jet_dt_hmode_refs() -> ReferenceValues {
     }
 }
 
+fn sparc_qce_refs() -> ReferenceValues {
+    // SPARC in the QCE (quasi-continuous exhaust) regime — the simulator's
+    // default SPARC scenario, NOT the published Primary Reference Discharge.
+    //
+    // The PRD (Creely et al. 2020, table 2) is Q = 11, P_fus = 140 MW,
+    // tau_E = 0.77 s, Te = 7.3 keV volume-averaged, beta_N = 1.0, at
+    // f_GW = 0.37 with 11.1 MW of ICRF. QCE trades pedestal pressure for
+    // type-I ELM-free operation and runs at higher density, which raises the
+    // L-H sustainment power — so it lands well below the PRD on gain.
+    //
+    // Hughes et al. (2020) §4.2 bound the trade: even a 2x pedestal reduction
+    // still leaves Q > 2. These ranges bracket the self-consistent QCE point.
+    ReferenceValues {
+        te0_range: (8.0, 16.0),
+        te_ped_range: (3.0, 6.0),
+        tau_e_range: (0.6, 1.1),
+        p_fus_range: (30.0, 90.0),
+        q_range: (1.8, 4.5),
+        w_th_range: (10.0, 30.0),
+        beta_n_range: (0.6, 1.3),
+    }
+}
+
 fn centaur_nt_refs() -> ReferenceValues {
     // CENTAUR conceptual design: compact high-field NT tokamak
     // R0=2.0m, a=0.72m, Bt=10.9T, Ip=9.6MA, δ=-0.55, DT
@@ -838,6 +861,17 @@ fn test_audit_iter_baseline() {
     let prog = make_prog(&device, 15.0, 5.3, 33.0, 20.0, 0.0, 0.80);
     let rec = run_and_average(&device, &prog, "ITER Baseline (15MA, 33NBI+20ECH, DT)", RAMP_LARGE, AVG_LARGE);
     print_audit(&rec, Some(&iter_baseline_refs()));
+}
+
+#[test]
+#[ignore]
+fn test_audit_sparc_qce() {
+    let device = devices::sparc(); // DT by default (mass_number = 2.5)
+    // QCE operating point: full field and current, ICRF stepped back to 17 MW
+    // once the alphas carry the burn, f_GW = 0.46.
+    let prog = make_prog(&device, 8.7, 12.2, 0.0, 0.0, 17.0, 0.46);
+    let rec = run_and_average(&device, &prog, "SPARC QCE (8.7MA, 17MW ICRF, DT)", RAMP_MED, AVG_MED);
+    print_audit(&rec, Some(&sparc_qce_refs()));
 }
 
 #[test]

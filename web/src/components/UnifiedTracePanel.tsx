@@ -69,10 +69,10 @@ function drawLabel(ctx: CanvasRenderingContext2D, cfg: TraceConfig, x: number, y
   ctx.fillText(cfg.sub, x - subW, y + 3)
 }
 
-// Default traces vary by device: ITER and CENTAUR show P_fus (burning plasma),
+// Default traces vary by device: ITER, SPARC and CENTAUR show P_fus (burning plasma),
 // DIII-D and JET show stored energy W_th (more relevant for non-burning devices).
 function defaultKeysForDevice(deviceId: string): Set<string> {
-  if (deviceId === 'iter' || deviceId === 'centaur') {
+  if (deviceId === 'iter' || deviceId === 'centaur' || deviceId === 'sparc') {
     return new Set(['ip', 'beta_n', 'p_fus', 'd_alpha'])
   }
   return new Set(['ip', 'beta_n', 'w_th', 'd_alpha'])
@@ -90,7 +90,12 @@ interface Props {
   programJson: string
   deviceId: string
   duration: number
-  finished: boolean
+  /**
+   * Scrubbing is allowed whenever the simulation is not advancing — after the
+   * pulse (finished) or while paused mid-pulse — so the operator can walk
+   * back through the equilibrium and plasma state history at any stop.
+   */
+  scrubbable: boolean
   scrubTime: number | null
   onScrub: (time: number | null) => void
   elmActive: boolean
@@ -101,7 +106,7 @@ export default function UnifiedTracePanel({
   programJson,
   deviceId,
   duration,
-  finished,
+  scrubbable,
   scrubTime,
   onScrub,
   elmActive,
@@ -549,7 +554,7 @@ export default function UnifiedTracePanel({
   // ── Mouse scrub interaction ──
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!finished || history.length === 0) return
+      if (!scrubbable || history.length === 0) return
       const canvas = canvasRef.current
       if (!canvas) return
 
@@ -568,14 +573,14 @@ export default function UnifiedTracePanel({
       // Pass time directly — useSimulation handles snapshot lookup
       onScrub(t)
     },
-    [finished, history.length, duration, onScrub],
+    [scrubbable, history.length, duration, onScrub],
   )
 
   const handleMouseLeave = useCallback(() => {
-    if (finished) {
+    if (scrubbable) {
       onScrub(null)
     }
-  }, [finished, onScrub])
+  }, [scrubbable, onScrub])
 
   return (
     <div ref={containerRef} className="w-full h-full relative">
@@ -584,7 +589,7 @@ export default function UnifiedTracePanel({
         className="absolute inset-0"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        style={{ cursor: finished && history.length > 0 ? 'crosshair' : 'default' }}
+        style={{ cursor: scrubbable && history.length > 0 ? 'crosshair' : 'default' }}
       />
       {/* ── Trace selector dropdown ── */}
       <div ref={dropdownRef} className="absolute top-1 right-1 z-10 flex items-center gap-1">

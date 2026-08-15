@@ -450,9 +450,29 @@ function extendLegsToWall(
   toX: (r: number) => number,
   toY: (z: number) => number,
   jumpThresh: number,
-  maxExtend = 0.5,
+  // The Rust side now clips the separatrix at its first wall impact, so leg
+  // ends normally sit ON the wall and need no extension at all. This pass
+  // survives only as a short gap-bridger for walls whose display polygon
+  // differs slightly from the physics wall — hence the tight cap. The old
+  // 0.5 m reach let the tangent ray fly from an already-landed strike point
+  // clear across the divertor throat to the far baffle, drawing the "leg
+  // through the limiter" glitch.
+  maxExtend = 0.08,
 ) {
   if (points.length < 4 || wall.length < 3) return
+
+  const distToWall = (px: number, py: number): number => {
+    let best = Infinity
+    for (let i = 0; i < wall.length; i++) {
+      const a = wall[i]
+      const b = wall[(i + 1) % wall.length]
+      const dx = b[0] - a[0], dy = b[1] - a[1]
+      const l2 = dx * dx + dy * dy
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / l2)) : 0
+      best = Math.min(best, Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy))
+    }
+    return best
+  }
 
   // Forward ray (unit dir d from p) vs wall polygon → nearest hit point or null.
   const rayHit = (px: number, py: number, dx: number, dy: number): [number, number] | null => {
@@ -489,6 +509,10 @@ function extendLegsToWall(
   if (cur.length) chains.push(cur)
 
   const extend = (end: [number, number], back: [number, number]) => {
+    // Already terminated on the wall (the normal case with Rust-side leg
+    // clipping, which lands ends within ~3 mm of the boundary) — nothing to
+    // extend, and extending would draw across in-vessel space.
+    if (distToWall(end[0], end[1]) < 0.012) return
     let dx = end[0] - back[0]
     let dy = end[1] - back[1]
     const n = Math.hypot(dx, dy)

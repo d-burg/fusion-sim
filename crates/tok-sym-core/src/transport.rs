@@ -185,7 +185,13 @@ impl TransportModel {
 
         let r0 = device.r0;
         let a = device.a;
+        // Programmed (separatrix) elongation — the plasma *shape*.
         let kappa = prog.kappa;
+        // Areal elongation κ_a = S/(πa²), which is what IPB98(y,2), the Uckan
+        // q* formula and the poloidal cross-section area are defined against.
+        // The programmed value ramps 1.0 → κ_sep, so the device ratio is
+        // applied to preserve that ramp (see Device::areal_ratio).
+        let kappa_a = kappa * device.areal_ratio();
         let volume = device.volume;
         let surface = device.surface_area;
 
@@ -219,7 +225,7 @@ impl TransportModel {
         // get unrealistically low q95 values.
         let delta = prog.delta;
         let shape_factor =
-            (1.0 + kappa * kappa * (1.0 + 2.0 * delta * delta - 1.2 * delta.powi(3))) / 2.0;
+            (1.0 + kappa_a * kappa_a * (1.0 + 2.0 * delta * delta - 1.2 * delta.powi(3))) / 2.0;
         self.q95 = 5.0 * a * a * bt * shape_factor / (r0 * ip);
         self.q95 = self.q95.max(1.0);
 
@@ -235,7 +241,9 @@ impl TransportModel {
         let te_avg = (self.te0 * 0.5).max(0.05); // rough volume average
         let eta = 2.8e-8 * z_eff / te_avg.powf(1.5); // Ω·m (approximate)
         let loop_length = 2.0 * std::f64::consts::PI * r0;
-        let cross_section = std::f64::consts::PI * a * a * kappa;
+        // Poloidal cross-section area S = π a² κ_a — this is the *definition*
+        // of the areal elongation, so κ_a is the correct factor here.
+        let cross_section = std::f64::consts::PI * a * a * kappa_a;
         let resistance = eta * loop_length / cross_section; // Ω
         self.p_ohmic = resistance * (ip * 1e6).powi(2) * 1e-6; // MW
         self.p_ohmic = self.p_ohmic.min(5.0); // Cap for numerical stability
@@ -310,7 +318,24 @@ impl TransportModel {
         // averaged model, we use ~50x lower effective Lz so that realistic seeding
         // rates (0.3–0.7 × 10²⁰/s) produce a few MW of radiation, not hundreds.
         // (Future: Lz becomes species-dependent for argon, krypton, nitrogen, etc.)
-        let lz_impurity = 1.0e-32 * (1.0 + 0.5 * (te_avg - 1.0).abs()).max(0.5);
+        //
+        // The low-temperature branch below is unchanged (it is what DIII-D and
+        // JET were calibrated against), but it cannot be extrapolated upward:
+        // as written it makes Lz *increase* without limit with temperature,
+        // which is backwards. Neon is fully stripped above ~2 keV and its
+        // cooling rate falls off steeply — only bremsstrahlung remains, and
+        // that is already accounted for in p_brem above.
+        //
+        // Without the roll-off, SPARC (⟨Te⟩ ≈ 8 keV) radiates ~8 MW from a
+        // neon fraction of only 1×10⁻⁴ and collapses out of H-mode; ITER at
+        // ⟨Te⟩ ≈ 12 keV is overestimated by a similar factor. The roll-off is
+        // continuous at 2 keV so nothing below that changes.
+        let lz_low_t = 1.0e-32 * (1.0 + 0.5 * (te_avg - 1.0).abs()).max(0.5);
+        let lz_impurity = if te_avg > 2.0 {
+            lz_low_t * (2.0 / te_avg).powf(1.5)
+        } else {
+            lz_low_t
+        };
         // Radiative collapse: radiation mantle moves inward at high impurity fraction
         let imp = &device.impurity_elm;
         let collapse_factor = if self.impurity_fraction > imp.impurity_collapse_threshold {
@@ -364,7 +389,10 @@ impl TransportModel {
                     self.elm_timer = 0.0;
                 }
             } else {
-                if net_heating < 0.8 * self.p_lh_threshold || self.q95 < 2.0 {
+                // Hysteretic back-transition: sustaining H-mode needs less
+                // power than entering it (see Device::h_mode_sustain_factor).
+                if net_heating < device.h_mode_sustain_factor * self.p_lh_threshold
+                    || self.q95 < 2.0 {
                     self.in_hmode = false;
                     self.h_factor = 0.5;
                 }
@@ -381,7 +409,7 @@ impl TransportModel {
             * p_total_mw.powf(-0.69)
             * r0.powf(1.97)
             * eps.powf(0.58)
-            * kappa.powf(0.78)
+            * kappa_a.powf(0.78) // IPB98(y,2) is defined with the areal elongation
             * mass.powf(0.19);
 
         // Triangularity correction to confinement (not in IPB98).
@@ -436,6 +464,15 @@ impl TransportModel {
         // geometry, divertor closure, etc.)
         self.tau_e *= device.confinement_factor;
 
+        // QCE / small-ELM penalty. Staying type-I ELM-free means holding the
+        // pedestal below the peeling-ballooning limit, which costs pedestal
+        // pressure and so global confinement. Uses the suppression flag from
+        // the previous step (set at the end of this same function) — the lag
+        // is one dt, which is negligible against τ_E.
+        if self.elm_suppressed {
+            self.tau_e *= device.qce_confinement_factor;
+        }
+
         self.tau_e = self.tau_e.max(0.001);
 
         // ── Power balance: dW/dt = P_input - W/τ_E - P_rad ──
@@ -479,15 +516,62 @@ impl TransportModel {
 
         // Determine ELM regime based on impurity level, q95, and shaping
         let imp = &device.impurity_elm;
-        self.elm_suppressed = self.in_hmode
-            && self.impurity_fraction >= imp.impurity_qce_threshold
-            && prog.delta >= imp.delta_grassy_min;
+        // Two independent routes into the ELM-suppressed (QCE) window:
+        //
+        //   1. Seeding route — impurity radiation cools the pedestal below the
+        //      peeling-ballooning limit. This is the original behaviour and is
+        //      what DIII-D / JET / ITER / CENTAUR use.
+        //   2. Density route — high separatrix density at high shaping drives
+        //      the pedestal foot ballooning-unstable, and continuous filaments
+        //      replace Type-I crashes (Faitsch/Harrer, AUG + JET; access at a
+        //      separatrix density of 0.3–0.4 n_GW). This is the physically
+        //      dominant path and the one SPARC uses.
+        //
+        // Seeding is not free for the density route: radiating power out of
+        // the SOL depresses n_e,sep and therefore *costs* QCE access
+        // (Lomanowski et al. 2026 for SPARC). Past `qce_impurity_ceiling` the
+        // large ELMs come back — the divertor-protection and regime-access
+        // knobs genuinely compete.
+        let qce_by_seeding = self.impurity_fraction >= imp.impurity_qce_threshold;
+
+        // The density needed for QCE is not fixed — it rises with the power
+        // crossing the separatrix. QCE and EDA sit at *higher* fuelling as the
+        // heating goes up (AUG: EDA at lower separatrix density and power, QCE
+        // at higher), and if the power outruns the fuelling the pedestal climbs
+        // back to the peeling-ballooning limit and Type-I ELMs return.
+        //
+        // The L-H threshold is the natural power scale to normalise against,
+        // so the requirement is expressed relative to it. Consequence in the
+        // control room: turning the ICRF up past the QCE window brings the
+        // large ELMs back, which is the intended discovery.
+        let power_ratio = if self.p_lh_threshold > 0.1 {
+            (net_heating / self.p_lh_threshold).max(0.5)
+        } else {
+            1.0
+        };
+        // Exponent 0.65 (was 0.35): at 0.35 the required density rose so
+        // weakly with power that even 25 MW held all pulse stayed inside the
+        // QCE window ((25 MW net + alphas)/P_LH ≈ 1.2 → needed 0.446 <
+        // operating 0.461), erasing the intended "turn the RF up and the
+        // ELMs come back" behavior. At 0.65 the full-power burning case
+        // (ratio ≈ 1.2) needs f_GW ≈ 0.475 — above the operating point once
+        // the alphas build — while the nominal 17 MW flat-top (ratio ≈ 0.76
+        // → needed ≈ 0.35) keeps a wide margin, and the brief 24 MW entry
+        // transient (ratio ≈ 1.1, alphas still small) stays just inside so
+        // QCE engages as soon as the fuelling ramp tops out. The exponent is
+        // a scenario-calibration knob, not a published number.
+        let fgw_needed = imp.qce_fgw_threshold * power_ratio.powf(0.65);
+        let qce_by_density = self.f_greenwald >= fgw_needed;
+        let qce_starved = self.impurity_fraction > imp.qce_impurity_ceiling;
+        let in_qce_window = (qce_by_seeding || qce_by_density)
+            && prog.delta >= imp.delta_grassy_min
+            && !qce_starved;
+
+        self.elm_suppressed = self.in_hmode && in_qce_window;
         let elm_regime: u8 = if !self.in_hmode {
             0 // No ELMs outside H-mode
-        } else if self.impurity_fraction >= imp.impurity_qce_threshold
-            && prog.delta >= imp.delta_grassy_min
-        {
-            0 // Suppressed → QCE (requires sufficient impurity + strong shaping)
+        } else if in_qce_window {
+            0 // Suppressed → QCE
         } else if self.impurity_fraction >= imp.impurity_type2_threshold
             && self.q95 >= imp.q95_grassy_range.0
             && self.q95 <= imp.q95_grassy_range.1

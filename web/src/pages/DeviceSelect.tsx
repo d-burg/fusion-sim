@@ -6,12 +6,18 @@ import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
 import { CENTAUR_LIMITER } from '../lib/centaur-geometry'
+import { SPARC_LIMITER } from '../lib/sparc-geometry'
 
 /** Extra display-only metadata keyed by device id. */
 const DEVICE_META: Record<string, { location: string; status?: string; desc: string }> = {
   diiid: {
     location: 'San Diego, USA',
     desc: 'Scenario development workhorse dating back to the late 1980s. The most extensively diagnosed tokamak in the world.',
+  },
+  sparc: {
+    location: 'Devens, USA',
+    status: 'Under construction',
+    desc: 'Compact high-field D-T tokamak — Q > 1 at 12.2 T with HTS magnets, running ELM-free in the QCE regime.',
   },
   centaur: {
     location: 'Conceptual design',
@@ -31,6 +37,7 @@ const DEVICE_META: Record<string, { location: string; status?: string; desc: str
 
 const DEVICE_LIMITERS: Record<string, [number, number][]> = {
   diiid: DIIID_LIMITER,
+  sparc: SPARC_LIMITER,
   centaur: CENTAUR_LIMITER,
   jet: JET_LIMITER,
   iter: ITER_LIMITER,
@@ -93,6 +100,9 @@ export default function DeviceSelect() {
   const navigate = useNavigate()
   const devices = useMemo(() => getDevices(), [])
   const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
+  // After "Skip tutorial" the page just sits on the hero — flash the
+  // scroll-down affordance for a few seconds so the next step is obvious.
+  const [flashScrollHint, setFlashScrollHint] = useState(false)
 
   // Show tutorial prompt after 1 second
   useEffect(() => {
@@ -112,6 +122,8 @@ export default function DeviceSelect() {
   const handleSkipTutorial = () => {
     setShowTutorialPrompt(false)
     sessionStorage.setItem('tutorial-dismissed', '1')
+    setFlashScrollHint(true)
+    setTimeout(() => setFlashScrollHint(false), 7000)
   }
 
   return (
@@ -150,15 +162,24 @@ export default function DeviceSelect() {
             0D transport &middot; MHD equilibrium &middot; ELM dynamics &middot; Fusion diagnostics
           </p>
         </div>
-        {/* Scroll affordance */}
-        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 font-mono text-[10px] tracking-[0.18em] uppercase text-gray-600 scroll-hint">
+        {/* Scroll affordance — clickable, and flashes after tutorial skip */}
+        <button
+          onClick={() =>
+            document.getElementById('device-panel')?.scrollIntoView({ behavior: 'smooth' })
+          }
+          className={`absolute bottom-7 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5
+                      font-mono text-[10px] tracking-[0.18em] uppercase cursor-pointer transition-colors
+                      ${flashScrollHint
+                        ? 'text-cyan-300 animate-bounce'
+                        : 'text-gray-600 hover:text-cyan-400 scroll-hint'}`}
+        >
           <span>Select a device</span>
           <span className="text-base leading-none">↓</span>
-        </div>
+        </button>
       </header>
 
       {/* ── Device selection (slides up over the pinned hero) ── */}
-      <main className="relative z-10 bg-[var(--c-base)] border-t border-gray-800 shadow-[0_-28px_60px_rgba(0,0,0,0.6)] px-6 sm:px-10 pt-12 pb-16">
+      <main id="device-panel" className="relative z-10 bg-[var(--c-base)] border-t border-gray-800 shadow-[0_-28px_60px_rgba(0,0,0,0.6)] px-6 sm:px-10 pt-12 pb-16">
         <div className="max-w-6xl mx-auto">
           <div className="panel-title pb-2 mb-px">
             <span className="panel-num">01 · </span>Select a device
