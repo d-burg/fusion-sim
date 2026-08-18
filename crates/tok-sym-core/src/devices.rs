@@ -751,13 +751,26 @@ pub fn iter() -> Device {
         mass_number: 2.0, // DD default (commissioning phase); DT via fuel toggle
         z_eff: 1.7,
         z0: 0.35, // plasma center above vessel midplane (X-point into lower divertor)
-        equilibrium_a_scale: 1.0,
-        equilibrium_r0_shift: 0.0,
-        equilibrium_kappa_scale: 1.0,
-        equilibrium_squareness: 0.0,
+        // Fitted by examples/fit_to_geqdsk.rs against the default ITER
+        // equilibrium shipped inside OpenFUSIONToolkit
+        // (src/tests/physics/ITER_test.eqdsk, R0 6.22, a 1.98, kappa 1.82,
+        // delta 0.33/0.57 — read locally, never committed): boundary RMS vs
+        // that reference dropped 383 -> 80 mm. The device card's a = 1.70
+        // underquotes the real ITER minor radius to keep the transport
+        // calibration; a_scale 1.14 restores the rendered plasma to the
+        // reference's true size, the same equilibrium-only mechanism as
+        // SPARC. Equilibrium deltas stay at the published 0.55/0.55 — the
+        // fit's asymmetric option (0.44/0.57) measured very slightly WORSE
+        // on the full-vessel metric, so the simpler choice wins. Wall gap
+        // 54 mm minimum, strikes on the cassette's inner (4.31, -3.90) and
+        // outer (5.20, -3.91) vertical targets.
+        equilibrium_a_scale: 1.14,
+        equilibrium_r0_shift: 0.16,
+        equilibrium_kappa_scale: 0.88,
+        equilibrium_squareness: -0.75,
         equilibrium_delta_upper: 0.55,
         equilibrium_delta_lower: 0.55,
-        equilibrium_squareness_out: 0.0,
+        equilibrium_squareness_out: -0.45,
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,

@@ -337,6 +337,31 @@ fn divertor_for(id: &str) -> Option<Divertor> {
             soft_score: None,
             lower_only: false,
         }),
+        // ITER: lower single null. Faces from the ported limiter cassette,
+        // in (R, |Z - z0|) with z0 = 0.35. Inner strike belongs on the
+        // inboard vertical target, outer on the outboard vertical target;
+        // the dome between them is not a target, and nearest-face
+        // classification rejects dome landings via the mislanded-strike
+        // check (nothing within TOL).
+        "iter" => Some(Divertor {
+            z_abs_min: 3.30,
+            inner_faces: vec![
+                ((4.406, 3.755), (4.311, 3.965)),
+                ((4.311, 3.965), (4.180, 4.235)),
+            ],
+            outer_faces: vec![
+                ((5.150, 4.188), (5.253, 4.335)),
+                ((5.253, 4.335), (5.273, 4.614)),
+                ((5.273, 4.614), (5.565, 4.906)),
+            ],
+            apex: None,
+            outer_anchor: None,
+            inner_r_max: None,
+            outer_r_min: None,
+            avoid_faces: vec![],
+            soft_score: None,
+            lower_only: true,
+        }),
         _ => None,
     }
 }
@@ -368,7 +393,12 @@ fn diiid_soft(strikes: &[Pt]) -> f64 {
 
 /// Clip to first impact and return the chain-end strike points as
 /// (R, |Z - z0|), divertor region only.
-fn collect_strikes(device: &Device, div: &Divertor, sep: &contour::Contour) -> Vec<Pt> {
+fn collect_strikes(
+    device: &Device,
+    div: &Divertor,
+    sep: &contour::Contour,
+    z0: f64,
+) -> Vec<Pt> {
     const JUMP: f64 = 0.15;
     let mut clipped = sep.clone();
     contour::clip_separatrix_to_wall(&mut clipped, &device.wall_outline, 0.005);
@@ -387,9 +417,10 @@ fn collect_strikes(device: &Device, div: &Divertor, sep: &contour::Contour) -> V
     }
     ends.push(pts[start]);
     ends.push(pts[pts.len() - 1]);
+    let _ = device;
     ends.into_iter()
-        .filter(|e| !(div.lower_only && e.1 > device.z0))
-        .map(|e| (e.0, (e.1 - device.z0).abs()))
+        .filter(|e| !(div.lower_only && e.1 > z0))
+        .map(|e| (e.0, (e.1 - z0).abs()))
         .filter(|h| h.1 >= div.z_abs_min)
         .collect()
 }
@@ -474,9 +505,10 @@ fn our_separatrix_segments(
     device: &Device,
     shape: &ShapeParams,
     r0: f64,
+    z0: f64,
 ) -> Option<(Vec<(Pt, Pt)>, contour::Contour)> {
     const JUMP: f64 = 0.15;
-    let eq = CerfonEquilibrium::solve(shape, r0, device.z0)?;
+    let eq = CerfonEquilibrium::solve(shape, r0, z0)?;
     // Extract over the whole vessel, not `grid_bounds()`: that box stops
     // ~0.15 R0 outside the plasma, which on DIII-D ends at Z = -1.19 while
     // the divertor floor is at -1.36 — the legs would be cut off before they
@@ -526,7 +558,7 @@ fn main() {
         eprintln!("NOTE: no divertor midline defined for {id} — the strike \
                    straddle constraint is inactive.");
     }
-    let mut best: Option<(f64, [f64; 7], String)> = None;
+    let mut best: Option<(f64, [f64; 8], String)> = None;
 
     // Split-squareness refit round: delta is PINNED to the user-adopted
     // baselines (SPARC 0.590 by decision, CENTAUR its fitted pair) and the
@@ -555,11 +587,41 @@ fn main() {
         "a_scl", "k_scl", "r0_sh", "sq_in", "sq_out", "d_up", "d_low", "RMS", "max"
     );
 
-    for &a_scale in &[0.92, 0.94, 0.96, 0.98, 1.00] {
-        for &k_scale in &[0.96, 1.00, 1.02, 1.05, 1.08, 1.10] {
-            for &r0_shift in &[-0.03, 0.0, 0.03, 0.06] {
-                for &sq in &SQ_GRID {
-                    for &sq_out in &SQ_GRID {
+    // Per-device search windows: SPARC/CENTAUR refits live near unity
+    // scales; the OFT ITER reference (R0 6.22, a 1.98, kappa 1.82) sits far
+    // from the device card (6.0 / 1.70 / 2.10), so ITER needs its own box.
+    let (a_grid, k_grid, shift_grid, sq_grid): (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) =
+        if device.id == "iter" {
+            (
+                vec![1.12, 1.14, 1.16, 1.18],
+                vec![0.84, 0.85, 0.86, 0.87, 0.88],
+                vec![0.10, 0.13, 0.16, 0.19],
+                vec![-1.05, -0.9, -0.75, -0.6, -0.45],
+            )
+        } else {
+            (
+                vec![0.92, 0.94, 0.96, 0.98, 1.00],
+                vec![0.96, 1.00, 1.02, 1.05, 1.08, 1.10],
+                vec![-0.03, 0.0, 0.03, 0.06],
+                SQ_GRID.to_vec(),
+            )
+        };
+
+    // Vertical centre: fixed at the device z0 except for ITER, where the
+    // reference equilibrium's boundary centre (~0.40 m) and axis (0.53 m)
+    // sit visibly above the device card's 0.35 m.
+    let z0_grid: Vec<f64> = if device.id == "iter" {
+        vec![0.35, 0.40, 0.45]
+    } else {
+        vec![device.z0]
+    };
+
+    for &z0 in &z0_grid {
+    for &a_scale in &a_grid {
+        for &k_scale in &k_grid {
+            for &r0_shift in &shift_grid {
+                for &sq in &sq_grid {
+                    for &sq_out in &sq_grid {
                     for &(du, dl) in &delta_opts {
                         let shape = ShapeParams {
                             epsilon: eps0 * a_scale,
@@ -573,7 +635,7 @@ fn main() {
                             squareness_out: sq_out,
                         };
                         let Some((ours, sep)) =
-                            our_separatrix_segments(&device, &shape, device.r0 + r0_shift)
+                            our_separatrix_segments(&device, &shape, device.r0 + r0_shift, z0)
                         else {
                             continue;
                         };
@@ -585,7 +647,7 @@ fn main() {
                         let mut wall_ok = true;
                         let mut min_gap = f64::MAX;
                         for &(r, z) in &sep.points {
-                            if (z - device.z0).abs() >= z_xpt_abs * 0.95 {
+                            if (z - z0).abs() >= z_xpt_abs * 0.95 {
                                 continue;
                             }
                             if point_in_poly(&device.wall_outline, r, z) {
@@ -618,7 +680,7 @@ fn main() {
                         let hyp = |p: Pt, q: Pt| (p.0 - q.0).hypot(p.1 - q.1);
                         let (imbalance, depth, soft_pen, n_in, n_out) = match &divertor {
                             Some(div) => {
-                                let strikes = collect_strikes(&device, div, &sep);
+                                let strikes = collect_strikes(&device, div, &sep, z0);
                                 if let Some(soft) = div.soft_score {
                                     // Soft path (DIII-D): no hard rejection,
                                     // just a preference penalty in metres.
@@ -670,7 +732,7 @@ fn main() {
                             println!("{row}");
                             best = Some((
                                 score,
-                                [a_scale, k_scale, r0_shift, sq, sq_out, du, dl],
+                                [a_scale, k_scale, r0_shift, sq, sq_out, du, dl, z0],
                                 row,
                             ));
                         }
@@ -679,6 +741,7 @@ fn main() {
                 }
             }
         }
+    }
     }
 
     if let Some((score, p, row)) = best {
@@ -701,9 +764,9 @@ fn main() {
                 squareness_out: p[4],
             };
             if let Some((_, sep)) =
-                our_separatrix_segments(&device, &shape, device.r0 + p[2])
+                our_separatrix_segments(&device, &shape, device.r0 + p[2], p[7])
             {
-                let strikes = collect_strikes(&device, div, &sep);
+                let strikes = collect_strikes(&device, div, &sep, p[7]);
                 if div.soft_score.is_some() {
                     let show = strikes
                         .iter()
@@ -726,8 +789,8 @@ fn main() {
         println!(
             "\n    equilibrium_a_scale: {:.2},\n    equilibrium_r0_shift: {:.2},\n    \
              equilibrium_kappa_scale: {:.3},\n    equilibrium_squareness: {:.2},\n    \
-             equilibrium_squareness_out: {:.2},\n    delta_upper: {:.3},",
-            p[0], p[2], p[1], p[3], p[4], p[5]
+             equilibrium_squareness_out: {:.2},\n    delta_upper: {:.3},\n    z0: {:.2},",
+            p[0], p[2], p[1], p[3], p[4], p[5], p[7]
         );
     } else {
         println!("\nNo candidate solved.");
