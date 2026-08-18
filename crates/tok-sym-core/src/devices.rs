@@ -132,16 +132,38 @@ pub struct Device {
     /// so the divertor legs enter the baffle throats at the right place.
     /// Physics (IPB98, q*) is untouched — it uses `kappa_areal`.
     pub equilibrium_kappa_scale: f64,
-    /// Squareness passed to the parametric equilibrium's curvature
-    /// constraints (Cerfon–Freidberg α_s; 0 = standard shape).
+    /// Extra squareness added to the parametric equilibrium's equatorial
+    /// curvature constraints; 0 = the plain Cerfon–Freidberg shape.
     ///
-    /// Positive squareness reduces the inboard midplane curvature
-    /// (N2 = (1−α_s)²/εκ²), producing a straighter inboard side that holds
-    /// its R higher up before turning over — which is how the published SPARC
-    /// separatrix follows the vessel's inboard chamfer at a ~55 mm gap all
-    /// the way to the X-point. The plain analytic shape instead cuts inboard
-    /// at height and would clip the chamfer.
+    /// The equatorial rows use α_s = arcsin(δ) + squareness, so this is a
+    /// perturbation *on top of* the triangularity, not a replacement for it
+    /// (it was the latter until issue #2 — see `equilibrium.rs`). The crown
+    /// row keeps the unmodified α = arcsin(δ).
+    ///
+    /// Raising α_s tightens the inboard midplane curvature (N2 = (1−α_s)²/εκ²)
+    /// and lowering it straightens the inboard side, so it holds its R higher
+    /// up before turning over — which is how the published SPARC separatrix
+    /// follows the vessel's inboard chamfer all the way to the X-point. The
+    /// plain analytic shape instead cuts inboard at height and clips the
+    /// chamfer, which is why SPARC carries a negative value here.
     pub equilibrium_squareness: f64,
+    /// Outboard counterpart of `equilibrium_squareness`: offset on α in the
+    /// OUTBOARD equatorial curvature row N₁ only. Lowering it flattens the
+    /// outboard midplane curvature so the boundary holds its width higher up
+    /// (a fuller shoulder) without touching the inboard side. Equal values
+    /// reproduce the pre-split single-knob behaviour exactly.
+    pub equilibrium_squareness_out: f64,
+    /// Upper triangularity used by the parametric equilibrium ONLY.
+    ///
+    /// The GEQDSK-anchored shape fits want a different δ than the published
+    /// reference values that calibrate q*, the L-H threshold and ELM gating
+    /// (`delta_upper`/`delta_lower`), so the two are kept separate exactly
+    /// like `kappa` vs `kappa_areal`. The running simulation applies the
+    /// difference as a rigid offset on the programmed δ waveform, so ramps
+    /// and the strike sweep carry through unchanged.
+    pub equilibrium_delta_upper: f64,
+    /// Lower-triangularity counterpart of `equilibrium_delta_upper`.
+    pub equilibrium_delta_lower: f64,
     /// Strike-point sweep frequency (Hz). 0 disables sweeping.
     ///
     /// SPARC's divertor is inertially cooled; the published mitigation for the
@@ -249,135 +271,420 @@ impl Device {
     }
 }
 
-/// Approximate DIII-D first wall outline (hand-crafted polygon).
+/// DIII-D first wall / limiter contour.
 ///
-/// Based on the actual DIII-D vessel cross-section with a D-shaped upper
-/// wall, inboard limiters, and open lower divertor with inner/outer baffles
-/// and a divertor floor. Coordinates in (R, Z) meters.
-///
-/// Traversed clockwise starting from the outboard midplane.
+/// Single source of truth, shared with the front end: this is the same
+/// contour as the matching `*_LIMITER` export in `web/src/lib/*-geometry.ts`,
+/// which `DeviceSelect`/`ControlRoom` render. Keep the two in sync — the
+/// limiter-contact check in `simulation.rs` uses this one, so a divergence
+/// means the plasma is collision-checked against a vessel nobody sees.
 fn diiid_wall() -> Vec<(f64, f64)> {
     vec![
-        // Outboard midplane → top (outer wall, slight D-shape)
-        (2.37, 0.00),
-        (2.36, 0.20),
-        (2.33, 0.40),
-        (2.28, 0.60),
-        (2.20, 0.80),
-        (2.08, 0.95),
-        // Top dome (flattened, shifted inward)
-        (1.93, 1.07),
-        (1.75, 1.14),
-        (1.58, 1.17),
-        (1.40, 1.14),
-        (1.25, 1.07),
-        // Inboard wall (vertical high-field side)
-        (1.13, 0.95),
-        (1.04, 0.75),
-        (1.01, 0.50),
-        (1.01, 0.25),
-        (1.01, 0.00),
-        (1.01, -0.25),
-        (1.01, -0.50),
-        (1.04, -0.75),
-        (1.10, -0.92),
-        // Inner divertor baffle (shelf turning toward floor)
-        (1.13, -1.02),
-        (1.15, -1.10),
-        (1.13, -1.18),
-        (1.10, -1.25),
-        // Divertor floor (flat bottom, connects inner→outer)
-        (1.15, -1.36),
-        (1.25, -1.42),
-        (1.40, -1.46),
-        (1.55, -1.48),
-        (1.70, -1.46),
-        (1.85, -1.42),
-        (1.95, -1.36),
-        // Outer divertor baffle (shelf rising from floor)
-        (2.04, -1.25),
-        (2.10, -1.10),
-        (2.14, -1.00),
-        // Outboard lower wall → midplane
-        (2.22, -0.85),
-        (2.30, -0.65),
-        (2.34, -0.45),
-        (2.36, -0.22),
-        (2.37, 0.00),
+        (1.0193, 1.1159),
+        (1.0350, 1.1639),
+        (1.0384, 1.1624),
+        (1.0612, 1.1636),
+        (1.0990, 1.1659),
+        (1.1381, 1.1682),
+        (1.1619, 1.1745),
+        (1.1901, 1.1870),
+        (1.2101, 1.2019),
+        (1.2308, 1.2250),
+        (1.2394, 1.2386),
+        (1.2611, 1.2863),
+        (1.2808, 1.3340),
+        (1.2808, 1.3481),
+        (1.3306, 1.3481),
+        (1.4195, 1.3475),
+        (1.4195, 1.3104),
+        (1.3741, 1.3069),
+        (1.3674, 1.2641),
+        (1.3679, 1.2265),
+        (1.3723, 1.1948),
+        (1.4156, 1.1565),
+        (1.4259, 1.1628),
+        (1.4470, 1.1820),
+        (1.4880, 1.2190),
+        (1.4911, 1.2135),
+        (1.4950, 1.1617),
+        (1.4817, 1.1159),
+        (1.4910, 1.1127),
+        (1.5294, 1.1048),
+        (1.6020, 1.0931),
+        (1.6469, 1.0785),
+        (1.7834, 1.0721),
+        (2.0452, 1.0391),
+        (2.0560, 1.0432),
+        (2.1064, 0.9997),
+        (2.0857, 0.8693),
+        (2.2222, 0.5191),
+        (2.2429, 0.4486),
+        (2.3115, 0.2797),
+        (2.3401, 0.2199),
+        (2.3464, 0.1987),
+        (2.3483, 0.0633),
+        (2.3511, 0.0421),
+        (2.3483, -0.2548),
+        (2.3464, -0.2727),
+        (2.3511, -0.4206),
+        (2.2783, -0.5934),
+        (2.2384, -0.6883),
+        (2.2359, -0.6941),
+        (2.1954, -0.7906),
+        (2.1939, -0.7941),
+        (2.1559, -0.8847),
+        (2.1526, -0.8882),
+        (1.9237, -1.0162),
+        (1.9203, -1.0196),
+        (1.7866, -1.1607),
+        (1.7767, -1.1665),
+        (1.7409, -1.2398),
+        (1.6452, -1.2448),
+        (1.4012, -1.2448),
+        (1.3856, -1.2482),
+        (1.3749, -1.2583),
+        (1.3695, -1.2694),
+        (1.3682, -1.2755),
+        (1.3686, -1.3225),
+        (1.3726, -1.3247),
+        (1.4277, -1.3247),
+        (1.4277, -1.3578),
+        (1.1645, -1.3589),
+        (1.0175, -1.2170),
+        (1.0173, -0.0010),
+        (1.0173, 0.0000),
+        (1.0193, 1.1159),
     ]
 }
 
-/// Approximate JET wall outline (simplified D-shaped polygon).
+/// JET first wall / limiter contour.
 ///
-/// Based on the JET Mk2 ITER-Like Wall cross-section with a D-shaped outer
-/// wall, vertical inboard limiters, and open lower divertor.
-/// Traversed clockwise starting from the outboard midplane.
+/// Single source of truth, shared with the front end: this is the same
+/// contour as the matching `*_LIMITER` export in `web/src/lib/*-geometry.ts`,
+/// which `DeviceSelect`/`ControlRoom` render. Keep the two in sync — the
+/// limiter-contact check in `simulation.rs` uses this one, so a divergence
+/// means the plasma is collision-checked against a vessel nobody sees.
 fn jet_wall() -> Vec<(f64, f64)> {
     vec![
-        // Outboard midplane → top (outer wall, D-shape)
-        (3.88, 0.00),
-        (3.88, 0.20),
-        (3.86, 0.45),
-        (3.82, 0.70),
-        (3.74, 0.95),
-        (3.64, 1.15),
-        // Top dome
-        (3.45, 1.35),
-        (3.20, 1.55),
-        (2.96, 1.70),
-        (2.70, 1.80),
-        (2.50, 1.85),
-        (2.30, 1.82),
-        (2.10, 1.72),
-        // Inboard wall
-        (1.97, 1.55),
-        (1.92, 1.30),
-        (1.88, 1.00),
-        (1.85, 0.70),
-        (1.84, 0.40),
-        (1.84, 0.10),
-        (1.84, -0.10),
-        (1.84, -0.40),
-        (1.85, -0.70),
-        (1.88, -1.00),
-        (1.93, -1.20),
-        // Inner divertor
-        (1.97, -1.30),
-        (2.01, -1.40),
-        // Divertor floor
-        (2.15, -1.50),
-        (2.40, -1.60),
-        (2.65, -1.64),
-        (2.90, -1.60),
-        // Outer divertor
-        (3.10, -1.50),
-        (3.25, -1.35),
-        (3.40, -1.15),
-        // Outboard lower wall → midplane
-        (3.55, -0.95),
-        (3.67, -0.70),
-        (3.76, -0.45),
-        (3.82, -0.25),
-        (3.86, -0.10),
-        (3.88, 0.00),
+        (3.2832, -1.1244),
+        (3.3119, -1.0832),
+        (3.3284, -1.0631),
+        (3.3524, -1.0387),
+        (3.3732, -1.0172),
+        (3.4233, -0.9599),
+        (3.4473, -0.9323),
+        (3.4943, -0.8719),
+        (3.5168, -0.8428),
+        (3.5591, -0.7815),
+        (3.5805, -0.7501),
+        (3.6193, -0.6868),
+        (3.6390, -0.6539),
+        (3.6736, -0.5877),
+        (3.6880, -0.5609),
+        (3.7223, -0.4850),
+        (3.7350, -0.4576),
+        (3.7682, -0.3714),
+        (3.7758, -0.3524),
+        (3.8026, -0.2692),
+        (3.8108, -0.2446),
+        (3.8333, -0.1580),
+        (3.8396, -0.1348),
+        (3.8565, -0.0508),
+        (3.8621, -0.0243),
+        (3.8752, 0.0685),
+        (3.8784, 0.0888),
+        (3.8857, 0.1762),
+        (3.8879, 0.1963),
+        (3.8905, 0.2904),
+        (3.8914, 0.3134),
+        (3.8886, 0.4076),
+        (3.8884, 0.4267),
+        (3.8803, 0.5199),
+        (3.8789, 0.5396),
+        (3.8656, 0.6323),
+        (3.8635, 0.6497),
+        (3.8445, 0.7435),
+        (3.8409, 0.7627),
+        (3.8171, 0.8532),
+        (3.8130, 0.8705),
+        (3.7837, 0.9613),
+        (3.7790, 0.9770),
+        (3.7441, 1.0672),
+        (3.7382, 1.0834),
+        (3.6987, 1.1705),
+        (3.6918, 1.1866),
+        (3.6749, 1.2188),
+        (3.6674, 1.2364),
+        (3.6373, 1.3339),
+        (3.6421, 1.4077),
+        (3.6214, 1.4266),
+        (3.6208, 1.4271),
+        (3.5941, 1.4514),
+        (3.5935, 1.4519),
+        (3.5668, 1.4762),
+        (3.5662, 1.4767),
+        (3.5395, 1.5010),
+        (3.5389, 1.5016),
+        (3.5122, 1.5258),
+        (3.5116, 1.5264),
+        (3.4849, 1.5507),
+        (3.4844, 1.5512),
+        (3.4577, 1.5755),
+        (3.4571, 1.5760),
+        (3.4304, 1.6003),
+        (3.4298, 1.6008),
+        (3.4031, 1.6251),
+        (3.4025, 1.6257),
+        (3.3818, 1.6445),
+        (3.3315, 1.7041),
+        (3.2818, 1.7387),
+        (3.1863, 1.8175),
+        (3.1366, 1.8521),
+        (3.0010, 1.8834),
+        (2.8689, 1.9396),
+        (2.8525, 1.9453),
+        (2.7756, 1.9680),
+        (2.7576, 1.9720),
+        (2.6790, 1.9829),
+        (2.6589, 1.9840),
+        (2.5779, 1.9829),
+        (2.5606, 1.9811),
+        (2.4801, 1.9677),
+        (2.4660, 1.9642),
+        (2.3884, 1.9389),
+        (2.3742, 1.9331),
+        (2.2980, 1.8947),
+        (2.2875, 1.8884),
+        (2.1954, 1.8228),
+        (2.1824, 1.8237),
+        (2.1657, 1.7908),
+        (2.1653, 1.7901),
+        (2.1490, 1.7579),
+        (2.1486, 1.7572),
+        (2.1323, 1.7251),
+        (2.1319, 1.7243),
+        (2.1156, 1.6922),
+        (2.1152, 1.6915),
+        (2.0989, 1.6593),
+        (2.0985, 1.6586),
+        (2.0822, 1.6264),
+        (2.0818, 1.6257),
+        (2.0682, 1.5988),
+        (2.0676, 1.5982),
+        (2.0547, 1.5645),
+        (2.0544, 1.5637),
+        (2.0415, 1.5300),
+        (2.0412, 1.5293),
+        (2.0283, 1.4956),
+        (2.0280, 1.4949),
+        (2.0151, 1.4612),
+        (2.0148, 1.4604),
+        (2.0019, 1.4267),
+        (2.0016, 1.4260),
+        (1.9888, 1.3923),
+        (1.9885, 1.3915),
+        (1.9756, 1.3578),
+        (1.9753, 1.3571),
+        (1.9613, 1.3206),
+        (1.9299, 1.2730),
+        (1.9270, 1.2610),
+        (1.9226, 1.2540),
+        (1.9425, 1.2346),
+        (1.9273, 1.1583),
+        (1.9250, 1.1380),
+        (1.9124, 1.0607),
+        (1.9097, 1.0400),
+        (1.8984, 0.9621),
+        (1.8957, 0.9401),
+        (1.8858, 0.8624),
+        (1.8830, 0.8407),
+        (1.8731, 0.7630),
+        (1.8704, 0.7417),
+        (1.8605, 0.6641),
+        (1.8584, 0.6429),
+        (1.8499, 0.5655),
+        (1.8482, 0.5452),
+        (1.8418, 0.4671),
+        (1.8410, 0.4462),
+        (1.8372, 0.3683),
+        (1.8370, 0.3474),
+        (1.8359, 0.2700),
+        (1.8364, 0.2485),
+        (1.8379, 0.1710),
+        (1.8391, 0.1497),
+        (1.8431, 0.0714),
+        (1.8450, 0.0507),
+        (1.8517, -0.0275),
+        (1.8542, -0.0478),
+        (1.8634, -0.1248),
+        (1.8666, -0.1455),
+        (1.8785, -0.2231),
+        (1.8823, -0.2432),
+        (1.8967, -0.3202),
+        (1.9013, -0.3402),
+        (1.9182, -0.4168),
+        (1.9234, -0.4365),
+        (1.9427, -0.5120),
+        (1.9486, -0.5319),
+        (1.9706, -0.6069),
+        (1.9597, -0.6265),
+        (1.9618, -0.6576),
+        (2.0091, -0.7840),
+        (2.0204, -0.8113),
+        (2.0207, -0.8120),
+        (2.0345, -0.8454),
+        (2.0348, -0.8461),
+        (2.0486, -0.8794),
+        (2.0490, -0.8802),
+        (2.0628, -0.9135),
+        (2.0631, -0.9143),
+        (2.0769, -0.9476),
+        (2.0772, -0.9483),
+        (2.0910, -0.9817),
+        (2.0913, -0.9824),
+        (2.1051, -1.0157),
+        (2.1055, -1.0167),
+        (2.1193, -1.0500),
+        (2.1196, -1.0507),
+        (2.1334, -1.0841),
+        (2.1337, -1.0848),
+        (2.1475, -1.1181),
+        (2.1478, -1.1189),
+        (2.1616, -1.1522),
+        (2.1619, -1.1530),
+        (2.1757, -1.1863),
+        (2.1761, -1.1870),
+        (2.1899, -1.2204),
+        (2.1902, -1.2211),
+        (2.2015, -1.2484),
+        (2.1446, -1.2749),
+        (2.2936, -1.3148),
+        (2.2936, -1.3314),
+        (2.2954, -1.3344),
+        (2.3599, -1.3344),
+        (2.3962, -1.3732),
+        (2.4091, -1.4003),
+        (2.4122, -1.4220),
+        (2.4129, -1.4315),
+        (2.4129, -1.4685),
+        (2.4122, -1.4768),
+        (2.4076, -1.5044),
+        (2.3980, -1.5164),
+        (2.4192, -1.5922),
+        (2.4212, -1.6102),
+        (2.4188, -1.6428),
+        (2.4163, -1.6561),
+        (2.4057, -1.6897),
+        (2.3150, -1.7387),
+        (2.3535, -1.7387),
+        (2.3743, -1.7350),
+        (2.4274, -1.7135),
+        (2.4462, -1.7098),
+        (2.5237, -1.7098),
+        (2.5246, -1.7000),
+        (2.5591, -1.6550),
+        (2.5530, -1.6380),
+        (2.5739, -1.6018),
+        (2.6330, -1.6171),
+        (2.6337, -1.6199),
+        (2.6938, -1.6355),
+        (2.6943, -1.6382),
+        (2.7544, -1.6548),
+        (2.7552, -1.6566),
+        (2.8147, -1.6720),
+        (2.8147, -1.7079),
+        (2.8043, -1.7116),
+        (2.8570, -1.7116),
+        (2.8785, -1.7160),
+        (2.9364, -1.7414),
+        (2.9573, -1.7459),
+        (2.9870, -1.7459),
+        (2.8977, -1.6823),
+        (2.8820, -1.6228),
+        (2.8816, -1.5916),
+        (2.9005, -1.5104),
+        (2.8905, -1.4984),
+        (2.8879, -1.4892),
+        (2.8859, -1.4740),
+        (2.8859, -1.4357),
+        (2.8895, -1.4171),
+        (2.9008, -1.3928),
+        (2.9133, -1.3762),
+        (2.9635, -1.3348),
+        (3.0097, -1.3348),
+        (3.0600, -1.2978),
+        (3.1940, -1.2140),
+        (3.2022, -1.2089),
+        (3.3063, -1.2089),
+        (3.2832, -1.1244),
     ]
 }
 
-/// Approximate ITER wall outline (simplified polygon)
+/// ITER first wall / limiter contour, including the lower divertor
+/// cassette (inner target, dome, outer target).
+///
+/// Single source of truth, shared with the front end: this is the same
+/// contour as the matching `*_LIMITER` export in `web/src/lib/*-geometry.ts`,
+/// which `DeviceSelect`/`ControlRoom` render. Keep the two in sync — the
+/// limiter-contact check in `simulation.rs` uses this one, so a divergence
+/// means the plasma is collision-checked against a vessel nobody sees.
 fn iter_wall() -> Vec<(f64, f64)> {
-    let n = 60;
-    let r0 = 6.2;
-    let a_wall = 2.5;
-    let kappa_wall = 2.2;
-    let delta_wall: f64 = 0.50;
-    let mut wall = Vec::with_capacity(n + 1);
-    for i in 0..=n {
-        let theta = 2.0 * std::f64::consts::PI * (i as f64) / (n as f64);
-        let r = r0 + a_wall * (theta + delta_wall.asin() * theta.sin()).cos();
-        let z = kappa_wall * a_wall * theta.sin();
-        wall.push((r, z));
-    }
-    wall
+    vec![
+        (4.0455, -2.5063),
+        (4.0455, -1.5000),
+        (4.0455, -0.4836),
+        (4.0455, 0.5328),
+        (4.0455, 1.5492),
+        (4.0455, 2.5656),
+        (4.0455, 3.5820),
+        (4.3109, 4.3240),
+        (4.9037, 4.7115),
+        (5.7538, 4.5323),
+        (6.5870, 3.8934),
+        (7.4672, 3.0833),
+        (7.9338, 2.4024),
+        (8.2703, 1.6814),
+        (8.3944, 0.6329),
+        (8.3063, -0.4215),
+        (7.8987, -1.3417),
+        (7.2829, -2.2570),
+        (6.2665, -3.0461),
+        (6.1710, -3.2350),
+        (5.9821, -3.2822),
+        (5.8150, -3.3823),
+        (5.6842, -3.5265),
+        (5.6008, -3.7024),
+        (5.5720, -3.8950),
+        (5.5720, -3.8960),
+        (5.5720, -3.9956),
+        (5.5720, -3.9961),
+        (5.5650, -4.0962),
+        (5.5650, -4.2494),
+        (5.5650, -4.4026),
+        (5.5650, -4.5559),
+        (5.2727, -4.2636),
+        (5.2628, -4.1244),
+        (5.2529, -3.9852),
+        (5.1496, -3.8382),
+        (4.9982, -3.7414),
+        (4.8215, -3.7090),
+        (4.6456, -3.7460),
+        (4.5687, -3.8276),
+        (4.4918, -3.9092),
+        (4.1799, -3.8847),
+        (4.2457, -3.7497),
+        (4.3115, -3.6148),
+        (4.3773, -3.4799),
+        (4.4062, -3.4048),
+        (4.4064, -3.4043),
+        (4.4670, -3.2801),
+        (4.5157, -3.1139),
+        (4.5066, -2.9410),
+        (4.4408, -2.7808),
+        (4.3257, -2.6514),
+        (4.1742, -2.5674),
+        (4.0455, -2.5063),
+    ]
 }
 
 pub fn diiid() -> Device {
@@ -397,10 +704,13 @@ pub fn diiid() -> Device {
         mass_number: 2.0,
         z_eff: 1.5,
         z0: 0.0,
-        equilibrium_a_scale: 1.0,
-        equilibrium_r0_shift: 0.0,
-        equilibrium_kappa_scale: 1.0,
-        equilibrium_squareness: 0.0,
+        equilibrium_a_scale: 0.94,
+        equilibrium_r0_shift: 0.03,
+        equilibrium_kappa_scale: 1.1,
+        equilibrium_squareness: -0.6,
+        equilibrium_delta_upper: 0.426,
+        equilibrium_delta_lower: 0.770,
+        equilibrium_squareness_out: -0.6,
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
@@ -445,6 +755,9 @@ pub fn iter() -> Device {
         equilibrium_r0_shift: 0.0,
         equilibrium_kappa_scale: 1.0,
         equilibrium_squareness: 0.0,
+        equilibrium_delta_upper: 0.55,
+        equilibrium_delta_lower: 0.55,
+        equilibrium_squareness_out: 0.0,
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
@@ -493,6 +806,9 @@ pub fn jet() -> Device {
         equilibrium_r0_shift: 0.0,
         equilibrium_kappa_scale: 1.0,
         equilibrium_squareness: 0.0,
+        equilibrium_delta_upper: 0.20,
+        equilibrium_delta_lower: 0.20,
+        equilibrium_squareness_out: 0.0,
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
@@ -520,55 +836,37 @@ pub fn jet() -> Device {
     }
 }
 
-/// Approximate CENTAUR wall outline (simplified polygon).
+/// CENTAUR first wall / limiter contour, including the upper and lower
+/// divertor slots.
 ///
-/// Based on the CENTAUR design study cross-section. Negative triangularity
-/// vessel with elongated NT-shaped vacuum vessel enclosing the limiter.
-/// The vessel is wider at the midplane and features divertor structures
-/// at top and bottom. Vertically symmetric.
-/// Traversed clockwise starting from the outboard midplane.
+/// Single source of truth, shared with the front end: this is the same
+/// contour as the matching `*_LIMITER` export in `web/src/lib/*-geometry.ts`,
+/// which `DeviceSelect`/`ControlRoom` render. Keep the two in sync — the
+/// limiter-contact check in `simulation.rs` uses this one, so a divergence
+/// means the plasma is collision-checked against a vessel nobody sees.
 fn centaur_wall() -> Vec<(f64, f64)> {
     vec![
-        // Outboard midplane → top
-        (2.85, 0.00),
-        (2.84, 0.25),
-        (2.82, 0.50),
-        (2.78, 0.80),
-        (2.72, 1.05),
-        (2.68, 1.20),
-        // Upper divertor region (outboard)
-        (2.75, 1.35),
-        (2.80, 1.50),
-        (2.55, 1.65),
-        (2.35, 1.70),
-        // Top dome (narrower — NT shape)
-        (2.15, 1.65),
-        (1.90, 1.45),
-        (1.60, 1.10),
-        (1.35, 0.80),
-        // Inboard wall (compact)
-        (1.18, 0.55),
-        (1.10, 0.30),
-        (1.08, 0.00),
-        // Inboard lower wall
-        (1.10, -0.30),
-        (1.18, -0.55),
-        (1.35, -0.80),
-        (1.60, -1.10),
-        (1.90, -1.45),
-        // Lower divertor region
-        (2.15, -1.65),
-        (2.35, -1.70),
-        (2.55, -1.65),
-        (2.80, -1.50),
-        (2.75, -1.35),
-        // Outboard lower wall → midplane
-        (2.68, -1.20),
-        (2.72, -1.05),
-        (2.78, -0.80),
-        (2.82, -0.50),
-        (2.84, -0.25),
-        (2.85, 0.00),
+        (1.2600, -0.2700),
+        (1.4500, -0.6900),
+        (2.1780, -1.2000),
+        (2.1780, -1.2930),
+        (2.2830, -1.5600),
+        (2.4630, -1.3747),
+        (2.7000, -1.4200),
+        (2.6740, -1.2375),
+        (2.6000, -1.1000),
+        (2.7300, -0.4552),
+        (2.7300, 0.4552),
+        (2.6000, 1.1000),
+        (2.6740, 1.2375),
+        (2.7000, 1.4200),
+        (2.4630, 1.3747),
+        (2.2830, 1.5600),
+        (2.1780, 1.2930),
+        (2.1780, 1.2000),
+        (1.4500, 0.6900),
+        (1.2600, 0.2700),
+        (1.2600, -0.2700),
     ]
 }
 
@@ -589,10 +887,13 @@ pub fn centaur() -> Device {
         mass_number: 2.5,   // D-T mix for Q > 1 operation
         z_eff: 1.43,
         z0: 0.0, // vertically symmetric
-        equilibrium_a_scale: 1.0,
-        equilibrium_r0_shift: 0.0,
-        equilibrium_kappa_scale: 1.0,
-        equilibrium_squareness: 0.0,
+        equilibrium_a_scale: 0.98,
+        equilibrium_r0_shift: 0.03,
+        equilibrium_kappa_scale: 1.05,
+        equilibrium_squareness: 0.9,
+        equilibrium_delta_upper: -0.550,
+        equilibrium_delta_lower: -0.540,
+        equilibrium_squareness_out: 0.9,
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
@@ -622,74 +923,95 @@ pub fn centaur() -> Device {
     }
 }
 
-/// SPARC first wall outline, decimated from published data.
+/// SPARC first wall / limiter contour, including the baffled divertor
+/// slots.
 ///
-/// Source: the 555-point limiter contour carried in the SPARC Primary
-/// Reference Discharge GEQDSK files in `cfs-energy/SPARCPublic` (MIT licence),
-/// generated with FreeGS. Reduced to 45 points with Ramer–Douglas–Peucker at a
-/// 5 mm tolerance, which preserves the divertor baffle and target structure.
-/// The published contour is exactly up-down symmetric and this reduction keeps
-/// that symmetry.
-///
-/// R ∈ [1.269, 2.430] m, Z ∈ [−1.599, 1.599] m.
-/// Traversed counter-clockwise from the outboard midplane.
-///
-/// Note: CFS describe this as a *simplified* first wall, not the engineering
-/// geometry. Acknowledgement per the SPARCPublic README: "The information,
-/// data, or work presented herein builds on the SPARC primary reference
-/// discharge and X-point target discharge data provided by Commonwealth Fusion
-/// Systems."
+/// Single source of truth, shared with the front end: this is the same
+/// contour as the matching `*_LIMITER` export in `web/src/lib/*-geometry.ts`,
+/// which `DeviceSelect`/`ControlRoom` render. Keep the two in sync — the
+/// limiter-contact check in `simulation.rs` uses this one, so a divergence
+/// means the plasma is collision-checked against a vessel nobody sees.
 fn sparc_wall() -> Vec<(f64, f64)> {
     vec![
-        // Outboard midplane → top
         (2.4295, 0.0000),
+        (2.4284, 0.0469),
+        (2.4250, 0.0938),
         (2.4193, 0.1406),
+        (2.4113, 0.1875),
+        (2.4010, 0.2344),
         (2.3883, 0.2812),
+        (2.3733, 0.3281),
         (2.3557, 0.3750),
+        (2.3357, 0.4219),
         (2.3047, 0.4845),
         (2.3047, 0.5090),
         (2.2516, 0.5972),
+        (2.1984, 0.6721),
         (2.1187, 0.7679),
+        (2.0656, 0.8243),
         (1.9063, 0.9813),
+        (1.8536, 1.0275),
         (1.8039, 1.0658),
+        (1.7567, 1.0979),
+        (1.6941, 1.1354),
         (1.6719, 1.1510),
+        (1.6541, 1.1665),
         (1.6450, 1.1818),
+        (1.6418, 1.1980),
         (1.6450, 1.2168),
-        // Upper divertor: baffle, target plate, then back to the inboard side
         (1.7293, 1.4085),
+        (1.7443, 1.4100),
         (1.8398, 1.4100),
         (1.8500, 1.4157),
         (1.8492, 1.5903),
         (1.8193, 1.5992),
+        (1.7462, 1.5152),
         (1.4795, 1.1781),
+        (1.4656, 1.1786),
+        (1.2985, 1.2308),
         (1.2850, 1.2332),
         (1.2913, 1.2205),
         (1.4597, 1.1002),
-        // Inboard wall (high-field side, straight centre column)
         (1.2689, 0.5000),
         (1.2689, -0.5000),
         (1.4597, -1.1002),
-        // Lower divertor (mirror of the upper)
         (1.2913, -1.2205),
         (1.2850, -1.2332),
+        (1.2985, -1.2308),
+        (1.4656, -1.1786),
         (1.4795, -1.1781),
+        (1.7462, -1.5152),
         (1.8193, -1.5992),
         (1.8492, -1.5903),
         (1.8500, -1.4157),
         (1.8398, -1.4100),
+        (1.7443, -1.4100),
         (1.7293, -1.4085),
         (1.6450, -1.2168),
+        (1.6418, -1.2006),
         (1.6450, -1.1818),
+        (1.6541, -1.1665),
         (1.6719, -1.1510),
+        (1.6941, -1.1354),
+        (1.7567, -1.0979),
         (1.8039, -1.0658),
+        (1.8536, -1.0275),
         (1.9063, -0.9813),
+        (2.0656, -0.8243),
         (2.1187, -0.7679),
+        (2.1984, -0.6721),
         (2.2516, -0.5972),
         (2.3047, -0.5090),
         (2.3047, -0.4845),
+        (2.3357, -0.4219),
         (2.3557, -0.3750),
+        (2.3733, -0.3281),
         (2.3883, -0.2812),
+        (2.4010, -0.2344),
+        (2.4113, -0.1875),
         (2.4193, -0.1406),
+        (2.4250, -0.0938),
+        (2.4284, -0.0469),
         (2.4295, 0.0000),
     ]
 }
@@ -724,37 +1046,30 @@ pub fn sparc() -> Device {
         mass_number: 2.5, // 50:50 D-T (Hughes table 1)
         z_eff: 1.5,
         z0: 0.0, // GEQDSK z_magnetic_axis = −0.002 m; vessel is up-down symmetric
-        equilibrium_a_scale: 0.92,
-        // Fitted by `examples/fit_sparc_shape.rs` (grid search over the SOLVED
-        // contour vs. the published wall, both strike-sweep extremes checked):
-        //   • X-point lands at (1.522, ±1.122) — published DN GEQDSK: (1.53, ±1.11)
-        //   • bulk minimum wall clearance 21 mm at both sweep extremes, zero
-        //     intersections
-        //   • inner leg strikes ~145 mm down the inboard slot at (1.31, ±1.20)
-        //   • outer leg runs up the inboard side of the outboard channel and
-        //     strikes the ROOF DIAGONAL, resting at (1.80, ±1.57) — 33 mm
-        //     from the back corner with 33 mm minimum baffle clearance over
-        //     the whole flat-top, reproducible across RNG-varied pulses
-        //     (measured live at the 96×144 separatrix grid). The X-points
-        //     trace a purely LATERAL arc: the δ-only sweep moves them
-        //     side-to-side with zero vertical excursion. The leg meets the
-        //     diagonal at grazing incidence near its top, so this landing is
-        //     bistable with the corner branch — the β-compensated strike
-        //     control below is what holds the deep branch; a vertical rock
-        //     was tried and rejected (it bobbed the X-points and flipped the
-        //     landing onto the corner baffle). The programmed κ ramp still
-        //     passes through the corner-landing band during shape
-        //     formation/termination (two brief ≤0.2 s corner traverses per
-        //     pulse are physical and accepted). Tune against the LIVE
-        //     equilibrium only; the fixed-pressure fit harness disagrees by
-        //     one κ notch
-        //   • the 1 Hz sweep excursions to HIGHER δ, so the strike walks
-        //     ~240 mm INBOARD along the diagonal and back — never toward the
-        //     baffle
+        equilibrium_a_scale: 0.96,
+        // Fitted by `examples/fit_to_geqdsk.rs` against the 2026-07 SPARC
+        // scenario equilibrium (sparc_bt87_ip60_17MW blend-ped, read locally,
+        // never committed), after the issue-#2 basis corrections and with the
+        // split squareness (α offsets applied per side, see
+        // equilibrium_squareness_out):
+        //   • boundary RMS vs the reference LCFS: 10.6 mm (84 mm shipped)
+        //   • δ = 0.590 is the user-adopted baseline and the strike-sweep
+        //     MIDPOINT; the sweep runs δ = 0.555..0.625 (strike_sweep_delta
+        //     is the full width, sweep symmetric about rest)
+        //   • strikes verified ON-TARGET at every sweep phase by first-impact
+        //     clipping: inner (1.461..1.389, |Z| 1.180..1.202) stays on the
+        //     wedge-slot faces — 5 mm from the slot mouth at the low-δ
+        //     extreme, which is what caps the sweep width — and outer
+        //     (1.637..1.554, |Z| 1.378..1.272) stays on the roof diagonal,
+        //     baffle-clear; outer transit 135 mm per half-cycle (2.0x the
+        //     pre-split band)
         // Re-run the example after touching any of these or the wall geometry.
-        equilibrium_r0_shift: -0.05,
-        equilibrium_kappa_scale: 1.1025,
-        equilibrium_squareness: 0.10,
+        equilibrium_r0_shift: 0.0,
+        equilibrium_kappa_scale: 1.02,
+        equilibrium_squareness: -0.6,
+        equilibrium_delta_upper: 0.590,
+        equilibrium_delta_lower: 0.590,
+        equilibrium_squareness_out: -0.45,
         // Analytic boundary bulges past the published wall at the
         // inboard corners; see the field doc. At 0.92 the worst-corner
         // clearance is ~7 mm in the DN shape (0.93 left only ~2 mm, which
@@ -769,7 +1084,7 @@ pub fn sparc() -> Device {
         // but rejected on review — it bobbed the X-points visibly and kept
         // flipping the grazing outer landing onto the back-corner baffle.
         strike_sweep_z: 0.0,
-        strike_sweep_delta: 0.03,
+        strike_sweep_delta: 0.07,
         wall_outline: sparc_wall(),
         config: MagneticConfig::DoubleNull, // vessel is exactly up-down symmetric; DN operation planned from the start
         impurity_elm: ImpurityElmParams {

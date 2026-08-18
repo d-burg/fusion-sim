@@ -926,8 +926,13 @@ impl Simulation {
             let v = 1.0 - (2.0 * sweep_frac - 1.0).abs(); // triangle 0→1→0
             v * v * v
         };
+        // Symmetric about the rest delta: `strike_sweep_delta` is the FULL
+        // sweep width, so the device's baseline delta is the sweep MIDPOINT
+        // (u = 0.5) rather than the outboard extreme. Changed from one-sided
+        // rest + amp*u when the SPARC baseline was re-anchored to the swept
+        // midpoint (user call, 2026-08-18).
         let delta_eff = if sweep_active {
-            delta_eff + self.device.strike_sweep_delta * sweep_u
+            delta_eff + self.device.strike_sweep_delta * (sweep_u - 0.5)
         } else {
             delta_eff
         };
@@ -977,15 +982,25 @@ impl Simulation {
             self.device.equilibrium_kappa_scale
         };
 
+        // Equilibrium-only δ correction, applied as a rigid offset on the
+        // programmed waveform so ramps and the strike sweep carry through
+        // unchanged (see Device::equilibrium_delta_lower). The upper end then
+        // carries the equilibrium's own up-down asymmetry on top.
+        let delta_eq =
+            delta_eff + (self.device.equilibrium_delta_lower - self.device.delta_lower);
+        let delta_eq_upper = delta_eq
+            + (self.device.equilibrium_delta_upper - self.device.equilibrium_delta_lower);
         let new_shape = ShapeParams {
             epsilon,
             // Equilibrium-only κ correction (see Device::equilibrium_kappa_scale)
             kappa: prog.kappa * kappa_scale_eff,
-            delta: delta_eff,
+            delta: delta_eq,
+            delta_upper: Some(delta_eq_upper),
             a_param,
             config,
-            x_point_alpha: Some(delta_eff.asin()),
+            x_point_alpha: Some(delta_eq.asin()),
             squareness: self.device.equilibrium_squareness,
+            squareness_out: self.device.equilibrium_squareness_out,
         };
         self.equilibrium.update(&new_shape);
 
