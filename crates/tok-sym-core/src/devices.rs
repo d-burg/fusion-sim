@@ -887,9 +887,9 @@ pub fn centaur() -> Device {
         mass_number: 2.5,   // D-T mix for Q > 1 operation
         z_eff: 1.43,
         z0: 0.0, // vertically symmetric
-        equilibrium_a_scale: 0.98,
+        equilibrium_a_scale: 0.94,
         equilibrium_r0_shift: 0.03,
-        equilibrium_kappa_scale: 1.05,
+        equilibrium_kappa_scale: 1.08,
         equilibrium_squareness: 0.9,
         equilibrium_delta_upper: -0.550,
         equilibrium_delta_lower: -0.540,

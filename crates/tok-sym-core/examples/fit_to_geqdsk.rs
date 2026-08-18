@@ -150,6 +150,48 @@ fn tokenize_reals(s: &str) -> Vec<f64> {
     out
 }
 
+fn point_in_poly(poly: &[Pt], r: f64, z: f64) -> bool {
+    let mut c = false;
+    let n = poly.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let (xi, yi) = poly[i];
+        let (xj, yj) = poly[j];
+        if ((yi > z) != (yj > z)) && r < (xj - xi) * (z - yi) / (yj - yi) + xi {
+            c = !c;
+        }
+        j = i;
+    }
+    c
+}
+
+fn dist_to_poly(poly: &[Pt], r: f64, z: f64) -> f64 {
+    let mut best = f64::MAX;
+    let n = poly.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let (x0, y0) = poly[j];
+        let (x1, y1) = poly[i];
+        let (dx, dy) = (x1 - x0, y1 - y0);
+        let l2 = dx * dx + dy * dy;
+        let t = if l2 > 0.0 {
+            (((r - x0) * dx + (z - y0) * dy) / l2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        best = best.min(((r - x0 - t * dx).powi(2) + (z - y0 - t * dy).powi(2)).sqrt());
+        j = i;
+    }
+    best
+}
+
+/// Hard floor on the bulk boundary's wall clearance (m). The live simulation
+/// force-disrupts on any LCFS point outside the wall, so a fit that grazes
+/// the limiter is not shippable no matter how good its RMS — CENTAUR's first
+/// unconstrained fit put 111 boundary points outside (min gap 0.02 mm) and
+/// disrupted the moment the contact check armed.
+const WALL_CLEAR_FLOOR: f64 = 0.008;
+
 fn dist_point_to_segments(p: Pt, segs: &[(Pt, Pt)]) -> f64 {
     let mut best = f64::MAX;
     for &(a, b) in segs {
@@ -535,6 +577,28 @@ fn main() {
                         else {
                             continue;
                         };
+
+                        // Bulk wall clearance: reject anything the live
+                        // limiter-contact check would disrupt.
+                        let z_xpt_abs = 1.01 * shape.epsilon * shape.kappa
+                            * (device.r0 + r0_shift);
+                        let mut wall_ok = true;
+                        let mut min_gap = f64::MAX;
+                        for &(r, z) in &sep.points {
+                            if (z - device.z0).abs() >= z_xpt_abs * 0.95 {
+                                continue;
+                            }
+                            if point_in_poly(&device.wall_outline, r, z) {
+                                min_gap =
+                                    min_gap.min(dist_to_poly(&device.wall_outline, r, z));
+                            } else {
+                                wall_ok = false;
+                                break;
+                            }
+                        }
+                        if !wall_ok || min_gap < WALL_CLEAR_FLOOR {
+                            continue;
+                        }
 
                         let mut sum2 = 0.0;
                         let mut max = 0.0f64;

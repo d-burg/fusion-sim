@@ -654,6 +654,11 @@ impl Simulation {
     }
 
     /// Seed the disruption model RNG.  Call from WASM layer with JS entropy.
+    /// Read-only access to the live equilibrium (diagnostics/examples).
+    pub fn equilibrium(&self) -> &CerfonEquilibrium {
+        &self.equilibrium
+    }
+
     pub fn seed_disruption(&mut self, seed: u64) {
         self.disruption.seed(seed);
     }
@@ -862,15 +867,24 @@ impl Simulation {
         let epsilon = if config == MagneticConfig::Limited {
             base_epsilon * (0.35 + 0.65 * ip_frac)
         } else if config == MagneticConfig::DoubleNull {
-            // DN plasma is smaller to fit within both upper and lower
-            // divertor shelves of the limiter geometry.
-            //
-            // SPARC is exempt: its wall IS a double-null vessel (symmetric,
-            // baffled at both ends) and equilibrium_a_scale already encodes
-            // the wall clearance, so the generic shrink would double-count
-            // and leave the plasma visibly undersized.
-            if self.device.id == "sparc" {
-                base_epsilon
+            // DN plasmas were historically shrunk 12% to clear the old
+            // hand-drawn "divertor shelf" walls. A device whose
+            // equilibrium_a_scale has been fitted against the real limiter
+            // already encodes its wall clearance, so the generic shrink
+            // double-counts: on CENTAUR it left the live plasma 12% smaller
+            // than the fitted shape and drove the outer strike off the notch
+            // floor onto the back wall. Keep the shrink only for future DN
+            // devices that have not been fitted (a_scale still 1.0).
+            if self.device.equilibrium_a_scale != 1.0 {
+                // Ramp to the fitted full size as Ip approaches flat-top:
+                // the transitional shapes (delta clamped, kappa mid-ramp)
+                // bulge differently from the fitted flat-top boundary, and
+                // at full epsilon they can clip the wall the moment the
+                // limiter-contact check arms at 30% Ip. 0.88 matches the
+                // legacy shrink at low current; full size from ~97% Ip,
+                // where the fitted shape (wall-clearance-constrained by
+                // fit_to_geqdsk) takes over.
+                base_epsilon * (0.88 + 0.12 * (ip_frac / 0.97).min(1.0))
             } else {
                 base_epsilon * 0.88
             }
