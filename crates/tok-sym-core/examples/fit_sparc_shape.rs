@@ -187,20 +187,28 @@ fn main() {
     println!("shift  ks     sq    alph  | out  clear |  X-point        | inner hit → depth | outer hit → depth");
     let mut best: Option<(f64, String)> = None;
 
-    for &shift in &[-0.05] {
-        for &ks in &[1.103, 1.104, 1.105] {
-            for &sq in &[0.100, 0.102, 0.104, 0.106] {
+    // Widened after the N1/N2 curvature rows were changed to the
+    // Cerfon-Freidberg α_s = arcsin(δ) + squareness form (github issue #2,
+    // claim 3): the previously fitted squareness no longer holds the inboard
+    // chamfer, so the neighbourhood has to be re-searched from scratch.
+    // Acceptance criteria below are UNCHANGED from the original fit.
+    for &shift in &[-0.065, -0.060, -0.055, -0.050] {
+        for &escale in &[0.895, 0.900, 0.905, 0.910] {
+        for &ks in &[1.090, 1.100, 1.110] {
+            for &sq in &[-0.15, -0.12, -0.10, -0.08, -0.05] {
                 for &amp in &[0.03] {
                     let asc = 1.0;
                     let delta = 0.54;
                     let shape = ShapeParams {
-                        epsilon: eps0 * 0.92,
+                        epsilon: eps0 * escale,
                         kappa: d.kappa * ks,
                         delta,
+                        delta_upper: None,
                         a_param: -0.05,
                         config: MagneticConfig::DoubleNull,
                         x_point_alpha: Some((delta as f64).asin() * asc),
                         squareness: sq,
+                        squareness_out: sq,
                     };
                     let Some(s) = evaluate(&wall, &shape, d.r0 + shift) else {
                         continue;
@@ -244,8 +252,8 @@ fn main() {
                         -1.0
                     };
                     let row = format!(
-                        "{:+.3}  {:.3} {:.2}  a{:.2} | {:3}  {:5.0}mm | ({:.3},{:.3}) | {} → {:4.0}mm | {} → {:4.0}mm {} | {}",
-                        shift, ks, sq, amp, s.n_out, s.min_clear_mm,
+                        "{:+.3} e{:.2} {:.4} {:+.2}  a{:.2} | {:3}  {:5.0}mm | ({:.3},{:.3}) | {} → {:4.0}mm | {} → {:4.0}mm {} | {}",
+                        shift, escale, ks, sq, amp, s.n_out, s.min_clear_mm,
                         s.x_pt.0, s.x_pt.1,
                         s.inner_hit.map(|h| format!("({:.3},{:.3})", h.0, h.1)).unwrap_or("   miss   ".into()),
                         s.inner_depth_mm,
@@ -260,6 +268,7 @@ fn main() {
                     println!("{row}");
                 }
             }
+        }
         }
     }
     println!("\nBEST: {}", best.map(|(_, r)| r).unwrap_or("none met all criteria".into()));
