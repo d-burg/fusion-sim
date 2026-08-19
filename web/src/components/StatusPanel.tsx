@@ -139,12 +139,20 @@ export default function StatusPanel({
           className={`px-1.5 py-px rounded text-[10px] font-bold shrink-0 ${
             s.disrupted
               ? 'bg-red-900 text-red-300'
-              : s.in_hmode
-                ? 'bg-cyan-900 text-cyan-300'
-                : 'bg-gray-800 text-gray-300'
+              : s.in_hmode && s.elm_suppressed
+                ? 'bg-emerald-900 text-emerald-300'
+                : s.in_hmode
+                  ? 'bg-cyan-900 text-cyan-300'
+                  : 'bg-gray-800 text-gray-300'
           }`}
         >
-          {s.disrupted ? 'DISRUPTED' : s.in_hmode ? 'H-MODE' : 'L-MODE'}
+          {/* ELM-suppressed H-mode is the QCE regime, not plain H-mode —
+              matches the QCE label the trace panel already uses. */}
+          {s.disrupted
+            ? 'DISRUPTED'
+            : s.in_hmode
+              ? (s.elm_suppressed ? 'QCE' : 'H-MODE')
+              : 'L-MODE'}
         </span>
         {/* Disruption risk bar */}
         <DisruptionRisk risk={s.disruption_risk} />

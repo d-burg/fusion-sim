@@ -199,10 +199,14 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     fresnelStrength: 0.20,
   },
   sparc: {
-    portR: 2.10, portZ: 0, portRadius: 0.35, portLength: 0.20, portPhi: 0,
-    camR: 2.30, camZ: 0.04, camPhi: 0,
-    lookR: 1.10, lookZ: -0.02, lookPhi: 0.28, fov: 80,
-    tileColor: [36, 34, 30],
+    // Geometry anchored to the published first wall: the outboard wall sits at
+    // R = 2.43 m and the divertor structures at |Z| ≈ 1.4–1.6 m. (The previous
+    // values here were placeholders written before SPARC was a real device in
+    // the simulator and were inconsistent with the wall.)
+    portR: 2.43, portZ: 0, portRadius: 0.38, portLength: 0.24, portPhi: 0,
+    camR: 2.64, camZ: 0.04, camPhi: 0,
+    lookR: 1.32, lookZ: -0.02, lookPhi: 0.26, fov: 80,
+    tileColor: [34, 32, 29],
     tileGridSpacing: { poloidal: 0.08, toroidal: 0.07 },
     tileGridDarken: 0.16,
     phiMin: -Math.PI, phiMax: Math.PI,
@@ -211,21 +215,49 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     tileRegions: {
       inboardGridSpacing: { poloidal: 0.08, toroidal: 0.08 },
       limiterGridSpacing: { poloidal: 0.08, toroidal: 0.14 },
-      limiterZThreshold: 0.55,
+      limiterZThreshold: 1.15,
     },
     extraPorts: (() => {
-      const ports: { theta: number; phi: number; radius: number }[] = []
-      const nSectors = 10
+      // SPARC has 18 toroidal field coils and three ports at each toroidal
+      // location: one midplane port and a symmetric pair above and below
+      // (Creely et al. 2020 §3). Of the 18 midplane ports, seven carry pairs
+      // of four-strap ICRF antennas — ICRF is the only auxiliary heating, so
+      // the midplane band alternates RF and diagnostic textures.
+      //
+      // Port *dimensions* are not published; sizes are styled by analogy with
+      // the other devices here.
+      type Port = { theta: number; phi: number; radius: number; zRadius?: number;
+        shape?: 'circle' | 'square' | 'stadium'; toroidalExtent?: number; texture?: 'dark' | 'rf' }
+      const ports: Port[] = []
+      const nSectors = 18
+      const dphi = (2 * Math.PI) / nSectors
+
       for (let k = 0; k < nSectors; k++) {
-        const phi = (k / nSectors) * 2 * Math.PI
-        ports.push({ theta:  25, phi, radius: 0.07 })
-        ports.push({ theta:  55, phi, radius: 0.06 })
-        ports.push({ theta: -25, phi, radius: 0.07 })
-        ports.push({ theta: -55, phi, radius: 0.06 })
+        const phi = k * dphi
+        // Midplane port — seven of eighteen are ICRF
+        const isRf = k % 18 < 7
+        ports.push({
+          theta: 0, phi, radius: 0.24, zRadius: 0.30, shape: 'square',
+          texture: isRf ? 'rf' : 'dark',
+        })
+        // Symmetric off-midplane pair
+        ports.push({ theta:  38, phi, radius: 0.11, zRadius: 0.11, shape: 'stadium', toroidalExtent: 0.05 })
+        ports.push({ theta: -38, phi, radius: 0.11, zRadius: 0.11, shape: 'stadium', toroidalExtent: 0.05 })
       }
       return ports
     })(),
+    antennae: [
+      // Four-strap ICRF antennas on the outboard midplane, 120 MHz, 25 MW total
+      { r: 2.43, zMin: -0.32, zMax: 0.32, phiMin: 0.42, phiMax: 0.62 },
+      { r: 2.43, zMin: -0.32, zMax: 0.32, phiMin: -0.62, phiMax: -0.42 },
+    ],
     fresnelStrength: 0.18,
+    divertorRegion: {
+      // Toroidally continuous, tightly baffled divertor at both ends.
+      zThreshold: -1.15,
+      tileColor: [24, 22, 20],
+      gridSpacing: { poloidal: 0.06, toroidal: 0.06 },
+    },
   },
   jet: {
     portR: 3.80, portZ: 0, portRadius: 0.50, portLength: 0.30, portPhi: 0,
@@ -325,38 +357,60 @@ export interface GlowTuning {
   pointSize: number         // sprite size in world units
 }
 
+// ═══ Recycling-light palette — grounded in what divertor cameras actually see ═══
+//
+// The visible glow at an attached divertor target is line emission, and the
+// dominant lines depend on the wall material:
+//
+//   • Carbon walls (DIII-D): C II (426, 515 nm) and especially C III (465 nm)
+//     dominate — the iconic blue-green divertor of carbon machines (the same
+//     emission that makes MAST-U Super-X images cyan). Dα (656 nm) adds a red
+//     component, pulling the mix toward pale cyan-violet.
+//   • Metal walls (JET ILW, ITER, SPARC, CENTAUR — W/Be): tungsten sputters
+//     far too little to light up in the visible; the glow is deuterium Balmer
+//     emission — Dα red + Dβ/Dγ blue — which reads as PINK/MAGENTA. This is
+//     what JET ILW divertor cameras actually record. Strong detachment adds
+//     high-n Balmer recombination light, pushing toward blue-violet.
+//   • Neon seeding (SPARC, CENTAUR presets; the classic neon-sign orange-red
+//     lines at 585–640 nm) warms the pink toward salmon.
+//
+// Tile incandescence (blackbody, near-white at >1300 °C) is layered on top by
+// divertorVisuals.ts — it is NOT part of these base colors. If a device glows
+// white, that is the thermal model saying the tiles are near melting.
 export const DEVICE_GLOW_TUNING: Record<string, GlowTuning> = {
-  // DIII-D: barely perceptible — faintest hint of warm glow
+  // DIII-D: carbon wall → C III blue-green + Dα, faint (low power)
   diiid: {
-    color: { r: 1.0, g: 0.45, b: 0.15 },      // warm orange
+    color: { r: 0.30, g: 0.80, b: 1.0 },      // C II/C III cyan
     jitterAmplitude: 0.001,
     flickerDepth: 0.05,
     pointSize: 0.08,
   },
-  // CENTAUR: dazzling — 30 MW ICRH into compact NT plasma, intense divertor load
+  // CENTAUR: W wall, Ne-seeded — Balmer pink warmed by neon lines
   centaur: {
-    color: { r: 1.0, g: 0.25, b: 0.06 },       // deep reddish orange (D-T)
+    color: { r: 1.0, g: 0.30, b: 0.45 },
     jitterAmplitude: 0.008,
     flickerDepth: 0.40,
     pointSize: 0.40,
   },
-  // ITER: most dazzling — 500 MW fusion power, extreme divertor heat flux
+  // ITER: W wall at 70 % divertor radiation — deeply detached, recombination-
+  // dominated Balmer light, magenta-violet
   iter: {
-    color: { r: 1.0, g: 0.18, b: 0.05 },       // deep red
+    color: { r: 0.90, g: 0.30, b: 0.95 },
     jitterAmplitude: 0.022,
     flickerDepth: 0.55,
     pointSize: 0.75,
   },
-  // SPARC: moderate
+  // SPARC: W (assumed), Ne-seeded, attached-but-swept — Balmer pink with a
+  // neon salmon tint
   sparc: {
-    color: { r: 1.0, g: 0.35, b: 0.10 },       // reddish orange
+    color: { r: 1.0, g: 0.42, b: 0.48 },
     jitterAmplitude: 0.006,
     flickerDepth: 0.30,
     pointSize: 0.28,
   },
-  // JET: moderate — visible but less intense than ITER/CENTAUR
+  // JET ILW: Balmer-dominated pink-magenta, as its divertor cameras show
   jet: {
-    color: { r: 1.0, g: 0.22, b: 0.06 },       // deep red
+    color: { r: 1.0, g: 0.32, b: 0.55 },
     jitterAmplitude: 0.007,
     flickerDepth: 0.25,
     pointSize: 0.35,

@@ -433,6 +433,139 @@ pub fn extract_separatrix(
     Contour { level: 0.0, points }
 }
 
+
+/// Clip a separatrix contour to the vessel interior.
+///
+/// Within each chain (chains are delimited by jump discontinuities, matching
+/// the frontend renderer's convention), keep only the LONGEST contiguous run
+/// of in-vessel points, terminating each cut end at the exact wall crossing.
+///
+/// Physics rationale: once a divertor leg strikes the limiter, the field line
+/// ends there — it must not be drawn re-emerging beyond a baffle it
+/// "tunnelled" through, which is what the raw marching-squares chains do
+/// (the ψ = 0 contour continues through wall metal into whatever vessel
+/// region lies beyond). Canvas-side masking cannot express "stop at first
+/// impact"; this can.
+///
+/// The crossing endpoint is extended `overshoot` metres past the wall so
+/// downstream strike-point detection (which looks for a polyline/wall
+/// intersection) still sees a crossing; the sliver beyond the wall is masked
+/// by the renderer.
+pub fn clip_separatrix_to_wall(
+    contour: &mut Contour,
+    wall: &[(f64, f64)],
+    overshoot: f64,
+) {
+    if wall.len() < 3 || contour.points.len() < 2 {
+        return;
+    }
+    const JUMP: f64 = 0.15; // chain-break threshold (m), matches renderer
+
+    fn point_in_poly(poly: &[(f64, f64)], r: f64, z: f64) -> bool {
+        let mut c = false;
+        let n = poly.len();
+        let mut j = n - 1;
+        for i in 0..n {
+            let (xi, yi) = poly[i];
+            let (xj, yj) = poly[j];
+            if ((yi > z) != (yj > z)) && r < (xj - xi) * (z - yi) / (yj - yi) + xi {
+                c = !c;
+            }
+            j = i;
+        }
+        c
+    }
+
+    /// Exact intersection of segment a→b with the wall polygon, as the point
+    /// on a→b closest to `a` (the in-vessel end), pushed `overshoot` past it.
+    fn wall_crossing(
+        poly: &[(f64, f64)],
+        a: (f64, f64),
+        b: (f64, f64),
+        overshoot: f64,
+    ) -> (f64, f64) {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let mut best_t = 1.0f64;
+        let n = poly.len();
+        let mut j = n - 1;
+        for i in 0..n {
+            let (x0, y0) = poly[j];
+            let (x1, y1) = poly[i];
+            let (ex, ey) = (x1 - x0, y1 - y0);
+            let denom = dx * ey - dy * ex;
+            if denom.abs() > 1e-12 {
+                let t = ((x0 - a.0) * ey - (y0 - a.1) * ex) / denom;
+                let u = ((x0 - a.0) * dy - (y0 - a.1) * dx) / denom;
+                if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) && t < best_t {
+                    best_t = t;
+                }
+            }
+            j = i;
+        }
+        let seg_len = (dx * dx + dy * dy).sqrt().max(1e-9);
+        let t = (best_t + overshoot / seg_len).min(1.0);
+        (a.0 + dx * t, a.1 + dy * t)
+    }
+
+    let pts = &contour.points;
+    let mut out: Vec<(f64, f64)> = Vec::with_capacity(pts.len());
+
+    // Chain boundaries
+    let mut chain_starts = vec![0usize];
+    for i in 1..pts.len() {
+        let d = ((pts[i].0 - pts[i - 1].0).powi(2) + (pts[i].1 - pts[i - 1].1).powi(2)).sqrt();
+        if d > JUMP {
+            chain_starts.push(i);
+        }
+    }
+    chain_starts.push(pts.len());
+
+    for w in chain_starts.windows(2) {
+        let (c0, c1) = (w[0], w[1]);
+        let chain = &pts[c0..c1];
+        if chain.len() < 2 {
+            continue;
+        }
+        let inside: Vec<bool> = chain
+            .iter()
+            .map(|&(r, z)| point_in_poly(wall, r, z))
+            .collect();
+
+        // Longest contiguous inside-run
+        let (mut best_a, mut best_b) = (0usize, 0usize); // [a, b) half-open
+        let mut run_a = None::<usize>;
+        for i in 0..=chain.len() {
+            let is_in = i < chain.len() && inside[i];
+            match (is_in, run_a) {
+                (true, None) => run_a = Some(i),
+                (false, Some(a)) => {
+                    if i - a > best_b - best_a {
+                        best_a = a;
+                        best_b = i;
+                    }
+                    run_a = None;
+                }
+                _ => {}
+            }
+        }
+        if best_b == best_a {
+            continue; // chain never enters the vessel — drop it entirely
+        }
+
+        // Entry crossing (chain came from outside)
+        if best_a > 0 {
+            out.push(wall_crossing(wall, chain[best_a], chain[best_a - 1], overshoot));
+        }
+        out.extend_from_slice(&chain[best_a..best_b]);
+        // Exit crossing (the strike point — nothing is kept past it)
+        if best_b < chain.len() {
+            out.push(wall_crossing(wall, chain[best_b - 1], chain[best_b], overshoot));
+        }
+    }
+
+    contour.points = out;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -129,10 +129,13 @@ export interface PlasmaUpdateParams {
 // ═══════════════════════════════════════════════════════════════════
 
 const N_SHELLS = SHELL_OFFSETS.length
-const SEP_MAX_VERTS = N_SHELLS * SEP_MESH_SLICES * SEP_CONTOUR_PTS
+// +32 headroom: the multi-chain budget split rounds each chain up to a
+// 24-point minimum, so the summed point count can slightly exceed
+// SEP_CONTOUR_PTS when the boundary arrives as several chains.
+const SEP_MAX_VERTS = N_SHELLS * SEP_MESH_SLICES * (SEP_CONTOUR_PTS + 32)
 // Each shell: (nSlices-1) × nQuadsPol × 6 indices (2 triangles × 3 verts)
 // nQuadsPol can be up to nPts (closed contour)
-const SEP_MAX_INDICES = N_SHELLS * (SEP_MESH_SLICES - 1) * SEP_CONTOUR_PTS * 6
+const SEP_MAX_INDICES = N_SHELLS * (SEP_MESH_SLICES - 1) * (SEP_CONTOUR_PTS + 32) * 6
 
 // Divertor legs: generous upper bound (4 legs × 25 pts × 4 shells × 120 slices)
 const LEG_MAX_VERTS = 200_000
@@ -360,155 +363,182 @@ function rebuildSepGeometry(
   // contour fingerprint, so the L-H transition triggers this rebuild.)
   const shellScale = inHmode ? 0.65 : 1.0
   const fresnelExp = inHmode ? 2.6 : FRESNEL_EXPONENT
-  const chains = splitChains(sepPts)
-  if (chains.length === 0) return empty
+  const allChains = splitChains(sepPts)
+  if (allChains.length === 0) return empty
 
-  // For negative triangularity: clip the outboard bridge from the main chain
-  const clipped = clipOutboardBridge(chains[0], xpR, xpZ, xpUR, xpUZ, axisR)
-
-  // Densify, subsample, smooth — the expensive contour pipeline
-  const densified = densifyContour(clipped, 0.02)
-  const sampled = subsample(densified, SEP_CONTOUR_PTS)
-  const mainLoop = smoothContour(sampled, 3)
-  const nPts = mainLoop.length
-  if (nPts < 4) return empty
-
-  // Check if the main loop is closed (first ≈ last point)
-  let avgSpacing = 0
-  for (let i = 1; i < nPts; i++) {
-    const dr = mainLoop[i][0] - mainLoop[i - 1][0]
-    const dz = mainLoop[i][1] - mainLoop[i - 1][1]
-    avgSpacing += Math.sqrt(dr * dr + dz * dz)
-  }
-  avgSpacing /= Math.max(nPts - 1, 1)
-  const closureThreshold = Math.max(avgSpacing * 5, 0.05)
-  const dClose = Math.sqrt(
-    (mainLoop[0][0] - mainLoop[nPts - 1][0]) ** 2 +
-    (mainLoop[0][1] - mainLoop[nPts - 1][1]) ** 2,
-  )
-  const isClosed = dClose < closureThreshold
-
-  // Compute contour normals (perpendicular to tangent in R-Z plane)
-  const cNormals: [number, number][] = []
-  for (let i = 0; i < nPts; i++) {
-    const prev = isClosed ? (i - 1 + nPts) % nPts : Math.max(0, i - 1)
-    const next = isClosed ? (i + 1) % nPts : Math.min(nPts - 1, i + 1)
-    const dR = mainLoop[next][0] - mainLoop[prev][0]
-    const dZ = mainLoop[next][1] - mainLoop[prev][1]
-    const len = Math.sqrt(dR * dR + dZ * dZ) || 1
-    cNormals.push([-dZ / len, dR / len])
-  }
+  // The double-null ψ_N=1 topology is sweep-phase dependent: at most phases
+  // the boundary arrives as one closed loop (plus short leg chains), but at
+  // the outboard sweep extreme marching squares emits it as TWO long open
+  // arcs — the outboard arc (running strike point to strike point through
+  // both outer legs) and the inboard arc (through both inner legs). Treating
+  // chains[0] as closed then draws a phantom vertical chord bridging its two
+  // strike-point ends across the whole vessel, and the inboard limb (all of
+  // chains[1]) simply vanishes. So: render every long chain, each with its
+  // own closure decided from its RAW endpoints — never assume closure.
+  // Short chains (< 60 pts — bare divertor legs) are left to the dedicated
+  // leg mesh, as before.
+  const chains = allChains.filter((c, i) => i === 0 || c.length >= 60).slice(0, 3)
+  const totalRawPts = chains.reduce((s, c) => s + c.length, 0)
 
   const nSlices = SEP_MESH_SLICES
   const phiMin = cfg.phiMin
   const phiMax = cfg.phiMax
-
-  // Per-slice depth fades
-  let rMin = Infinity, rMax = -Infinity
-  for (const [R] of mainLoop) {
-    if (R < rMin) rMin = R
-    if (R > rMax) rMax = R
-  }
-  const rGeo = (rMin + rMax) / 2
-  const depthFades = computeDepthFades(cfg, rGeo, nSlices, phiMin, phiMax)
-
-  const nQuadsPol = isClosed ? nPts : nPts - 1
   const phiStep = (phiMax - phiMin) / (nSlices - 1)
 
   let vi = 0
   let ii = 0
+  let mainContour: [number, number][] = []
+  let mainNormals: [number, number][] = []
 
-  for (let sh = 0; sh < N_SHELLS; sh++) {
-    const shellBase = sh * nSlices * nPts
-    const offset = SHELL_OFFSETS[sh] * shellScale
-    // Golden-ratio-based stagger so no two shells align
-    const phiStagger = phiStep * ((sh * 0.618) % 1.0)
+  for (let ci = 0; ci < chains.length; ci++) {
+    const rawChain = chains[ci]
+    // For negative triangularity: clip the outboard bridge from the main chain
+    const clipped = ci === 0
+      ? clipOutboardBridge(rawChain, xpR, xpZ, xpUR, xpUZ, axisR)
+      : rawChain
+    if (clipped.length < 4) continue
 
-    // Offset contour along normals to create shell
-    const shellPts: [number, number][] = mainLoop.map((pt, i) => [
-      pt[0] + offset * cNormals[i][0],
-      pt[1] + offset * cNormals[i][1],
-    ])
+    // Closure from the RAW endpoints: a genuinely closed loop ends within a
+    // grid cell of its start; open arcs end at wall strike points, 0.5–3 m
+    // apart. This must be decided before densification — densifying an open
+    // arc as closed is what painted the bridge.
+    const endGap = Math.sqrt(
+      (clipped[0][0] - clipped[clipped.length - 1][0]) ** 2 +
+      (clipped[0][1] - clipped[clipped.length - 1][1]) ** 2,
+    )
+    const isClosed = endGap < 0.12
 
-    for (let si = 0; si < nSlices; si++) {
-      const phi = phiMin + (si / (nSlices - 1)) * (phiMax - phiMin) + phiStagger
-      const cosPhi = Math.cos(phi)
-      const sinPhi = Math.sin(phi)
-      const dFade = depthFades[si]
+    // Densify, subsample (proportional share of the point budget), smooth
+    const densified = isClosed ? densifyContour(clipped, 0.02) : densifyOpen(clipped, 0.02)
+    const budget = Math.max(24, Math.round(SEP_CONTOUR_PTS * rawChain.length / totalRawPts))
+    const sampled = subsample(densified, budget)
+    const loop = smoothContour(sampled, 3)
+    const nPts = loop.length
+    if (nPts < 4) continue
 
-      for (let pi = 0; pi < nPts; pi++) {
-        const R = shellPts[pi][0]
-        const Z = shellPts[pi][1]
-
-        // 3D position (toroidal coordinates)
-        const px = R * cosPhi
-        const py = R * sinPhi
-        const pz = Z
-        positions[vi * 3] = px
-        positions[vi * 3 + 1] = py
-        positions[vi * 3 + 2] = pz
-
-        // Surface normal = cross(poloidalTangent, toroidalTangent)
-        const prev = isClosed ? (pi - 1 + nPts) % nPts : Math.max(0, pi - 1)
-        const next = isClosed ? (pi + 1) % nPts : Math.min(nPts - 1, pi + 1)
-        const dR = shellPts[next][0] - shellPts[prev][0]
-        const dZ = shellPts[next][1] - shellPts[prev][1]
-
-        let nx = -dZ * cosPhi
-        let ny = -dZ * sinPhi
-        let nz = dR
-        const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz)
-        if (nLen > 1e-10) { nx /= nLen; ny /= nLen; nz /= nLen }
-
-        // View direction (camera → vertex)
-        const vx = camPos.x - px
-        const vy = camPos.y - py
-        const vz = camPos.z - pz
-        const vLen = Math.sqrt(vx * vx + vy * vy + vz * vz)
-        const NdotV = Math.abs((nx * vx + ny * vy + nz * vz) / vLen)
-
-        // Fresnel: transparent face-on (NdotV≈1), bright edge-on (NdotV≈0)
-        let fresnel = Math.pow(Math.max(0, 1.0 - NdotV), fresnelExp)
-        fresnel *= smoothstep(0.08, 0.35, fresnel)
-
-        // Cache geometry-dependent brightness (without opacity/ELM which change per-frame)
-        baseBright[vi] = SEP_BASE_INTENSITY * fresnel * dFade
-
-        // ELM localization weight: strongest at the outboard midplane
-        // (ballooning-unstable side), fading toward the inboard/top/bottom.
-        const outb = Math.max(0, Math.min(1, (R - axisR) / Math.max(rMax - axisR, 0.2)))
-        const zg = Math.exp(-((Z - axisZ) * (Z - axisZ)) / 0.72)  // σ ≈ 0.6 m
-        elmWeight[vi] = 0.25 + 0.75 * outb * zg
-
-        // Toroidal + poloidal parametrization for the ELM helical stripes.
-        // Poloidal angle is measured around the magnetic axis; with an integer
-        // stripe count it stays continuous across the inboard branch cut.
-        vertPhi[vi] = phi
-        vertPolAngle[vi] = Math.atan2(Z - axisZ, R - axisR)
-
-        vi++
-      }
+    // Compute contour normals (perpendicular to tangent in R-Z plane)
+    const cNormals: [number, number][] = []
+    for (let i = 0; i < nPts; i++) {
+      const prev = isClosed ? (i - 1 + nPts) % nPts : Math.max(0, i - 1)
+      const next = isClosed ? (i + 1) % nPts : Math.min(nPts - 1, i + 1)
+      const dR = loop[next][0] - loop[prev][0]
+      const dZ = loop[next][1] - loop[prev][1]
+      const len = Math.sqrt(dR * dR + dZ * dZ) || 1
+      cNormals.push([-dZ / len, dR / len])
+    }
+    if (ci === 0) {
+      mainContour = loop
+      mainNormals = cNormals
     }
 
-    // Triangle indices for this shell's quad grid
-    for (let si = 0; si < nSlices - 1; si++) {
-      for (let pi = 0; pi < nQuadsPol; pi++) {
-        const nextPi = (pi + 1) % nPts
-        const a = shellBase + si * nPts + pi
-        const b = shellBase + (si + 1) * nPts + pi
-        const c = shellBase + (si + 1) * nPts + nextPi
-        const d = shellBase + si * nPts + nextPi
-        indices[ii++] = a
-        indices[ii++] = b
-        indices[ii++] = c
-        indices[ii++] = a
-        indices[ii++] = c
-        indices[ii++] = d
+    // Per-slice depth fades from this chain's radial extent
+    let rMin = Infinity, rMax = -Infinity
+    for (const [R] of loop) {
+      if (R < rMin) rMin = R
+      if (R > rMax) rMax = R
+    }
+    const rGeo = (rMin + rMax) / 2
+    const depthFades = computeDepthFades(cfg, rGeo, nSlices, phiMin, phiMax)
+
+    const nQuadsPol = isClosed ? nPts : nPts - 1
+
+    for (let sh = 0; sh < N_SHELLS; sh++) {
+      const shellBase = vi
+      const offset = SHELL_OFFSETS[sh] * shellScale
+      // Golden-ratio-based stagger so no two shells align
+      const phiStagger = phiStep * ((sh * 0.618) % 1.0)
+
+      // Offset contour along normals to create shell
+      const shellPts: [number, number][] = loop.map((pt, i) => [
+        pt[0] + offset * cNormals[i][0],
+        pt[1] + offset * cNormals[i][1],
+      ])
+
+      // Safety: don't exceed the pre-allocated buffers
+      if (vi + nSlices * nPts > SEP_MAX_VERTS) break
+
+      for (let si = 0; si < nSlices; si++) {
+        const phi = phiMin + (si / (nSlices - 1)) * (phiMax - phiMin) + phiStagger
+        const cosPhi = Math.cos(phi)
+        const sinPhi = Math.sin(phi)
+        const dFade = depthFades[si]
+
+        for (let pi = 0; pi < nPts; pi++) {
+          const R = shellPts[pi][0]
+          const Z = shellPts[pi][1]
+
+          // 3D position (toroidal coordinates)
+          const px = R * cosPhi
+          const py = R * sinPhi
+          const pz = Z
+          positions[vi * 3] = px
+          positions[vi * 3 + 1] = py
+          positions[vi * 3 + 2] = pz
+
+          // Surface normal = cross(poloidalTangent, toroidalTangent)
+          const prev = isClosed ? (pi - 1 + nPts) % nPts : Math.max(0, pi - 1)
+          const next = isClosed ? (pi + 1) % nPts : Math.min(nPts - 1, pi + 1)
+          const dR = shellPts[next][0] - shellPts[prev][0]
+          const dZ = shellPts[next][1] - shellPts[prev][1]
+
+          let nx = -dZ * cosPhi
+          let ny = -dZ * sinPhi
+          let nz = dR
+          const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz)
+          if (nLen > 1e-10) { nx /= nLen; ny /= nLen; nz /= nLen }
+
+          // View direction (camera → vertex)
+          const vx = camPos.x - px
+          const vy = camPos.y - py
+          const vz = camPos.z - pz
+          const vLen = Math.sqrt(vx * vx + vy * vy + vz * vz)
+          const NdotV = Math.abs((nx * vx + ny * vy + nz * vz) / vLen)
+
+          // Fresnel: transparent face-on (NdotV≈1), bright edge-on (NdotV≈0)
+          let fresnel = Math.pow(Math.max(0, 1.0 - NdotV), fresnelExp)
+          fresnel *= smoothstep(0.08, 0.35, fresnel)
+
+          // Cache geometry-dependent brightness (without opacity/ELM which change per-frame)
+          baseBright[vi] = SEP_BASE_INTENSITY * fresnel * dFade
+
+          // ELM localization weight: strongest at the outboard midplane
+          // (ballooning-unstable side), fading toward the inboard/top/bottom.
+          const outb = Math.max(0, Math.min(1, (R - axisR) / Math.max(rMax - axisR, 0.2)))
+          const zg = Math.exp(-((Z - axisZ) * (Z - axisZ)) / 0.72)  // σ ≈ 0.6 m
+          elmWeight[vi] = 0.25 + 0.75 * outb * zg
+
+          // Toroidal + poloidal parametrization for the ELM helical stripes.
+          // Poloidal angle is measured around the magnetic axis; with an integer
+          // stripe count it stays continuous across the inboard branch cut.
+          vertPhi[vi] = phi
+          vertPolAngle[vi] = Math.atan2(Z - axisZ, R - axisR)
+
+          vi++
+        }
+      }
+
+      // Triangle indices for this shell's quad grid
+      for (let si = 0; si < nSlices - 1; si++) {
+        for (let pi = 0; pi < nQuadsPol; pi++) {
+          if (ii + 6 > SEP_MAX_INDICES) break
+          const nextPi = (pi + 1) % nPts
+          const a = shellBase + si * nPts + pi
+          const b = shellBase + (si + 1) * nPts + pi
+          const c = shellBase + (si + 1) * nPts + nextPi
+          const d = shellBase + si * nPts + nextPi
+          indices[ii++] = a
+          indices[ii++] = b
+          indices[ii++] = c
+          indices[ii++] = a
+          indices[ii++] = c
+          indices[ii++] = d
+        }
       }
     }
   }
 
-  return { vertCount: vi, idxCount: ii, contour: mainLoop, normals: cNormals }
+  if (vi === 0) return empty
+  return { vertCount: vi, idxCount: ii, contour: mainContour, normals: mainNormals }
 }
 
 // ═══════════════════════════════════════════════════════════════════

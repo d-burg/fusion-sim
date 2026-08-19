@@ -150,11 +150,52 @@ pub fn iter_ne_params() -> ProfileParams {
     }
 }
 
+/// Default SPARC Te profile parameters (keV, ρ grid).
+///
+/// Read off the public TRANSP profiles for the Primary Reference Discharge
+/// (`PrimaryReferenceDischarge/5 - transp_*.txt` in `cfs-energy/SPARCPublic`):
+///   ρ=0.00 → 22.8 keV, ρ=0.50 → 10.3, ρ=0.90 → 4.6, ρ=0.95 → 4.1,
+///   ρ=0.99 → 0.36, ρ=1.00 → 0.27.
+/// The pedestal foot sits near ρ ≈ 0.96 and is narrow (Δρ ≈ 0.04), consistent
+/// with the high pedestal pressure EPED predicts for SPARC.
+///
+/// Note these are the *full* Type-I ELMy pedestal values from the PRD. In the
+/// QCE regime the pedestal is degraded (see Device::qce_confinement_factor);
+/// that reduction is applied through the transport model, not baked in here.
+pub fn sparc_te_params() -> ProfileParams {
+    ProfileParams {
+        edge: 0.27,  // 270 eV at the separatrix
+        ped: 4.1,    // ~4.1 keV pedestal top
+        core: 22.8,  // ~22.8 keV on axis
+        expin: 1.6,
+        expout: 1.5,
+        widthp: 0.04,
+        xphalf: 0.965,
+    }
+}
+
+/// Default SPARC ne profile parameters (10²⁰ m⁻³, ρ grid).
+///
+/// Same source: ne(0) = 4.17×10²⁰, ne(0.95) = 2.79×10²⁰, ne(sep) = 0.84×10²⁰.
+/// The profile is markedly flatter than the temperature (peaking ≈ 1.2).
+pub fn sparc_ne_params() -> ProfileParams {
+    ProfileParams {
+        edge: 0.84, // 8.4e19 m⁻³ — high separatrix density, as QCE requires
+        ped: 2.80,  // 2.8e20 m⁻³
+        core: 4.17, // 4.17e20 m⁻³
+        expin: 1.5,
+        expout: 1.5,
+        widthp: 0.045,
+        xphalf: 0.965,
+    }
+}
+
 impl Profiles {
     /// Create profiles with device-specific defaults.
     pub fn for_device(device_id: &str) -> Self {
         let (te, ne) = match device_id {
             "iter" => (iter_te_params(), iter_ne_params()),
+            "sparc" => (sparc_te_params(), sparc_ne_params()),
             _ => (diiid_te_params(), diiid_ne_params()), // DIII-D is the fallback
         };
         Profiles {

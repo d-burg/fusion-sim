@@ -46,7 +46,31 @@ const CENTAUR_PRESETS: typeof ALL_PRESETS = [
   },
 ]
 
+// SPARC defaults to the quasi-continuous exhaust regime rather than the Type-I
+// ELMy Primary Reference Discharge — see SPARC_SCOPING.md §11.
+const SPARC_PRESETS: typeof ALL_PRESETS = [
+  {
+    id: 'hmode',
+    name: 'QCE',
+    desc: 'Quasi-continuous exhaust — heavy fuelling and full shaping stabilise the Type-I ELMs. Q ≈ 5, ELM-free.',
+    color: 'cyan',
+  },
+  {
+    id: 'lmode',
+    name: 'L-mode',
+    desc: 'Modest ICRF, low density, no seeding — stays below the L-H threshold',
+    color: 'amber',
+  },
+  {
+    id: 'density_limit',
+    name: 'Density Limit',
+    desc: 'Over-fuelled plasma — pushes past the Greenwald limit. Will it disrupt?',
+    color: 'red',
+  },
+]
+
 function getPresets(deviceId: string) {
+  if (deviceId === 'sparc') return SPARC_PRESETS
   return deviceId === 'centaur' ? CENTAUR_PRESETS : ALL_PRESETS
 }
 

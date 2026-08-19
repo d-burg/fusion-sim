@@ -24,8 +24,18 @@ pub struct ShapeParams {
     pub epsilon: f64,
     /// Elongation κ
     pub kappa: f64,
-    /// Triangularity δ (lower, for LSN)
+    /// Triangularity δ at the X-point end of the plasma (lower for LSN,
+    /// upper for USN, and both by symmetry for DN).
     pub delta: f64,
+    /// Triangularity δ at the crown — the smooth end opposite the X-point.
+    ///
+    /// Real single-null shapes are not up-down symmetric: a DIII-D H-mode
+    /// runs δ_lower ≈ 0.77 against δ_upper ≈ 0.35, and the recent SPARC
+    /// scenarios sit at 0.63 / 0.53. The Cerfon-Freidberg up-down asymmetric
+    /// formulation carries both, so the crown row uses this while the
+    /// X-point rows use `delta`. `None` falls back to `delta`, reproducing
+    /// the old symmetric behaviour.
+    pub delta_upper: Option<f64>,
     /// Solov'ev parameter A: ratio of pressure to current contributions.
     /// A = 0 → pure toroidal current; A = 1 → pure pressure driven.
     /// Typical range: -0.2 to 0.3
@@ -36,21 +46,35 @@ pub struct ShapeParams {
     /// For LSN, this controls the X-point vertical position.
     /// Typically α = arcsin(δ) for the Cerfon-Freidberg formulation.
     pub x_point_alpha: Option<f64>,
-    /// Squareness parameter (N₁ in some formulations). Controls X-point curvature.
+    /// Inboard squareness: extra offset on α in the INBOARD equatorial
+    /// curvature row N₂ only. See `Device::equilibrium_squareness`.
     pub squareness: f64,
+    /// Outboard squareness: extra offset on α in the OUTBOARD equatorial
+    /// curvature row N₁ only. Splitting the two lets the outboard midplane
+    /// curvature flatten (fuller shoulder) without tightening the inboard
+    /// side — with `squareness_out == squareness` the old single-knob
+    /// behaviour is reproduced exactly.
+    pub squareness_out: f64,
 }
 
 impl ShapeParams {
     pub fn from_device(device: &Device) -> Self {
-        let delta = device.delta_lower;
+        // Equilibrium-only triangularities: the GEQDSK-fitted shape wants a
+        // different delta than the published values that calibrate transport
+        // (see Device::equilibrium_delta_upper).
+        let delta = device.equilibrium_delta_lower;
         ShapeParams {
-            epsilon: device.epsilon(),
-            kappa: device.kappa,
+            epsilon: device.epsilon() * device.equilibrium_a_scale,
+            kappa: device.kappa * device.equilibrium_kappa_scale,
             delta,
+            delta_upper: Some(device.equilibrium_delta_upper),
             a_param: -0.05, // Sensible default
             config: device.config,
             x_point_alpha: Some(delta.asin()),
-            squareness: 0.0,
+            // Must match what the running simulation passes, or a device's
+            // static preview solves a different shape than its pulse does.
+            squareness: device.equilibrium_squareness,
+            squareness_out: device.equilibrium_squareness_out,
         }
     }
 }
@@ -130,10 +154,10 @@ fn psi_basis(x: f64, y: f64) -> [f64; 12] {
         2.0 * y4 - 9.0 * x2 * y2 + 3.0 * x4 * lnx - 12.0 * x2 * y2 * lnx,
         // ψ₆ = x⁶ - 12x⁴y² + 8x²y⁴
         x6 - 12.0 * x4 * y2 + 8.0 * x2 * y4,
-        // ψ₇ = 8y⁶ - 140x²y⁴ + 75x⁴y² - 15x⁶ ln(x) + 180x²y⁴ ln(x) - 120x⁴y² ln(x)
+        // ψ₇ = 8y⁶ - 140x²y⁴ + 75x⁴y² - 15x⁶ ln(x) + 180x⁴y² ln(x) - 120x²y⁴ ln(x)
         8.0 * y6 - 140.0 * x2 * y4 + 75.0 * x4 * y2 - 15.0 * x6 * lnx
-            + 180.0 * x2 * y4 * lnx
-            - 120.0 * x4 * y2 * lnx,
+            + 180.0 * x4 * y2 * lnx
+            - 120.0 * x2 * y4 * lnx,
         // ψ₈ = y
         y,
         // ψ₉ = y·x²
@@ -172,12 +196,11 @@ fn dpsi_basis_dx(x: f64, y: f64) -> [f64; 12] {
             - 12.0 * x * y2,
         // d/dx(x⁶ - 12x⁴y² + 8x²y⁴) = 6x⁵ - 48x³y² + 16xy⁴
         6.0 * x5 - 48.0 * x3 * y2 + 16.0 * x * y4,
-        // d/dx(ψ₇)
-        -280.0 * x * y4 + 300.0 * x3 * y2 - 90.0 * x5 * lnx - 15.0 * x5
-            + 360.0 * x * y4 * lnx
-            + 180.0 * x * y4
-            - 480.0 * x3 * y2 * lnx
-            - 120.0 * x3 * y2,
+        // d/dx(ψ₇) = -400xy⁴ + 480x³y² - 90x⁵ln(x) - 15x⁵
+        //            + 720x³y² ln(x) - 240xy⁴ ln(x)
+        -400.0 * x * y4 + 480.0 * x3 * y2 - 90.0 * x5 * lnx - 15.0 * x5
+            + 720.0 * x3 * y2 * lnx
+            - 240.0 * x * y4 * lnx,
         // d/dx(y) = 0
         0.0,
         // d/dx(y·x²) = 2xy
@@ -209,9 +232,9 @@ fn dpsi_basis_dy(x: f64, y: f64) -> [f64; 12] {
         -8.0 * x2 * y,        // d/dy(x⁴ - 4x²y²)
         8.0 * y3 - 18.0 * x2 * y - 24.0 * x2 * y * lnx, // d/dy(ψ₅)
         -24.0 * x4 * y + 32.0 * x2 * y3,                 // d/dy(ψ₆)
-        // d/dy(ψ₇)
-        48.0 * y5 - 560.0 * x2 * y3 + 150.0 * x4 * y + 720.0 * x2 * y3 * lnx
-            - 240.0 * x4 * y * lnx,
+        // d/dy(ψ₇) = 48y⁵ - 560x²y³ + 150x⁴y + 360x⁴y ln(x) - 480x²y³ ln(x)
+        48.0 * y5 - 560.0 * x2 * y3 + 150.0 * x4 * y + 360.0 * x4 * y * lnx
+            - 480.0 * x2 * y3 * lnx,
         1.0,        // d/dy(y)
         x2,         // d/dy(y·x²)
         3.0 * y2 - 3.0 * x2 * lnx, // d/dy(ψ₁₀)
@@ -237,8 +260,9 @@ fn d2psi_basis_dy2(x: f64, y: f64) -> [f64; 12] {
         -8.0 * x2,
         24.0 * y2 - 18.0 * x2 - 24.0 * x2 * lnx,
         -24.0 * x4 + 96.0 * x2 * y2,
-        240.0 * y4 - 1680.0 * x2 * y2 + 150.0 * x4 + 2160.0 * x2 * y2 * lnx
-            - 240.0 * x4 * lnx,
+        // ψ₇: 240y⁴ - 1680x²y² + 150x⁴ + 360x⁴ln(x) - 1440x²y² ln(x)
+        240.0 * y4 - 1680.0 * x2 * y2 + 150.0 * x4 + 360.0 * x4 * lnx
+            - 1440.0 * x2 * y2 * lnx,
         0.0,
         0.0,
         6.0 * y,
@@ -262,22 +286,19 @@ fn d2psi_basis_dx2(x: f64, y: f64) -> [f64; 12] {
         -2.0 * lnx - 3.0,
         12.0 * x2 - 8.0 * y2,
         // ψ₅
-        -18.0 * y2 + 36.0 * x2 * lnx + 15.0 * x2 - 24.0 * y2 * lnx - 36.0 * y2,
+        -54.0 * y2 + 36.0 * x2 * lnx + 21.0 * x2 - 24.0 * y2 * lnx,
         // ψ₆
         30.0 * x4 - 144.0 * x2 * y2 + 16.0 * y4,
         // ψ₇
-        -280.0 * y4 + 900.0 * x2 * y2 - 450.0 * x4 * lnx - 105.0 * x4
-            + 360.0 * y4 * lnx
-            + 540.0 * y4
-            - 1440.0 * x2 * y2 * lnx
-            - 600.0 * x2 * y2,
+        -640.0 * y4 + 2160.0 * x2 * y2 - 450.0 * x4 * lnx - 165.0 * x4
+            + 2160.0 * x2 * y2 * lnx
+            - 240.0 * y4 * lnx,
         0.0,
         2.0 * y,
         -6.0 * y * lnx - 9.0 * y,
         36.0 * y * x2 - 8.0 * y3,
         // ψ₁₂
-        -540.0 * y * x2 - 160.0 * y3 * lnx - 240.0 * y3 + 720.0 * y * x2 * lnx
-            + 240.0 * y * x2,
+        -120.0 * y * x2 - 160.0 * y3 * lnx - 240.0 * y3 + 720.0 * y * x2 * lnx,
     ]
 }
 
@@ -303,28 +324,48 @@ fn assemble_lsn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
     let delta = shape.delta;
     let a = shape.a_param;
     let sq = shape.squareness;
+    let sq_out = shape.squareness_out;
 
     // Key boundary points in normalized coordinates
     let x_out = 1.0 + eps; // outboard midplane
     let x_in = 1.0 - eps; // inboard midplane
     let y_mid = 0.0;
 
-    // X-point location for LSN
+    // X-point location for LSN — governed by the lower triangularity.
     let alpha = shape.x_point_alpha.unwrap_or(delta.asin());
     let x_xpt = 1.0 - 1.01 * eps * delta; // slightly inboard due to Shafranov shift
     let y_xpt = -1.01 * eps * kappa; // below midplane
 
-    // Upper crown (top of plasma)
-    let x_top = 1.0 - eps * delta;
+    // Upper crown (top of plasma) — governed by the UPPER triangularity,
+    // which on a real single null differs substantially from the lower one.
+    let delta_top = shape.delta_upper.unwrap_or(delta);
+    let alpha_top = delta_top.asin();
+    let x_top = 1.0 - eps * delta_top;
     let y_top = eps * kappa;
 
-    // N1, N2, N3 curvature constraints from Cerfon-Freidberg
-    // N1 = -(1+α_s)² / (ε κ²) related to outboard curvature
-    // N2 = (1-α_s)² / (ε κ²) related to inboard curvature
-    // N3 = -κ / (ε cos²(α_s)) related to upper curvature
-    let n1 = -(1.0 + sq).powi(2) / (eps * kappa * kappa);
-    let n2 = (1.0 - sq).powi(2) / (eps * kappa * kappa);
-    let n3 = -kappa / (eps * alpha.cos().powi(2));
+    // N1, N2, N3 curvature constraints from Cerfon-Freidberg.
+    //
+    // All three are curvatures of the parametrized boundary
+    //   R = 1 + ε cos(τ + α sin τ),  Z = εκ sin τ
+    // and so share the same α = arcsin(δ):
+    //   N1 = -(1+α)² / (ε κ²)   outboard equatorial point
+    //   N2 =  (1-α)² / (ε κ²)   inboard equatorial point
+    //   N3 = -κ / (ε cos²α)     high point
+    //
+    // Squareness is an additional device knob layered on top of α in the
+    // equatorial rows only (see Device::equilibrium_squareness), split per
+    // side: `squareness_out` shifts the OUTBOARD row N1, `squareness` the
+    // INBOARD row N2. The split exists because one shared offset couples two
+    // opposite appetites — flattening the outboard midplane curvature (a
+    // fuller shoulder) previously tightened the inboard side in lockstep.
+    //
+    // The equatorial rows see the mean of the two triangularities, since each
+    // equatorial point is shared between the upper and lower halves; the
+    // crown row N3 uses the upper α alone.
+    let alpha_eq = 0.5 * (alpha + alpha_top);
+    let n1 = -(1.0 + alpha_eq + sq_out).powi(2) / (eps * kappa * kappa);
+    let n2 = (1.0 - (alpha_eq + sq)).powi(2) / (eps * kappa * kappa);
+    let n3 = -kappa / (eps * alpha_top.cos().powi(2));
 
     let mut mat = [0.0f64; 144]; // 12×12 row-major
     let mut rhs = [0.0f64; 12];
@@ -426,24 +467,36 @@ fn assemble_usn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
     let delta = shape.delta;
     let a = shape.a_param;
     let sq = shape.squareness;
+    let sq_out = shape.squareness_out;
 
     let x_out = 1.0 + eps;
     let x_in = 1.0 - eps;
     let y_mid = 0.0;
 
-    // X-point above midplane for USN
-    let alpha = shape.x_point_alpha.unwrap_or(delta.asin());
-    let x_xpt = 1.0 - 1.01 * eps * delta;
+    // X-point above midplane for USN. The roles of the two triangularities
+    // swap relative to LSN: the X-point is now the upper end of the plasma
+    // and the crown the lower, so `delta_upper` drives the X-point and
+    // `delta` (the X-point-end value) drives the crown.
+    let delta_xpt = shape.delta_upper.unwrap_or(delta);
+    let alpha = shape
+        .x_point_alpha
+        .unwrap_or_else(|| delta_xpt.asin());
+    let x_xpt = 1.0 - 1.01 * eps * delta_xpt;
     let y_xpt = 1.01 * eps * kappa; // POSITIVE — above midplane
 
     // Lower crown (bottom of plasma) — mirror of LSN upper crown
+    let alpha_bot = delta.asin();
     let x_bot = 1.0 - eps * delta;
     let y_bot = -eps * kappa; // below midplane
 
-    let n1 = -(1.0 + sq).powi(2) / (eps * kappa * kappa);
-    let n2 = (1.0 - sq).powi(2) / (eps * kappa * kappa);
-    // N3 curvature at the lower crown (sign flipped vs LSN)
-    let n3 = -kappa / (eps * alpha.cos().powi(2));
+    // Same Cerfon-Freidberg curvatures as the LSN case (see there), with the
+    // same per-side squareness split.
+    let alpha_eq = 0.5 * (alpha + alpha_bot);
+    let n1 = -(1.0 + alpha_eq + sq_out).powi(2) / (eps * kappa * kappa);
+    let n2 = (1.0 - (alpha_eq + sq)).powi(2) / (eps * kappa * kappa);
+    // N3 curvature at the lower crown (sign flipped vs LSN); the crown's own
+    // triangularity governs it, as in the LSN case.
+    let n3 = -kappa / (eps * alpha_bot.cos().powi(2));
 
     let mut mat = [0.0f64; 144];
     let mut rhs = [0.0f64; 12];
@@ -546,6 +599,7 @@ fn assemble_dn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
     let delta = shape.delta;
     let a = shape.a_param;
     let sq = shape.squareness;
+    let sq_out = shape.squareness_out;
 
     let x_out = 1.0 + eps;
     let x_in = 1.0 - eps;
@@ -555,8 +609,11 @@ fn assemble_dn_system(shape: &ShapeParams) -> ([f64; 144], [f64; 12]) {
     let x_xpt = 1.0 - 1.01 * eps * delta;
     let y_xpt = -1.01 * eps * kappa;
 
-    let n1 = -(1.0 + sq).powi(2) / (eps * kappa * kappa);
-    let n2 = (1.0 - sq).powi(2) / (eps * kappa * kappa);
+    // Same Cerfon-Freidberg curvatures as the LSN case (see there). Double
+    // null has no crown row, so only the equatorial N1/N2 appear.
+    let alpha = shape.x_point_alpha.unwrap_or(delta.asin());
+    let n1 = -(1.0 + alpha + sq_out).powi(2) / (eps * kappa * kappa);
+    let n2 = (1.0 - (alpha + sq)).powi(2) / (eps * kappa * kappa);
 
     let mut mat = [0.0f64; 144];
     let mut rhs = [0.0f64; 12];
@@ -710,9 +767,11 @@ impl CerfonEquilibrium {
     }
 
     /// Solve equilibrium for a given device with default shape.
+    /// The equilibrium centre carries the device's fit shift (see
+    /// Device::equilibrium_r0_shift) — physics quantities do not.
     pub fn from_device(device: &Device) -> Option<Self> {
         let shape = ShapeParams::from_device(device);
-        Self::solve(&shape, device.r0, device.z0)
+        Self::solve(&shape, device.r0 + device.equilibrium_r0_shift, device.z0)
     }
 
     /// Evaluate ψ at normalized coordinates (x, y).
@@ -945,6 +1004,219 @@ mod tests {
         assert!((b[3] - 1.0).abs() < 1e-10); // ψ₄ = x⁴ = 1
     }
 
+    // ─── Basis verification (github issue #2) ──────────────────────────────
+    //
+    // Two independent numerical checks on the Cerfon-Freidberg basis:
+    //
+    //   1. every ψᵢ must satisfy the homogeneous GS operator Δ*ψ = 0;
+    //   2. every analytic derivative table must agree with a finite
+    //      difference of `psi_basis`.
+    //
+    // Both are needed. Check 1 cannot see an error in a derivative table,
+    // because those tables are not used to build ψ — they only enter the
+    // boundary-condition rows. Check 2 cannot see a ψᵢ that is internally
+    // consistent but is not a GS solution.
+
+    /// Points spanning the region the solver actually evaluates:
+    /// x ∈ [1−ε, 1+ε] for ε up to ~0.45, y out to ~±εκ.
+    const BASIS_SAMPLE_POINTS: [(f64, f64); 6] = [
+        (0.75, -0.5),
+        (1.0, 0.2),
+        (1.3, 0.6),
+        (0.9, -0.55),
+        (0.6, 0.35),
+        (1.45, -0.15),
+    ];
+
+    fn basis_at(i: usize, x: f64, y: f64) -> f64 {
+        psi_basis(x, y)[i]
+    }
+
+    /// Δ*ψ ≡ ψ_xx − ψ_x/x + ψ_yy, evaluated on `psi_basis` by central
+    /// differences so the analytic derivative tables play no part.
+    fn delta_star_fd(i: usize, x: f64, y: f64, h: f64) -> f64 {
+        let f = |a: f64, b: f64| basis_at(i, a, b);
+        let f0 = f(x, y);
+        let psi_xx = (f(x + h, y) - 2.0 * f0 + f(x - h, y)) / (h * h);
+        let psi_yy = (f(x, y + h) - 2.0 * f0 + f(x, y - h)) / (h * h);
+        let psi_x = (f(x + h, y) - f(x - h, y)) / (2.0 * h);
+        psi_xx - psi_x / x + psi_yy
+    }
+
+    #[test]
+    fn test_basis_functions_are_grad_shafranov_solutions() {
+        // With h = 1e-4 the finite-difference floor over these points is
+        // ~1e-5 (roundoff ε|ψ|/h² plus truncation h²ψ''''/12, with |ψ| up to
+        // ~1e2 here). A 1e-3 bound leaves two decades of headroom above the
+        // floor while sitting six decades below the residual of a basis
+        // function that is not actually a solution.
+        const H: f64 = 1e-4;
+        const TOL: f64 = 1e-3;
+
+        let mut worst = [0.0f64; 12];
+        for (x, y) in BASIS_SAMPLE_POINTS {
+            for i in 0..12 {
+                let residual = delta_star_fd(i, x, y, H).abs();
+                if residual > worst[i] {
+                    worst[i] = residual;
+                }
+            }
+        }
+
+        for (i, &residual) in worst.iter().enumerate() {
+            assert!(
+                residual < TOL,
+                "ψ{} does not satisfy Δ*ψ = 0: max |Δ*ψ| = {:.4e} over the \
+                 sample points (tolerance {:.0e}). Every homogeneous basis \
+                 function must be annihilated by the GS operator.",
+                i + 1,
+                residual,
+                TOL
+            );
+        }
+    }
+
+    #[test]
+    fn test_particular_solution_drives_the_right_source() {
+        // Cerfon-Freidberg: Δ*ψ_p = (1 − A)x² + A, which is what makes the
+        // full ψ a solution of the inhomogeneous GS equation.
+        const H: f64 = 1e-4;
+        const TOL: f64 = 1e-3;
+
+        for a in [-0.05, 0.0, 0.3] {
+            for (x, _) in BASIS_SAMPLE_POINTS {
+                let f = |v: f64| psi_particular(v, a);
+                let psi_xx = (f(x + H) - 2.0 * f(x) + f(x - H)) / (H * H);
+                let psi_x = (f(x + H) - f(x - H)) / (2.0 * H);
+                let delta_star = psi_xx - psi_x / x; // no y dependence
+                let expected = (1.0 - a) * x * x + a;
+                assert!(
+                    (delta_star - expected).abs() < TOL,
+                    "Δ*ψ_p at x = {}, A = {}: got {:.6}, expected {:.6}",
+                    x,
+                    a,
+                    delta_star,
+                    expected
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_analytic_first_derivatives_match_finite_differences() {
+        // First-order central differences: truncation h²ψ'''/6, roundoff
+        // ε|ψ|/h. At h = 1e-5 both sit below ~1e-8 for these functions.
+        const H: f64 = 1e-5;
+        const TOL: f64 = 1e-4;
+
+        for (x, y) in BASIS_SAMPLE_POINTS {
+            let dx = dpsi_basis_dx(x, y);
+            let dy = dpsi_basis_dy(x, y);
+            for i in 0..12 {
+                let fd_x = (basis_at(i, x + H, y) - basis_at(i, x - H, y)) / (2.0 * H);
+                let fd_y = (basis_at(i, x, y + H) - basis_at(i, x, y - H)) / (2.0 * H);
+                assert!(
+                    (dx[i] - fd_x).abs() < TOL * (1.0 + fd_x.abs()),
+                    "dψ{}/dx at ({}, {}): analytic {:.6}, finite difference {:.6}",
+                    i + 1,
+                    x,
+                    y,
+                    dx[i],
+                    fd_x
+                );
+                assert!(
+                    (dy[i] - fd_y).abs() < TOL * (1.0 + fd_y.abs()),
+                    "dψ{}/dy at ({}, {}): analytic {:.6}, finite difference {:.6}",
+                    i + 1,
+                    x,
+                    y,
+                    dy[i],
+                    fd_y
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_analytic_second_derivatives_match_finite_differences() {
+        // Second-order central differences bottom out near 1e-5 at h = 1e-4
+        // for |ψ| ~ 1e2; the relative bound below is ~1e-3 of the derivative
+        // magnitude, which is far tighter than any dropped product-rule term.
+        const H: f64 = 1e-4;
+        const TOL: f64 = 1e-3;
+
+        for (x, y) in BASIS_SAMPLE_POINTS {
+            let dxx = d2psi_basis_dx2(x, y);
+            let dyy = d2psi_basis_dy2(x, y);
+            for i in 0..12 {
+                let f0 = basis_at(i, x, y);
+                let fd_xx =
+                    (basis_at(i, x + H, y) - 2.0 * f0 + basis_at(i, x - H, y)) / (H * H);
+                let fd_yy =
+                    (basis_at(i, x, y + H) - 2.0 * f0 + basis_at(i, x, y - H)) / (H * H);
+                assert!(
+                    (dxx[i] - fd_xx).abs() < TOL * (1.0 + fd_xx.abs()),
+                    "d²ψ{}/dx² at ({}, {}): analytic {:.6}, finite difference {:.6}",
+                    i + 1,
+                    x,
+                    y,
+                    dxx[i],
+                    fd_xx
+                );
+                assert!(
+                    (dyy[i] - fd_yy).abs() < TOL * (1.0 + fd_yy.abs()),
+                    "d²ψ{}/dy² at ({}, {}): analytic {:.6}, finite difference {:.6}",
+                    i + 1,
+                    x,
+                    y,
+                    dyy[i],
+                    fd_yy
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_solved_equilibria_satisfy_grad_shafranov() {
+        // End-to-end: the assembled ψ for every shipped device must satisfy
+        // Δ*ψ = (1 − A)x² + A throughout the plasma volume, not just at the
+        // boundary points the 12×12 system pins down.
+        const H: f64 = 1e-4;
+        const TOL: f64 = 1e-3;
+
+        for device in devices::all_devices() {
+            let eq = CerfonEquilibrium::from_device(&device)
+                .unwrap_or_else(|| panic!("{} equilibrium should solve", device.id));
+            let eps = eq.shape.epsilon;
+            let kappa = eq.shape.kappa;
+
+            let mut worst: f64 = 0.0;
+            for xi in 0..5 {
+                for yi in 0..5 {
+                    // Interior sample points, inset from the separatrix.
+                    let x = 1.0 + 0.6 * eps * (-1.0 + 0.5 * xi as f64);
+                    let y = 0.6 * eps * kappa * (-1.0 + 0.5 * yi as f64);
+                    let f = |a: f64, b: f64| eq.psi_normalized(a, b);
+                    let f0 = f(x, y);
+                    let psi_xx = (f(x + H, y) - 2.0 * f0 + f(x - H, y)) / (H * H);
+                    let psi_yy = (f(x, y + H) - 2.0 * f0 + f(x, y - H)) / (H * H);
+                    let psi_x = (f(x + H, y) - f(x - H, y)) / (2.0 * H);
+                    let delta_star = psi_xx - psi_x / x + psi_yy;
+                    let expected = (1.0 - eq.a_param) * x * x + eq.a_param;
+                    worst = worst.max((delta_star - expected).abs());
+                }
+            }
+            assert!(
+                worst < TOL,
+                "{}: solved ψ violates the GS equation by up to {:.4e} \
+                 (tolerance {:.0e})",
+                device.id,
+                worst,
+                TOL
+            );
+        }
+    }
+
     #[test]
     fn test_diiid_equilibrium_solves() {
         let device = devices::diiid();
@@ -952,8 +1224,11 @@ mod tests {
         assert!(eq.is_some(), "DIII-D equilibrium should solve");
 
         let eq = eq.unwrap();
-        // ψ should be 0 at outboard midplane
-        let x_out = 1.0 + device.epsilon();
+        // ψ should be 0 at the equilibrium's own midplane boundary points —
+        // the device's equilibrium_a_scale shrinks the solved plasma, so the
+        // boundary sits at 1 ± ε·a_scale, not 1 ± ε.
+        let eps_eq = device.epsilon() * device.equilibrium_a_scale;
+        let x_out = 1.0 + eps_eq;
         let psi_out = eq.psi_normalized(x_out, 0.0);
         assert!(
             psi_out.abs() < 1e-6,
@@ -962,7 +1237,7 @@ mod tests {
         );
 
         // ψ should be 0 at inboard midplane
-        let x_in = 1.0 - device.epsilon();
+        let x_in = 1.0 - eps_eq;
         let psi_in = eq.psi_normalized(x_in, 0.0);
         assert!(
             psi_in.abs() < 1e-6,

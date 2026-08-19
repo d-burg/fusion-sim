@@ -7,6 +7,36 @@
       "runtimeArgs": ["vite", "--port", "5173", "--host"],
       "port": 5173,
       "cwd": "web"
+    },
+    {
+      "name": "redesign",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "/Users/danielburgess/Desktop/plasma/fusion-sim-redesign/web",
+        "--",
+        "--port",
+        "5174",
+        "--host"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "console",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "/Users/danielburgess/Desktop/plasma/fusion-sim-console/web",
+        "--",
+        "--port",
+        "5175",
+        "--host"
+      ],
+      "port": 5175
     }
   ]
 }

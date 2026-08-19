@@ -18,6 +18,78 @@ interface Ref {
 
 const REFERENCES: Ref[] = [
   {
+    id: 'creely2020',
+    authors: 'A. J. Creely et al.',
+    title: 'Overview of the SPARC tokamak',
+    journal: 'J. Plasma Phys. 86, 865860502',
+    year: 2020,
+    doi: '10.1017/S0022377820001257',
+  },
+  {
+    id: 'hughes2020',
+    authors: 'J. W. Hughes et al.',
+    title: 'Projections of H-mode access and edge pedestal in the SPARC tokamak',
+    journal: 'J. Plasma Phys. 86, 865860504',
+    year: 2020,
+    doi: '10.1017/S0022377820001300',
+  },
+  {
+    id: 'kuang2020',
+    authors: 'A. Q. Kuang et al.',
+    title: 'Divertor heat flux challenge and mitigation in SPARC',
+    journal: 'J. Plasma Phys. 86, 865860505',
+    year: 2020,
+    doi: '10.1017/S0022377820001117',
+  },
+  {
+    id: 'rodriguezfernandez2022',
+    authors: 'P. Rodriguez-Fernandez et al.',
+    title: 'Overview of the SPARC physics basis towards the exploration of burning-plasma regimes in high-field, compact tokamaks',
+    journal: 'Nucl. Fusion 62, 042003',
+    year: 2022,
+    doi: '10.1088/1741-4326/ac1654',
+  },
+  {
+    id: 'faitsch2023',
+    authors: 'M. Faitsch, T. Eich, L. Gil, et al.',
+    title: 'Analysis and expansion of the quasi-continuous exhaust (QCE) regime in ASDEX Upgrade',
+    journal: 'Nucl. Fusion 63, 076013',
+    year: 2023,
+    doi: '10.1088/1741-4326/acd464',
+  },
+  {
+    id: 'harrer2022',
+    authors: 'G. F. Harrer et al.',
+    title: 'Development of a physics understanding of the quasi-continuous exhaust regime: pedestal profile and ballooning stability analysis',
+    journal: 'Nucl. Fusion 62, 076044',
+    year: 2022,
+    doi: '10.1088/1741-4326/ac6d6a',
+  },
+  {
+    id: 'kalis2024',
+    authors: 'J. Kalis et al.',
+    title: 'Experimental characterization of the quasi-coherent mode in EDA H-mode and QCE scenarios at ASDEX Upgrade',
+    journal: 'Nucl. Fusion 64, 016038',
+    year: 2024,
+    doi: '10.1088/1741-4326/ad0d32',
+  },
+  {
+    id: 'greenwald1999',
+    authors: 'M. Greenwald et al.',
+    title: 'Characterization of enhanced Dα high-confinement modes in Alcator C-Mod',
+    journal: 'Phys. Plasmas 6, 1943',
+    year: 1999,
+    doi: '10.1063/1.873451',
+  },
+  {
+    id: 'lomanowski2026',
+    authors: 'B. Lomanowski, T. Eich, J. D. Lore, J.-S. Park, T. Body, and P. Stangeby',
+    title: 'The power exhaust constrained SPARC separatrix operational space',
+    journal: 'arXiv:2607.18558',
+    year: 2026,
+    doi: '10.48550/arXiv.2607.18558',
+  },
+  {
     id: 'cerfon2010',
     authors: 'A. J. Cerfon and J. P. Freidberg',
     title: '"One size fits all" analytic solutions to the Grad-Shafranov equation',
@@ -346,6 +418,45 @@ export default function Bibliography() {
             indicate proximity to the external kink stability boundary.
           </p>
         </Section>
+
+        {/* ─── SPARC: QCE regime and the synthetic magnetics diagnostic ─── */}
+        <section className="mb-10">
+          <h2 className="panel-title mb-3">SPARC · QCE regime and magnetics</h2>
+          <p className="text-gray-400 text-sm leading-relaxed mb-3">
+            SPARC's default scenario here is the <strong>quasi-continuous exhaust (QCE)</strong>{' '}
+            regime rather than the published Primary Reference Discharge. Unmitigated SPARC ELMs
+            are projected at 1.4–2.2 MJ every 0.07–0.4 s (Hughes 2020), which an inertially cooled
+            divertor cannot absorb. QCE is a type-I ELM-free H-mode reached at high shaping and high
+            separatrix density, where ballooning modes at the pedestal foot replace discrete crashes
+            with continuous filamentary transport (Harrer 2022, Faitsch 2023).
+          </p>
+          <p className="text-gray-400 text-sm leading-relaxed mb-3">
+            Access is driven by <em>fuelling and shaping</em>, not by impurity seeding. For SPARC
+            specifically, neon seeding depresses the separatrix density through SOL power starvation
+            and therefore works against QCE access, even though the divertor needs the radiation
+            (Lomanowski 2026) — so the simulator makes those two knobs compete. The pulse reproduces
+            the entry sequence observed on ASDEX Upgrade and JET: L–H transition, a transient type-I
+            ELMy phase, then QCE held for the rest of the flat-top.
+          </p>
+          <p className="text-gray-400 text-sm leading-relaxed mb-3">
+            The QCE pedestal is degraded relative to the type-I pedestal, which costs fusion gain.
+            Hughes 2020 §4.2 brackets the trade: even a 2× pedestal reduction leaves Q &gt; 2,
+            against Q = 11 at full pedestal. The value used here is a ≈0.78 pedestal reduction,
+            applied as a ≈0.88 global confinement penalty because the core carries most of the
+            stored energy. That specific factor is our interpolation, not a published SPARC number.
+          </p>
+          <div className="border-l-2 border-amber-700/60 pl-4 py-1 text-gray-500 text-sm max-w-3xl mb-3">
+            <span className="font-mono uppercase tracking-wider text-amber-500/80 text-xs">
+              Synthetic diagnostic
+            </span>
+            {' — '}The magnetics panel (Mirnov trace and spectrogram) is <em>reconstructed</em>, not
+            predicted: this is a 0D transport model and computes no edge MHD. The quasi-coherent
+            mode is synthesised from published parameters — Alcator C-Mod EDA H-mode at ≈50–150 kHz
+            with n ≈ 17 in the pedestal density-gradient region (Greenwald 1999), and ASDEX Upgrade
+            at 15–35 kHz localised at ρ_pol = 0.993 (Kalis 2024). The EDA/QCE discriminator shown —
+            a mode bandwidth below 10 kHz reading as EDA, broader as QCE — is also from Kalis 2024.
+          </div>
+        </section>
 
         {/* ─── 5. Greenwald Density Limit ─── */}
         <Section number={5} title="Greenwald Density Limit">
@@ -730,7 +841,7 @@ export default function Bibliography() {
             {'V = 2π² R₀ a² κ  [plasma volume, m³]'}
           </Eq>
           <p>
-            Wall/limiter outlines for DIII-D, JET, ITER, and CENTAUR are parameterized from published machine
+            SPARC's first-wall contour is reduced from the 555-point polygon in the SPARC Primary Reference Discharge GEQDSK files published in the MIT-licensed cfs-energy/SPARCPublic repository; CFS describe it as a simplified first wall rather than engineering geometry. Wall/limiter outlines for DIII-D, JET, ITER, and CENTAUR are parameterized from published machine
             geometries and used for both the equilibrium cross-section display and the 3D port view
             rendering.
           </p>

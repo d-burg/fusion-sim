@@ -335,6 +335,23 @@ export class DivertorThermalModel {
       this.armor_L = 0.022   // 22 mm effective thermal depth (W lamellae + CFC substrate)
       this.T_coolant = 200   // JET vessel baked at 200°C
       this.h_cool = 0        // inertial cooling only
+    } else if (deviceId === 'sparc') {
+      // SPARC — tungsten PFCs with NO active divertor cooling. The 10 s pulse
+      // is short enough that the divertor is inertially cooled, and the
+      // steady-state load is handled by sweeping the strike point at ~1 Hz
+      // over the flat-top instead (Kuang et al., JPP 86, 865860505, 2020).
+      //
+      // Carbon is also under evaluation in the published design; tungsten is
+      // assumed here and stated as an assumption in the Bibliography.
+      //
+      // The effective thermal depth is larger than the ITER monoblock armour
+      // because there is no cooled substrate holding the back face at inlet
+      // temperature — the heat soaks into the full tile.
+      this.rho = 19350
+      this.cp = 150
+      this.armor_L = 0.020  // 20 mm effective inertial thermal depth
+      this.T_coolant = 80   // between-pulse baseline only
+      this.h_cool = 0       // inertial: no active cooling during the pulse
     } else {
       // CENTAUR (conceptual) — actively cooled W monoblocks, similar to ITER
       // but with slightly better cooling from advanced design.
@@ -354,6 +371,7 @@ export class DivertorThermalModel {
       case 'diiid': return 25   // room temperature
       case 'jet':   return 200  // JET baked at 200°C
       case 'iter':  return 100  // ITER coolant pre-heats to ~100°C
+      case 'sparc': return 80   // inertially cooled; starts near vessel temp
       default:      return 80
     }
   }
@@ -433,6 +451,14 @@ export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): Div
   // Eich scaling: λ_q ≈ 1.35 / B_pol^0.9 (mm), with minimum 0.5 mm
   let lambda_q_m = Math.max(1.35e-3 / Math.pow(B_pol, 0.9), 0.5e-3) // metres
 
+  // SPARC design assumption: the narrowest of the surveyed heat-flux-width
+  // scalings, λ_q = 0.18 mm at the outboard midplane, is taken as the design
+  // value (Kuang et al. 2020, table 2). Eich alone would give a wider result
+  // here, so floor it at the published design number.
+  if (device.id === 'sparc') {
+    lambda_q_m = Math.min(lambda_q_m, 0.18e-3)
+  }
+
   // Negative triangularity correction: NT plasmas have 1.5–2× wider SOL
   const delta_avg = (device.delta_upper + device.delta_lower) / 2
   if (delta_avg < -0.1) {
@@ -444,6 +470,10 @@ export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): Div
   const f_x = (() => {
     switch (device.id) {
       case 'centaur': return 18  // snowflake-like divertor
+      // SPARC: value unused for the tile-average — the sweep model below
+      // replaces the wetted-stripe area with the swept target area. Kept for
+      // the ELM stripe (ELMs deposit on the instantaneous strike stripe).
+      case 'sparc':   return 14
       case 'iter':    return 8   // standard vertical target
       case 'jet':     return 12  // Mk2-HD high-delta divertor
       case 'diiid':   return 7   // open lower divertor
@@ -458,12 +488,38 @@ export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): Div
       case 'iter':    return 0.70
       case 'diiid':   return 0.35
       case 'centaur': return 0.25
+      case 'sparc':   return 0.50  // baseline design assumption (Kuang 2020 §2.3)
       default:        return 0.30
     }
   })()
 
   // Wetted area: toroidal ring × SOL width × flux expansion
-  const A_wet = 2 * Math.PI * R0 * lambda_q_m * f_x  // m²
+  let A_wet = 2 * Math.PI * R0 * lambda_q_m * f_x  // m²
+
+  // ── SPARC: strike-point sweep ──
+  // The inertially cooled targets survive because the strike point is swept
+  // at ~1 Hz across the target for the whole flat-top (Kuang 2020): the
+  // *tile-averaged* load is set by the swept area (outer target ≈ 4.5 m²),
+  // not by the instantaneous λ_q stripe. Without this, the λ_q = 0.18 mm
+  // stripe gives ~200 MW/m², melts the model tile in a second, and drives
+  // the divertor glow to blackbody white — which is exactly what the stripe
+  // WOULD do to the real machine if the sweep failed.
+  //
+  // The stripe passing back and forth over the reference tile appears as the
+  // sweep-phase factor below: a Gaussian pass twice per period (the Rust
+  // equilibrium sweeps δ at the same 1 Hz, so the glow position and the tile
+  // heat pulse move together), normalized to a unit time-average so the
+  // energy delivered over a sweep period is conserved.
+  const SPARC_SWEEP_HZ = 1.0
+  const SPARC_SWEPT_AREA = 4.5 // m² — outer target swept area (Kuang 2020 §2.4)
+  let sweepMod = 1.0
+  if (device.id === 'sparc') {
+    A_wet = SPARC_SWEPT_AREA
+    const t = snapshot.time ?? 0
+    const sPhase = Math.sin(2 * Math.PI * SPARC_SWEEP_HZ * t)
+    const prox = Math.exp(-(sPhase * sPhase) / (0.35 * 0.35))
+    sweepMod = prox / 0.2047 // ⟨prox⟩ over a period = 0.2047
+  }
 
   // Power crossing the separatrix
   const p_sol = Math.max(snapshot.p_loss - snapshot.p_rad, 0)  // MW
@@ -481,8 +537,9 @@ export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): Div
   const f_GW = snapshot.f_greenwald
   const f_detach = Math.min(1 - 1 / (1 + Math.pow(f_GW / 0.7, 6)), 0.97)
 
-  // Inter-ELM baseline heat flux
-  const q_interELM = q_attached * (1 - f_detach) / 1e6  // MW/m²
+  // Inter-ELM baseline heat flux (sweep-modulated on SPARC; sweepMod = 1
+  // everywhere else)
+  const q_interELM = q_attached * (1 - f_detach) * sweepMod / 1e6  // MW/m²
 
   // ── ELM transient heat flux ──────────────────────────────
   // Published ELM energy and heat flux values (Loarte 2003, Pitts 2009):
@@ -498,6 +555,7 @@ export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): Div
       case 'diiid':   return 0.001  // 1 ms
       case 'jet':     return 0.0004 // 0.4 ms (faster crash)
       case 'iter':    return 0.0005 // 0.5 ms (projected)
+      case 'sparc':   return 0.00012 // 0.12 ms (Hughes et al. 2020, §4.1)
       default:        return 0.001
     }
   })()
@@ -511,6 +569,12 @@ export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): Div
         case 'jet':     return 0.08   // 8%: 100–600 kJ from 4–8 MJ
         case 'iter':    return 0.06   // 6%: 5–22 MJ from ~350 MJ
         case 'centaur': return 0.0    // NT-edge: no ELMs
+        // SPARC never produces Type-I ELMs in this model — the machine is
+        // designed to avoid them at all costs (a single unmitigated 1.4–2.2 MJ
+        // crash risks flash-melting the inertially cooled W targets, Hughes
+        // 2020 §4.1). ELMing SPARC plasmas are grassy Type-II, ~0.5–1.5 % of
+        // W_th per crash.
+        case 'sparc':   return 0.012
         default:        return 0.06
       }
     })()

@@ -105,12 +105,30 @@ impl PulseProgram {
             // CENTAUR: 9.6 MA, 20s pulse, 30 MW ICRH, fGW = 0.65
             // NT breakeven scenario — high-field compact DT machine
             "centaur" => (device.ip_max, 20.0,  0.0,   0.0, 30.0, 0.65),
+            // SPARC: 8.7 MA, 25s pulse (10s flat-top), ICRF only.
+            //
+            // This is the QCE scenario, NOT the Primary Reference Discharge.
+            // Deliberate differences from the PRD (Creely table 2: 11.1 MW RF,
+            // fGW = 0.37, Q = 11):
+            //   • fGW raised 0.37 → 0.46 to clear qce_fgw_threshold, since QCE
+            //     access needs high separatrix density (0.3–0.4 n_GW published,
+            //     line-averaged proxy here).
+            //   • ICRF raised 11.1 → 24 MW, just under the 25 MW installed.
+            //     The PRD's 11.1 MW works only because 140 MW of fusion is
+            //     already burning; getting *into* H-mode from L-mode with no
+            //     alphas needs to beat P_LH ≈ 21 MW on ICRF alone (Hughes et
+            //     al. 2020: "additional alpha heating is likely needed for
+            //     H-mode sustainment"). At 15 MW the plasma never transitions,
+            //     and the fuelling ramp then radiatively collapses it.
+            // No NBI and no ECH: SPARC's only auxiliary heating is 25 MW of
+            // 120 MHz ICRF (ECH would need >300 GHz sources at 12.2 T).
+            "sparc"   => (device.ip_max, 25.0,  0.0,   0.0, 24.0, 0.46),
             _         => (device.ip_max * 0.4, 10.0, 5.0, 0.0, 0.0, 0.60),
         };
         // ITER and CENTAUR use full toroidal field; other devices typically
         // run slightly below max.
         let bt = match device.id.as_str() {
-            "iter" | "centaur" => device.bt_max,
+            "iter" | "centaur" | "sparc" => device.bt_max,
             _                  => device.bt_max * 0.9,
         };
         let ne_target = device.greenwald_density(ip_flat) * ne_frac;
@@ -121,16 +139,28 @@ impl PulseProgram {
         let (f_ramp0, f_ramp1, f_end, f_down) = match device.id.as_str() {
             "iter"    => (0.01, 0.08, 0.88, 0.95),
             "centaur" => (0.02, 0.20, 0.70, 0.85), // slow ramp for high-field: ~4s up, 10s flat, ~4s down
+            // SPARC: ~5s ramp to 8.7 MA, 10s flat-top (the design value,
+            // Creely table 1), ~4s ramp-down inside a 25s window.
+            "sparc"   => (0.03, 0.22, 0.62, 0.80),
             _         => (0.05, 0.15, 0.80, 0.90),
         };
         let (f_heat_on, f_heat_full, f_heat_off0, f_heat_off) = match device.id.as_str() {
             "iter"    => (0.10, 0.12, 0.85, 0.88),
             "centaur" => (0.18, 0.22, 0.68, 0.80), // ICRH on during flat-top, off before Ip ramp-down
+            // ICRF on early so the L-H transition happens near the start of
+            // flat-top, leaving room for the Type-I phase before QCE.
+            "sparc"   => (0.20, 0.24, 0.60, 0.74),
             _         => (0.20, 0.25, 0.75, 0.80),
         };
         let (f_ne0, f_ne1, f_ne_end, f_ne_off) = match device.id.as_str() {
             "iter"    => (0.06, 0.12, 0.88, 0.95),
             "centaur" => (0.10, 0.22, 0.68, 0.82),
+            // Density deliberately LAGS the heating. This reproduces the
+            // published QCE entry sequence (AUG and JET): L-H transition →
+            // a transient ELMy phase (grassy on SPARC — Type-I is designed
+            // out, see ImpurityElmParams) → fuelling brings the edge density
+            // up → QCE, held for the rest of the flat-top.
+            "sparc"   => (0.20, 0.28, 0.62, 0.78),
             _         => (0.10, 0.20, 0.80, 0.90),
         };
 
@@ -144,14 +174,43 @@ impl PulseProgram {
                 (duration, 0.0),
             ],
             bt: vec![(0.0, bt), (duration, bt)],
-            ne_target: vec![
-                (0.0, 0.05),
-                (duration * f_ne0, ne_target * 0.5),
-                (duration * f_ne1, ne_target),
-                (duration * f_ne_end, ne_target),
-                (duration * f_ne_off, ne_target * 0.3),
-                (duration, 0.05),
-            ],
+            ne_target: if device.id == "sparc" {
+                // Staged fuelling, following how QCE discharges are actually
+                // entered on AUG and JET: reach H-mode at a moderate density
+                // first, run briefly with Type-I ELMs, then raise the gas to
+                // push the edge density over the QCE access threshold.
+                //
+                // The intermediate plateau sits at ≈0.36 n_GW — the published
+                // PRD Greenwald fraction — and the QCE plateau at ≈0.46 n_GW.
+                // Ramping straight to the QCE density instead collapses the
+                // plasma radiatively before it ever gets to H-mode.
+                // The intermediate plateau is deliberately BRIEF (~0.5 s):
+                // SPARC will push into QCE as fast as possible to spare the
+                // inertially cooled divertor — every extra second of the
+                // transient ELMy phase is unmitigated pulsed heat flux. The
+                // plateau can't be skipped entirely (ramping straight to the
+                // QCE density radiatively collapses the plasma before L-H),
+                // but the moment H-mode is established the gas ramp starts.
+                vec![
+                    (0.0, 0.05),
+                    (duration * 0.10, ne_target * 0.45),
+                    (duration * f_heat_full, ne_target * 0.78), // L-H transition
+                    (duration * 0.245, ne_target * 0.78),       // brief ELMy phase
+                    (duration * 0.285, ne_target),              // fuelling ramp → QCE
+                    (duration * f_ne_end, ne_target),
+                    (duration * f_ne_off, ne_target * 0.3),
+                    (duration, 0.05),
+                ]
+            } else {
+                vec![
+                    (0.0, 0.05),
+                    (duration * f_ne0, ne_target * 0.5),
+                    (duration * f_ne1, ne_target),
+                    (duration * f_ne_end, ne_target),
+                    (duration * f_ne_off, ne_target * 0.3),
+                    (duration, 0.05),
+                ]
+            },
             p_nbi: vec![
                 (0.0, 0.0),
                 (duration * f_heat_on, 0.0),
@@ -172,7 +231,31 @@ impl PulseProgram {
             } else {
                 vec![(0.0, 0.0), (duration, 0.0)]
             },
-            p_ich: if p_ich > 0.0 {
+            p_ich: if device.id == "sparc" {
+                // Two-level ICRF, which is how a burning-plasma scenario
+                // actually runs. Full power (24 MW of the 25 MW installed) is
+                // needed to beat P_LH ≈ 21 MW and get into H-mode with no
+                // alphas yet. Once QCE is established and the alphas are
+                // carrying ~12–15 MW, the RF steps back to 17 MW and Q rises
+                // accordingly. It cannot go all the way to the PRD's 11 MW:
+                // at the QCE density the Martin threshold is ~29 MW, and
+                // even with hysteresis the plasma needs ~17 MW of RF on top
+                // of the alphas to stay in H-mode. That trade — more density
+                // for ELM-free operation, paid for in recirculating power —
+                // is the whole point of the scenario. Backing the
+                // RF off is what makes Q large; holding 24 MW all pulse caps
+                // it near 1 no matter how much fusion power is produced.
+                vec![
+                    (0.0, 0.0),
+                    (duration * (f_heat_on - 0.02), 0.0),
+                    (duration * f_heat_on, p_ich),
+                    (duration * 0.285, p_ich),         // through QCE entry
+                    (duration * 0.325, 17.0),          // alphas take over in QCE
+                    (duration * f_heat_off0, 17.0),
+                    (duration * f_heat_off, 0.0),
+                    (duration, 0.0),
+                ]
+            } else if p_ich > 0.0 {
                 vec![
                     (0.0, 0.0),
                     (duration * (f_heat_on - 0.02), 0.0),
@@ -196,15 +279,48 @@ impl PulseProgram {
                 (duration * f_end, device.delta_lower),
                 (duration, 0.0),
             ],
-            d2_puff: vec![
-                (0.0, 0.0),
-                (duration * 0.03, 2.0),
-                (duration * f_ne1, 1.0),
-                (duration * f_heat_off0, 1.0),
-                (duration * f_ne_off, 0.0),
-                (duration, 0.0),
-            ],
-            neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
+            d2_puff: if device.id == "sparc" {
+                // Heavy, sustained fuelling — this is what drives the plasma
+                // into QCE, and it stays on for the whole flat-top because the
+                // regime has to be maintained, not just triggered.
+                vec![
+                    (0.0, 0.0),
+                    (duration * 0.05, 3.0),
+                    (duration * f_ne1, 5.0),
+                    (duration * f_heat_off0, 5.0),
+                    (duration * f_ne_off, 0.0),
+                    (duration, 0.0),
+                ]
+            } else {
+                vec![
+                    (0.0, 0.0),
+                    (duration * 0.03, 2.0),
+                    (duration * f_ne1, 1.0),
+                    (duration * f_heat_off0, 1.0),
+                    (duration * f_ne_off, 0.0),
+                    (duration, 0.0),
+                ]
+            },
+            neon_puff: if device.id == "sparc" {
+                // Modest neon for divertor protection, established *before*
+                // the QCE fuelling ramp so the radiation settles first. SPARC's divertor is
+                // inertially cooled and its unmitigated parallel heat flux is
+                // >10 GW/m² (Kuang et al. 2020), so some radiation is not
+            // optional. Held at 0.05 → impurity fraction ≈ 9×10⁻⁵, under
+                // qce_impurity_ceiling (2.5×10⁻⁴): turn it up ~3× further
+                // and the SOL power-starves, n_e,sep collapses, and the plasma
+                // drops out of QCE back into Type-I ELMs.
+                vec![
+                    (0.0, 0.0),
+                    (duration * f_heat_full, 0.0),
+                    (duration * 0.26, 0.05),
+                    (duration * f_heat_off0, 0.05),
+                    (duration * f_ne_off, 0.0),
+                    (duration, 0.0),
+                ]
+            } else {
+                vec![(0.0, 0.0), (duration, 0.0)]
+            },
             duration,
             config_override: None,
         }
@@ -217,10 +333,20 @@ impl PulseProgram {
         // Device-specific timing for consistent ramp rates
         let (duration, t_ramp_start, t_ramp_end, t_flat_end, t_down) = match device.id.as_str() {
             "centaur" => (16.0, 1.0, 4.0, 12.0, 14.0),
+            "sparc"   => (20.0, 1.0, 5.0, 15.0, 17.5),
             "iter"    => (50.0, 1.0, 5.0, 40.0, 47.0),
             _         => (8.0,  0.5, 1.5, 6.0,  7.0),
         };
         let ne_target = device.greenwald_density(ip_max) * 0.4;
+
+        // SPARC has no ohmic-only option worth showing: with 12.2 T and 3.5 MA
+        // the ohmic power alone is small next to the radiated power, so the
+        // L-mode reference carries modest ICRF. Kept well under P_LH (≈21 MW
+        // in D-T) and with no seeding, so it stays in L-mode — this is the
+        // "cut the heating and the fuelling" end of the SPARC operating space,
+        // not the published full-field L-mode point (24.1 MW, Q = 2.2), which
+        // is a high-power L-mode reachable by hand from the pulse planner.
+        let p_ich_lmode = if device.id == "sparc" { 8.0 } else { 0.0 };
 
         PulseProgram {
             ip: vec![
@@ -232,16 +358,28 @@ impl PulseProgram {
                 (duration, 0.0),
             ],
             bt: vec![(0.0, bt), (duration, bt)],
+            // Density and fuelling follow the *device* flat-top times. These
+            // were previously hardcoded at 1/6/7 s, which is right for DIII-D
+            // (8 s pulse) but left ITER, CENTAUR and SPARC running at 5×10¹⁸
+            // m⁻³ for most of their flat-top — and therefore at absurd
+            // temperatures, since W/(3neV) blows up as ne → 0.
             ne_target: vec![
                 (0.0, 0.05),
-                (1.0, ne_target),
-                (6.0, ne_target),
-                (7.0, 0.05),
+                (t_ramp_start, ne_target),
+                (t_flat_end, ne_target),
+                (t_down, 0.05),
                 (duration, 0.05),
             ],
             p_nbi: vec![(0.0, 0.0), (duration, 0.0)],
             p_ech: vec![(0.0, 0.0), (duration, 0.0)],
-            p_ich: vec![(0.0, 0.0), (duration, 0.0)],
+            p_ich: vec![
+                (0.0, 0.0),
+                (t_ramp_end, 0.0),
+                (t_ramp_end + 0.5, p_ich_lmode),
+                (t_flat_end, p_ich_lmode),
+                (t_down, 0.0),
+                (duration, 0.0),
+            ],
             kappa: vec![
                 (0.0, 1.0),
                 (1.0, device.kappa),
@@ -256,10 +394,9 @@ impl PulseProgram {
             ],
             d2_puff: vec![
                 (0.0, 0.0),
-                (0.3, 2.0),
-                (1.5, 2.0),
-                (6.0, 2.0),
-                (7.0, 0.0),
+                (t_ramp_start * 0.3, 2.0),
+                (t_flat_end, 2.0),
+                (t_down, 0.0),
                 (duration, 0.0),
             ],
             neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
@@ -275,6 +412,7 @@ impl PulseProgram {
         // CENTAUR needs longer duration for slower ramps (high-field machine)
         let (duration, t_ramp_start, t_ramp_end, t_flat_end, t_down) = match device.id.as_str() {
             "centaur" => (16.0, 1.0, 4.0, 12.0, 14.0),
+            "sparc"   => (20.0, 1.0, 5.0, 15.0, 17.5),
             "iter"    => (50.0, 1.0, 5.0, 40.0, 47.0),
             _         => (8.0,  0.5, 1.5, 6.0,  7.0),
         };
@@ -440,6 +578,7 @@ fn point_in_polygon(r: f64, z: f64, outline: &[(f64, f64)]) -> bool {
 /// Sample LCFS boundary points using Miller parameterization.
 /// Returns Vec<(R, Z, theta)> in physical coordinates.
 /// `z0` is the vertical offset of the plasma center.
+#[cfg(test)] // retained for shape unit tests; the contact check now marches the solved boundary
 fn sample_lcfs(r0: f64, a: f64, kappa: f64, delta: f64, z0: f64, n: usize) -> Vec<(f64, f64, f64)> {
     let mut points = Vec::with_capacity(n);
     for i in 0..n {
@@ -515,6 +654,11 @@ impl Simulation {
     }
 
     /// Seed the disruption model RNG.  Call from WASM layer with JS entropy.
+    /// Read-only access to the live equilibrium (diagnostics/examples).
+    pub fn equilibrium(&self) -> &CerfonEquilibrium {
+        &self.equilibrium
+    }
+
     pub fn seed_disruption(&mut self, seed: u64) {
         self.disruption.seed(seed);
     }
@@ -716,14 +860,36 @@ impl Simulation {
         } else {
             0.0
         };
+        // Device-specific correction for the analytic-vs-real boundary shape
+        // mismatch (see Device::equilibrium_a_scale). Applied to every branch
+        // so the rendered plasma and the wall-contact check stay consistent.
+        let base_epsilon = self.device.epsilon() * self.device.equilibrium_a_scale;
         let epsilon = if config == MagneticConfig::Limited {
-            self.device.epsilon() * (0.35 + 0.65 * ip_frac)
+            base_epsilon * (0.35 + 0.65 * ip_frac)
         } else if config == MagneticConfig::DoubleNull {
-            // DN plasma is smaller to fit within both upper and lower
-            // divertor shelves of the limiter geometry.
-            self.device.epsilon() * 0.88
+            // DN plasmas were historically shrunk 12% to clear the old
+            // hand-drawn "divertor shelf" walls. A device whose
+            // equilibrium_a_scale has been fitted against the real limiter
+            // already encodes its wall clearance, so the generic shrink
+            // double-counts: on CENTAUR it left the live plasma 12% smaller
+            // than the fitted shape and drove the outer strike off the notch
+            // floor onto the back wall. Keep the shrink only for future DN
+            // devices that have not been fitted (a_scale still 1.0).
+            if self.device.equilibrium_a_scale != 1.0 {
+                // Ramp to the fitted full size as Ip approaches flat-top:
+                // the transitional shapes (delta clamped, kappa mid-ramp)
+                // bulge differently from the fitted flat-top boundary, and
+                // at full epsilon they can clip the wall the moment the
+                // limiter-contact check arms at 30% Ip. 0.88 matches the
+                // legacy shrink at low current; full size from ~97% Ip,
+                // where the fitted shape (wall-clearance-constrained by
+                // fit_to_geqdsk) takes over.
+                base_epsilon * (0.88 + 0.12 * (ip_frac / 0.97).min(1.0))
+            } else {
+                base_epsilon * 0.88
+            }
         } else {
-            self.device.epsilon()
+            base_epsilon
         };
 
         // During limited phase (δ < 0.1), the LSN X-point boundary conditions
@@ -737,14 +903,118 @@ impl Simulation {
             prog.delta
         };
 
+        // ── Strike-point sweep ──
+        // Slow oscillation of the boundary triangularity, which moves the
+        // X-points — and with them the separatrix legs, the strike points and
+        // the divertor glow — back and forth across the targets. Everything
+        // downstream (equilibrium panel, contour tracing, portview) follows
+        // from the perturbed equilibrium, so the sweep is self-consistent by
+        // construction. Only active once diverted and near flat-top current.
+        // The sweep excursions to HIGHER δ: δ oscillates in [δ₀, δ₀ + amp].
+        // A higher δ moves the X-points inboard, which walks the outer strike
+        // point INBOARD along the divertor roof diagonal — away from the outer
+        // vertical face, which is baffle rather than target. Containment at
+        // the +amp extreme is verified by the fit harness (21 mm clearance)
+        // and guarded at runtime by the solved-boundary contact check below.
+        // Sweep only during TRUE flat-top current. During the Ip ramps the
+        // plasma shape and β are transient, and the grazing-incidence outer
+        // landing wanders far enough to clip the back-corner baffle no matter
+        // how the sweep is tuned — measured repeatedly at both H-mode entry
+        // and rampdown onset. Real strike sweeps are likewise a flat-top
+        // activity; the ramps hold a static shape.
+        let sweep_active = self.device.strike_sweep_hz > 0.0
+            && config != MagneticConfig::Limited
+            && prog.ip > 0.97 * self.device.ip_max;
+        // Dwell-equalized waveform. A plain sinusoid gave a badly lopsided
+        // dwell (measured with examples/sweep_dwell.rs): the δ→strike-arc
+        // mapping along the roof diagonal is compressive at the +δ (inboard)
+        // end — s(u) ≈ u^0.33 — so the sinusoid's turning-point dwell piled
+        // 30% of the period into one 25 mm band at the inboard end while the
+        // outboard half of the target got a grazing instant. A triangle wave
+        // in normalized arc position v, warped through the inverse mapping
+        // u = v³, makes the strike traverse the target at near-constant speed:
+        // measured dwell is then flat across the sweep range. u = 0 is the
+        // outboard-deep extreme (δ-rest), u = 1 the inboard extreme (δ+amp).
+        let sweep_frac = (self.device.strike_sweep_hz * self.time).fract();
+        let sweep_u = {
+            let v = 1.0 - (2.0 * sweep_frac - 1.0).abs(); // triangle 0→1→0
+            v * v * v
+        };
+        // Symmetric about the rest delta: `strike_sweep_delta` is the FULL
+        // sweep width, so the device's baseline delta is the sweep MIDPOINT
+        // (u = 0.5) rather than the outboard extreme. Changed from one-sided
+        // rest + amp*u when the SPARC baseline was re-anchored to the swept
+        // midpoint (user call, 2026-08-18).
+        let delta_eff = if sweep_active {
+            delta_eff + self.device.strike_sweep_delta * (sweep_u - 0.5)
+        } else {
+            delta_eff
+        };
+        // Vertical rock, IN phase with the δ modulation: the plasma (and both
+        // X-points) rises 0..strike_sweep_z as δ excursions inboard, sliding
+        // the strike points along the angled target faces — the only lever
+        // that actually moves the inner strikes (see Device::strike_sweep_z).
+        //
+        // The phasing is load-bearing: the upward rock deepens the upper
+        // outer landing, and the landing is bistable with the back-corner
+        // baffle — an out-of-phase rock lifts the plasma while the outer
+        // strike is at its deep (δ-rest) end and snaps it onto the corner at
+        // every κ in the usable range. In phase, the deepest outer moment
+        // coincides with z = 0, so the resting depth is controlled purely by
+        // equilibrium_kappa_scale while the rock does its work at the safe,
+        // far-inboard end of the sweep.
+        //
+        // Applied to the equilibrium centre so axis, X-points, legs and the
+        // wall-contact check all follow consistently.
+        // Quadratic easing on the rock: z ∝ ((1+sin)/2)², so the lift only
+        // develops once the δ modulation has already carried the landing well
+        // inboard. With a linear (shared-waveform) rock the mid-sweep
+        // combination of partial lift + partial δ flips the grazing-incidence
+        // landing onto the back-corner branch — measured as transient 0 mm
+        // baffle clearance — even though both endpoints of the sweep are safe.
+        self.equilibrium.z0 = if sweep_active {
+            self.device.z0 + self.device.strike_sweep_z * sweep_u * sweep_u
+        } else {
+            self.device.z0
+        };
+
+        // ── Strike-point position control (β compensation) ──
+        // The divertor-leg landing depth is grazing-incidence-sensitive to the
+        // Shafranov shift: as β falls the landing slides OUTBOARD along the
+        // target, and during rampdown (β: 0.57 → 0.5 at ICRF step-down) it
+        // slid past the target's outermost extent onto the baffle corner —
+        // measured as a burst of 0 mm baffle clearance at t ≈ 15.6 s while
+        // the whole flat-top stayed clean. Real machines hold the strike
+        // point with PF feedback; here the equilibrium elongation absorbs the
+        // drift: below β_N ≈ 0.7 the κ scale rises slightly, retreating the
+        // landing inboard down the diagonal as the pulse terminates.
+        // Smoothed β is used so ELM transients don't jitter the boundary.
+        let kappa_scale_eff = if self.device.strike_sweep_hz > 0.0 {
+            self.device.equilibrium_kappa_scale
+                + 0.006 * (0.70 - self.smoothed_beta_n).max(0.0)
+        } else {
+            self.device.equilibrium_kappa_scale
+        };
+
+        // Equilibrium-only δ correction, applied as a rigid offset on the
+        // programmed waveform so ramps and the strike sweep carry through
+        // unchanged (see Device::equilibrium_delta_lower). The upper end then
+        // carries the equilibrium's own up-down asymmetry on top.
+        let delta_eq =
+            delta_eff + (self.device.equilibrium_delta_lower - self.device.delta_lower);
+        let delta_eq_upper = delta_eq
+            + (self.device.equilibrium_delta_upper - self.device.equilibrium_delta_lower);
         let new_shape = ShapeParams {
             epsilon,
-            kappa: prog.kappa,
-            delta: delta_eff,
+            // Equilibrium-only κ correction (see Device::equilibrium_kappa_scale)
+            kappa: prog.kappa * kappa_scale_eff,
+            delta: delta_eq,
+            delta_upper: Some(delta_eq_upper),
             a_param,
             config,
-            x_point_alpha: Some(delta_eff.asin()),
-            squareness: 0.0,
+            x_point_alpha: Some(delta_eq.asin()),
+            squareness: self.device.equilibrium_squareness,
+            squareness_out: self.device.equilibrium_squareness_out,
         };
         self.equilibrium.update(&new_shape);
 
@@ -757,8 +1027,28 @@ impl Simulation {
             && prog.ip > 0.3 * self.device.ip_max
             && self.actual_ip > 0.1
         {
-            let a = epsilon * self.device.r0; // physical minor radius
-            let lcfs_points = sample_lcfs(self.device.r0, a, prog.kappa, delta_eff, self.device.z0, 24);
+            // Sample the SOLVED boundary, not the analytic parametrization.
+            // The Cerfon–Freidberg solution deviates from its own boundary
+            // parametrization by a few cm (outboard bulge, squarer corners
+            // when squareness ≠ 0), and the rendered separatrix is the solved
+            // contour — so the analytic proxy both misses real contacts and
+            // reports false ones. Ray-march ψ_N = 1 from the axis instead.
+            let (ax_r, ax_z) = self.equilibrium.axis_physical();
+            let mut lcfs_points: Vec<(f64, f64, f64)> = Vec::with_capacity(24);
+            for k in 0..24 {
+                let theta = 2.0 * std::f64::consts::PI * (k as f64) / 24.0;
+                let (dr, dz) = (theta.cos(), theta.sin());
+                let mut rad = 0.05;
+                while rad < 1.6 {
+                    let r = ax_r + dr * rad;
+                    let z = ax_z + dz * rad;
+                    if self.equilibrium.psi_norm(r, z) >= 1.0 {
+                        lcfs_points.push((r, z, theta));
+                        break;
+                    }
+                    rad += 0.01;
+                }
+            }
 
             // X-point(s) for bulk/leg discrimination
             let (xp_lower, xp_upper) = self.equilibrium.x_points_physical();
@@ -848,7 +1138,36 @@ impl Simulation {
         // region even when the equilibrium ε is reduced (e.g. DN uses 0.88×ε).
         let sep_bounds = Some((grid_r_min, grid_r_max, grid_z_min, grid_z_max));
         let mut separatrix = if self.actual_ip > 0.1 {
-            contour::extract_separatrix(&self.equilibrium, self.eq_nr, self.eq_nz, sep_bounds)
+            // The separatrix is extracted at twice the flux-surface grid
+            // resolution: the divertor-leg landing point quantizes on the
+            // marching-squares cells (~45 mm in Z at 48×72 over the
+            // wall-extended bounds), which made the outer strike position
+            // bistable between the roof diagonal and the back corner and
+            // hid most of the inner strike's sweep motion. One extra ψ_N
+            // level at 96×144 costs well under a millisecond.
+            let mut sep = contour::extract_separatrix(
+                &self.equilibrium,
+                self.eq_nr * 2,
+                self.eq_nz * 2,
+                sep_bounds,
+            );
+            // Terminate divertor legs at their first wall impact: a leg that
+            // strikes a baffle must not re-emerge beyond it, and spurious
+            // far-SOL ψ=0 chains outside the vessel are dropped outright.
+            //
+            // Applied in the limited phase too: the tangent LCFS survives the
+            // clip untouched (it lies inside, touching at one point), but the
+            // ψ=0 extraction produces large spurious chains outside the vessel
+            // during ramp-up/ramp-down — measured at up to 386 mm outside the
+            // limiter before this covered the limited phase.
+            //
+            // The 3 mm overshoot keeps the frontend's leg/wall intersection
+            // detection working; the sliver past the wall is masked by the
+            // renderer.
+            if !self.device.wall_outline.is_empty() {
+                contour::clip_separatrix_to_wall(&mut sep, &self.device.wall_outline, 0.003);
+            }
+            sep
         } else {
             Contour {
                 level: 0.0,
@@ -886,7 +1205,8 @@ impl Simulation {
                 .map(|(r, _)| *r)
                 .fold(f64::INFINITY, f64::min);
             // Current inboard edge of the equilibrium
-            let r_inboard = self.device.r0 * (1.0 - self.equilibrium.shape.epsilon);
+            let r_inboard = (self.device.r0 + self.device.equilibrium_r0_shift)
+                * (1.0 - self.equilibrium.shape.epsilon);
             // Shift decreases as Ip ramps toward flat-top
             let shift = (r_inboard - r_limiter).max(0.0) * (1.0 - ip_frac);
 
@@ -1163,6 +1483,137 @@ mod tests {
         // stochastically disrupt. But we can at least verify the simulation ran.
         // The key test is that extreme shapes DO disrupt (next test).
         let _ = wall_disrupted;
+    }
+
+    /// SPARC must reach the QCE regime, and must get there the published way:
+    /// L-H transition first, a transient Type-I ELMy phase, then QCE held for
+    /// the rest of the flat-top (the entry sequence observed on AUG and JET).
+    #[test]
+    fn test_sparc_enters_qce_after_type1_phase() {
+        let device = devices::sparc();
+        let program = PulseProgram::standard_hmode(&device);
+        let duration = program.duration;
+        let mut sim = Simulation::new(device, program);
+        sim.start();
+
+        let mut t_hmode = None;
+        let mut t_qce = None;
+        let mut type1_crashes = 0;
+        let mut grassy_crashes = 0;
+        let mut qce_steps = 0;
+
+        let dt = 0.005;
+        let max_steps = (duration / dt) as usize + 100;
+        for _ in 0..max_steps {
+            let s = sim.step(dt);
+            if s.time >= duration || s.disrupted {
+                assert!(!s.disrupted, "SPARC QCE preset should not disrupt (t={:.2}s)", s.time);
+                break;
+            }
+            if s.in_hmode && t_hmode.is_none() {
+                t_hmode = Some(s.time);
+            }
+            if s.elm_suppressed && t_qce.is_none() {
+                t_qce = Some(s.time);
+            }
+            if s.elm_active && s.elm_type == 1 {
+                type1_crashes += 1;
+            }
+            if s.elm_active && s.elm_type == 2 {
+                grassy_crashes += 1;
+            }
+            if s.elm_suppressed {
+                qce_steps += 1;
+            }
+        }
+
+        let t_hmode = t_hmode.expect("SPARC should reach H-mode");
+        let t_qce = t_qce.expect("SPARC should reach the QCE regime");
+        assert!(
+            t_qce > t_hmode,
+            "QCE must come after the L-H transition (L-H {t_hmode:.2}s, QCE {t_qce:.2}s)"
+        );
+        // SPARC avoids Type-I ELMs at all costs — the transient ELMy phase
+        // before QCE must be small grassy ELMs, never large crashes.
+        assert_eq!(
+            type1_crashes, 0,
+            "SPARC must never produce Type-I ELMs, got {type1_crashes}"
+        );
+        assert!(
+            grassy_crashes > 3,
+            "expected a transient grassy ELM phase before QCE, got {grassy_crashes} crashes"
+        );
+        // QCE should hold for a decent share of the flat-top, not just flicker
+        assert!(
+            qce_steps as f64 * dt > 2.0,
+            "QCE should be sustained for >2s, got {:.2}s",
+            qce_steps as f64 * dt
+        );
+    }
+
+    /// Raising the ICRF beyond the QCE window brings the Type-I ELMs back:
+    /// the regime needs enough edge density *for the power*.
+    #[test]
+    fn test_sparc_extra_power_leaves_qce_window() {
+        let device = devices::sparc();
+        let mut program = PulseProgram::standard_hmode(&device);
+        for p in program.p_ich.iter_mut() {
+            if p.1 > 0.0 {
+                p.1 = 25.0; // full installed ICRF, held all pulse
+            }
+        }
+        let duration = program.duration;
+        let mut sim = Simulation::new(device, program);
+        sim.start();
+
+        let mut qce_steps = 0;
+        let mut type1_crashes = 0;
+        let mut grassy_crashes = 0;
+        let dt = 0.005;
+        for _ in 0..((duration / dt) as usize + 100) {
+            let s = sim.step(dt);
+            if s.time >= duration || s.disrupted {
+                break;
+            }
+            if s.elm_suppressed {
+                qce_steps += 1;
+            }
+            if s.elm_active && s.elm_type == 1 {
+                type1_crashes += 1;
+            }
+            if s.elm_active && s.elm_type == 2 {
+                grassy_crashes += 1;
+            }
+        }
+
+        let baseline_device = devices::sparc();
+        let baseline = PulseProgram::standard_hmode(&baseline_device);
+        let mut base_sim = Simulation::new(baseline_device, baseline);
+        base_sim.start();
+        let mut base_qce = 0;
+        for _ in 0..((duration / dt) as usize + 100) {
+            let s = base_sim.step(dt);
+            if s.time >= duration || s.disrupted {
+                break;
+            }
+            if s.elm_suppressed {
+                base_qce += 1;
+            }
+        }
+
+        assert!(
+            qce_steps < base_qce,
+            "extra ICRF should shrink the QCE window (got {qce_steps} steps vs {base_qce} at nominal power)"
+        );
+        // Even pushed out of the QCE window, SPARC's ELMs stay grassy.
+        assert_eq!(
+            type1_crashes, 0,
+            "SPARC must never produce Type-I ELMs, got {type1_crashes}"
+        );
+        assert!(
+            grassy_crashes > 10,
+            "at full ICRF the plasma should sit in grassy ELMy H-mode, got {grassy_crashes} crashes"
+        );
     }
 
     #[test]

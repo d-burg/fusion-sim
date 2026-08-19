@@ -350,7 +350,7 @@ const STEPS: TutorialStep[] = [
           <ul className="space-y-0.5">
             <li><b>▶ Start / ⏸ Pause</b> — run or pause the pulse</li>
             <li><b>Speed buttons</b> — 0.5x to 2x playback speed</li>
-            <li><b>Device dropdown</b> — switch between tokamaks (DIII-D, JET, ITER, CENTAUR)</li>
+            <li><b>Device dropdown</b> — switch between tokamaks (DIII-D, SPARC, JET, ITER, CENTAUR)</li>
             <li><b>Preset buttons</b> — H-mode, L-mode, or Density Limit scenarios</li>
             <li><b>📋 Edit</b> — open the pulse planner to customize the program</li>
             <li><b>After pulse</b> — click on the trace panel to scrub through time</li>
