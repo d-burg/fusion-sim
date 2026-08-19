@@ -4,10 +4,53 @@
  * The panel itself is a canvas animation, so these tests cover the part that
  * carries the physics claim: which fluctuation state each plasma condition
  * maps to, and the EDA/QCE discriminator (AUG: Δf_QCM < 10 kHz ⇒ EDA).
+ *
+ * Standalone, like src/lib/divertorThermal.test.ts — this project has no test
+ * runner, and `tsc -b` (which the production build runs) typechecks src/, so a
+ * `vitest` import would fail the build for a dependency that is not installed.
+ *
+ * Run with: npx tsx src/components/magnetics.test.ts
  */
-import { describe, it, expect } from 'vitest'
 import { deriveMode } from '../lib/magnetics'
 import type { Snapshot } from '../lib/types'
+
+// ── Minimal describe/it/expect shim ────────────────────────────────────────
+let failures = 0
+let checks = 0
+
+function describe(name: string, body: () => void) {
+  console.log(`\n${name}`)
+  body()
+}
+
+function it(name: string, body: () => void) {
+  try {
+    body()
+    console.log(`  ok   ${name}`)
+  } catch (e) {
+    failures++
+    console.log(`  FAIL ${name}\n       ${(e as Error).message}`)
+  }
+}
+
+function expect(actual: unknown) {
+  checks++
+  return {
+    toBe(want: unknown) {
+      if (actual !== want) throw new Error(`expected ${String(want)}, got ${String(actual)}`)
+    },
+    toBeGreaterThan(bound: number) {
+      if (!((actual as number) > bound)) {
+        throw new Error(`expected > ${bound}, got ${String(actual)}`)
+      }
+    },
+    toBeLessThan(bound: number) {
+      if (!((actual as number) < bound)) {
+        throw new Error(`expected < ${bound}, got ${String(actual)}`)
+      }
+    },
+  }
+}
 
 function snap(over: Partial<Snapshot>): Snapshot {
   return {
@@ -70,3 +113,11 @@ describe('deriveMode', () => {
     expect(b.fQcm).toBeGreaterThan(a.fQcm)
   })
 })
+
+// Throw rather than process.exit: the app tsconfig has no node types, and a
+// thrown error is still a non-zero exit under `npx tsx` (same as
+// divertorThermal.test.ts).
+if (failures > 0) {
+  throw new Error(`${failures} failing (${checks} assertions)`)
+}
+console.log(`\nall passing (${checks} assertions)`)
