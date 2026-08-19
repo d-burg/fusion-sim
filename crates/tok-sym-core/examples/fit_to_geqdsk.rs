@@ -41,6 +41,12 @@ const W_DEPTH: f64 = 0.05;
 /// excess spread / missing outboard shift, traded against boundary RMS.
 const W_SOFT: f64 = 0.10;
 
+/// Weight on the upper-outboard outward excursion — how far our boundary
+/// balloons OUTSIDE the reference LCFS toward the limiter in the ~2 o'clock
+/// sector. Strong: an outward excursion toward the wall is worse than the
+/// same distance of ordinary mismatch.
+const W_UP_OUT: f64 = 0.50;
+
 /// Parse the boundary (RBBBS/ZBBBS) out of a GEQDSK file.
 ///
 /// The format is a fixed header followed by a free-form stream of Fortran
@@ -345,19 +351,18 @@ fn divertor_for(id: &str) -> Option<Divertor> {
         // check (nothing within TOL).
         "iter" => Some(Divertor {
             z_abs_min: 3.30,
-            inner_faces: vec![
-                ((4.406, 3.755), (4.311, 3.965)),
-                ((4.311, 3.965), (4.180, 4.235)),
-            ],
-            outer_faces: vec![
-                ((5.150, 4.188), (5.253, 4.335)),
-                ((5.253, 4.335), (5.273, 4.614)),
-                ((5.273, 4.614), (5.565, 4.906)),
-            ],
+            // Valid landings are the BOTTOM of the cassette only (user
+            // review of the first fit round): the inner floor at
+            // Z = -3.885..-3.909 and the deep outer ramp down to the bottom
+            // corner. The dome flank (5.150,-3.838)->(5.253,-3.985) had been
+            // wrongly included as outer target, which let shapes whose outer
+            // leg landed on the dome side pass.
+            inner_faces: vec![((4.180, 4.235), (4.492, 4.259))],
+            outer_faces: vec![((5.273, 4.614), (5.565, 4.906))],
             apex: None,
             outer_anchor: None,
             inner_r_max: None,
-            outer_r_min: None,
+            outer_r_min: Some(5.28),
             avoid_faces: vec![],
             soft_score: None,
             lower_only: true,
@@ -593,10 +598,10 @@ fn main() {
     let (a_grid, k_grid, shift_grid, sq_grid): (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) =
         if device.id == "iter" {
             (
-                vec![1.12, 1.14, 1.16, 1.18],
-                vec![0.84, 0.85, 0.86, 0.87, 0.88],
+                vec![1.04, 1.06, 1.08, 1.10, 1.12],
+                vec![0.90, 0.92, 0.93, 0.94, 0.96],
                 vec![0.10, 0.13, 0.16, 0.19],
-                vec![-1.05, -0.9, -0.75, -0.6, -0.45],
+                vec![-1.05, -0.9, -0.75, -0.6, -0.45, -0.3],
             )
         } else {
             (
@@ -606,6 +611,9 @@ fn main() {
                 SQ_GRID.to_vec(),
             )
         };
+
+    // Reference boundary as segments, for outward-excursion distances.
+    let bnd_segs: Vec<(Pt, Pt)> = bnd.windows(2).map(|w| (w[0], w[1])).collect();
 
     // Vertical centre: fixed at the device z0 except for ITER, where the
     // reference equilibrium's boundary centre (~0.40 m) and axis (0.53 m)
@@ -671,6 +679,26 @@ fn main() {
                         }
                         let rms = (sum2 / bnd.len() as f64).sqrt();
 
+                        // Outward excursion in the upper-outboard sector
+                        // (~2 o'clock): symmetric RMS cannot tell "outside
+                        // the reference toward the limiter" from "inside",
+                        // and the user specifically flagged the former. Max
+                        // distance of our bulk boundary beyond the reference
+                        // polygon, upper-outboard points only.
+                        let mut up_out = 0.0f64;
+                        for &(r, z) in &sep.points {
+                            if z > z0 + 1.2
+                                && r > device.r0
+                                && (z - z0).abs() < z_xpt_abs * 0.95
+                                && !point_in_poly(&bnd, r, z)
+                            {
+                                up_out = up_out.max(dist_point_to_segments(
+                                    (r, z),
+                                    &bnd_segs,
+                                ));
+                            }
+                        }
+
                         // Strike points must land one per fin — candidates
                         // whose legs both hit the same fin are rejected
                         // outright, since no amount of shape agreement makes
@@ -718,16 +746,18 @@ fn main() {
                         let score = rms
                             + W_BALANCE * imbalance
                             + W_DEPTH * depth
-                            + W_SOFT * soft_pen;
+                            + W_SOFT * soft_pen
+                            + W_UP_OUT * up_out;
 
                         if best.as_ref().map(|(b, _, _)| score < *b).unwrap_or(true) {
                             let row = format!(
                                 "{:6.2} {:6.2} {:+7.2} {:+6.2} {:+6.2} {:+7.2} {:+7.2} | \
                                  {:7.1}mm {:7.1}mm | {:2}/{:2} bal {:5.0}mm dep {:5.0}mm \
-                                 soft {:5.0}mm",
+                                 soft {:5.0}mm upout {:5.0}mm",
                                 a_scale, k_scale, r0_shift, sq, sq_out, du, dl,
                                 rms * 1000.0, max * 1000.0, n_in, n_out,
-                                imbalance * 1000.0, depth * 1000.0, soft_pen * 1000.0
+                                imbalance * 1000.0, depth * 1000.0, soft_pen * 1000.0,
+                                up_out * 1000.0
                             );
                             println!("{row}");
                             best = Some((

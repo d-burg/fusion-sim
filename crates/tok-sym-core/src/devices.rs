@@ -753,26 +753,26 @@ pub fn iter() -> Device {
         z0: 0.35, // plasma center above vessel midplane (X-point into lower divertor)
         // Fitted by examples/fit_to_geqdsk.rs against the default ITER
         // equilibrium shipped inside OpenFUSIONToolkit
-        // (src/tests/physics/ITER_test.eqdsk, R0 6.22, a 1.98, kappa 1.82,
-        // delta 0.33/0.57 — read locally, never committed): boundary RMS vs
-        // that reference dropped 383 -> 78 mm. The device card's a = 1.70
-        // underquotes the real ITER minor radius to keep the transport
-        // calibration; a_scale 1.14 restores the rendered plasma to the
-        // reference's true size (narrowed one notch from the raw optimum of
-        // 1.14 on user review — at kappa_scale 0.90 the RMS actually improves
-        // and the wall gap grows to 67 mm), the same mechanism as
-        // SPARC. Equilibrium deltas stay at the published 0.55/0.55 — the
-        // fit's asymmetric option (0.44/0.57) measured very slightly WORSE
-        // on the full-vessel metric, so the simpler choice wins. Strikes on
-        // the cassette's inner (4.35, -3.90) and outer (5.22, -3.94)
-        // vertical targets.
-        equilibrium_a_scale: 1.12,
-        equilibrium_r0_shift: 0.16,
-        equilibrium_kappa_scale: 0.9,
-        equilibrium_squareness: -0.75,
+        // (src/tests/physics/ITER_test.eqdsk, R0 6.22, a 1.98, kappa 1.82 —
+        // read locally, never committed). Constraints from user review of
+        // the first two rounds: strikes must land on the BOTTOM of the
+        // cassette (inner floor Z = -3.89..-3.91, outer ramp down to the
+        // corner) — the dome flank does not count — and the boundary must
+        // not balloon outside the reference toward the limiter in the
+        // upper-outboard (~2 o'clock) sector, which the harness penalizes
+        // via W_UP_OUT. Under those constraints: boundary RMS 105 mm
+        // (383 mm shipped), zero upper-outboard excursion, strikes verified
+        // live at flat-top: (4.455, -3.910) inner floor, (5.515, -4.509)
+        // outer ramp. The device card's a = 1.70 underquotes the machine to
+        // keep the transport calibration; a_scale restores rendered size,
+        // the same equilibrium-only mechanism as SPARC.
+        equilibrium_a_scale: 1.10,
+        equilibrium_r0_shift: 0.19,
+        equilibrium_kappa_scale: 0.90,
+        equilibrium_squareness: -0.45,
         equilibrium_delta_upper: 0.55,
-        equilibrium_delta_lower: 0.55,
-        equilibrium_squareness_out: -0.45,
+        equilibrium_delta_lower: 0.57,
+        equilibrium_squareness_out: -0.30,
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
