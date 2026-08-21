@@ -521,6 +521,23 @@ impl Simulation {
         &self.equilibrium
     }
 
+    /// Programmed current as a fraction of the programme's peak current —
+    /// the ramp variable for plasma size and the limited-phase inboard shift.
+    /// Zero below the 0.1 MA breakdown threshold.
+    fn ip_ramp_fraction(&self, prog_ip: f64) -> f64 {
+        if prog_ip <= 0.1 {
+            return 0.0;
+        }
+        let ip_peak = self
+            .program
+            .ip
+            .iter()
+            .map(|&(_, v)| v)
+            .fold(0.0_f64, f64::max)
+            .max(0.1);
+        (prog_ip / ip_peak).clamp(0.0, 1.0)
+    }
+
     pub fn seed_disruption(&mut self, seed: u64) {
         self.disruption.seed(seed);
     }
@@ -716,18 +733,23 @@ impl Simulation {
             self.device.config
         };
 
-        // During limited phase, reduce epsilon so plasma starts small and grows with Ip
-        let ip_frac = if prog.ip > 0.1 {
-            (self.actual_ip / prog.ip).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        // Ramp variable for the plasma size: programmed current relative to
+        // the programme's peak. (This used to be actual_ip / prog.ip, which
+        // is identically 1 because the current tracks its waveform, so the
+        // start-up plasma was full-size from the first frame.)
+        let ip_frac = self.ip_ramp_fraction(prog.ip);
         // Device-specific correction for the analytic-vs-real boundary shape
         // mismatch (see Device::equilibrium_a_scale). Applied to every branch
         // so the rendered plasma and the wall-contact check stay consistent.
         let base_epsilon = self.device.epsilon() * self.device.equilibrium_a_scale;
+        // The plasma starts small — a near-circular column limited on the
+        // inboard wall (see the inboard shift in the snapshot) — and grows
+        // with the programmed current, reaching the fitted flat-top size from
+        // 97% of peak. One ramp for all configurations, so nothing jumps when
+        // the programmed δ crosses 0.1 and the plasma diverts.
+        let size = 0.35 + 0.65 * (ip_frac / 0.97).min(1.0);
         let epsilon = if config == MagneticConfig::Limited {
-            base_epsilon * (0.35 + 0.65 * ip_frac)
+            base_epsilon * size
         } else if config == MagneticConfig::DoubleNull {
             // DN plasmas were historically shrunk 12% to clear the old
             // hand-drawn "divertor shelf" walls. A device whose
@@ -738,20 +760,12 @@ impl Simulation {
             // floor onto the back wall. Keep the shrink only for future DN
             // devices that have not been fitted (a_scale still 1.0).
             if self.device.equilibrium_a_scale != 1.0 {
-                // Ramp to the fitted full size as Ip approaches flat-top:
-                // the transitional shapes (delta clamped, kappa mid-ramp)
-                // bulge differently from the fitted flat-top boundary, and
-                // at full epsilon they can clip the wall the moment the
-                // limiter-contact check arms at 30% Ip. 0.88 matches the
-                // legacy shrink at low current; full size from ~97% Ip,
-                // where the fitted shape (wall-clearance-constrained by
-                // fit_to_geqdsk) takes over.
-                base_epsilon * (0.88 + 0.12 * (ip_frac / 0.97).min(1.0))
+                base_epsilon * size
             } else {
-                base_epsilon * 0.88
+                base_epsilon * 0.88 * size
             }
         } else {
-            base_epsilon
+            base_epsilon * size
         };
 
         // During limited phase (δ < 0.1), the LSN X-point boundary conditions
@@ -1045,6 +1059,29 @@ impl Simulation {
             if !self.device.wall_outline.is_empty() {
                 contour::clip_separatrix_to_wall(&mut sep, &self.device.wall_outline, 0.003);
             }
+            // Keep only the chains that belong to the plasma — the ones
+            // through an X-point (the δ-clamped limited solution has a
+            // virtual one below the body). The tolerance is a quarter of the
+            // current minor radius, but never less than a few marching-
+            // squares cells, which is how far a chain can miss the saddle.
+            {
+                let (xl, xu) = self.equilibrium.x_points_physical();
+                let mut anchors: Vec<(f64, f64)> = xl.into_iter().chain(xu).collect();
+                if anchors.is_empty() {
+                    anchors.push(self.equilibrium.x_point_physical());
+                }
+                let a_now = self.equilibrium.shape.epsilon * self.equilibrium.r0;
+                let cell = ((grid_r_max - grid_r_min) / (self.eq_nr * 2) as f64)
+                    .hypot((grid_z_max - grid_z_min) / (self.eq_nz * 2) as f64);
+                contour::keep_chains_near(&mut sep, &anchors, (0.25 * a_now).max(3.0 * cell));
+            }
+            // A limited plasma has no divertor legs: keep the closed LCFS
+            // body and drop the ψ=0 chains hanging below the virtual X-point
+            // of the δ-clamped boundary conditions.
+            if is_limited {
+                let (_, z_x) = self.equilibrium.x_point_physical();
+                sep.points.retain(|p| p.1 >= z_x - 0.005);
+            }
             sep
         } else {
             Contour {
@@ -1072,11 +1109,7 @@ impl Simulation {
 
         // During limited phase, shift plasma inboard so inboard edge touches limiter
         if is_limited && self.actual_ip > 0.1 {
-            let ip_frac = if prog.ip > 0.1 {
-                (self.actual_ip / prog.ip).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
+            let ip_frac = self.ip_ramp_fraction(prog.ip);
             // Find inboard limiter R (minimum R of wall outline near midplane)
             let r_limiter = self.device.wall_outline.iter()
                 .filter(|(_, z)| z.abs() < 0.3)
