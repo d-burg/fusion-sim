@@ -858,14 +858,30 @@ impl Simulation {
             self.device.equilibrium_kappa_scale
         };
 
+        // The equilibrium-only corrections (δ offsets, κ scale, squareness)
+        // are fitted against flat-top reference equilibria. The limited
+        // start-up plasma must stay the plain near-circular shape (δ 0.2,
+        // programmed κ, zero squareness) it had before those knobs existed,
+        // so they are weighted in with the programmed δ ramp once diverted:
+        // zero in the limited phase, full strength by the time δ reaches the
+        // device's flat-top value.
+        let shape_w = if config == MagneticConfig::Limited {
+            0.0
+        } else {
+            let d_full = self.device.delta_lower.abs().max(0.2);
+            ((prog.delta.abs() - 0.1) / (d_full - 0.1)).clamp(0.0, 1.0)
+        };
+        let kappa_scale_eff = 1.0 + (kappa_scale_eff - 1.0) * shape_w;
+
         // Equilibrium-only δ correction, applied as a rigid offset on the
         // programmed waveform so ramps and the strike sweep carry through
         // unchanged (see Device::equilibrium_delta_lower). The upper end then
         // carries the equilibrium's own up-down asymmetry on top.
-        let delta_eq =
-            delta_eff + (self.device.equilibrium_delta_lower - self.device.delta_lower);
+        let delta_eq = delta_eff
+            + shape_w * (self.device.equilibrium_delta_lower - self.device.delta_lower);
         let delta_eq_upper = delta_eq
-            + (self.device.equilibrium_delta_upper - self.device.equilibrium_delta_lower);
+            + shape_w
+                * (self.device.equilibrium_delta_upper - self.device.equilibrium_delta_lower);
         let new_shape = ShapeParams {
             epsilon,
             // Equilibrium-only κ correction (see Device::equilibrium_kappa_scale)
@@ -875,8 +891,8 @@ impl Simulation {
             a_param,
             config,
             x_point_alpha: Some(delta_eq.asin()),
-            squareness: self.device.equilibrium_squareness,
-            squareness_out: self.device.equilibrium_squareness_out,
+            squareness: self.device.equilibrium_squareness * shape_w,
+            squareness_out: self.device.equilibrium_squareness_out * shape_w,
         };
         self.equilibrium.update(&new_shape);
 
