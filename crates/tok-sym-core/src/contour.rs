@@ -768,3 +768,42 @@ mod tests {
         }
     }
 }
+
+/// Keep only the chains that belong to the plasma: those passing within
+/// `tol` of one of the `anchors` (the X-points — the LCFS body and every
+/// divertor leg meet there).
+///
+/// The analytic solution has further ψ=0 chains far from the plasma. At
+/// flat-top size they lie outside the vessel and the wall clip removes them,
+/// but around a small start-up plasma they fall inside the limiter and were
+/// drawn as stray petals. Chains are delimited by jump discontinuities,
+/// matching `clip_separatrix_to_wall` and the renderer.
+pub fn keep_chains_near(contour: &mut Contour, anchors: &[(f64, f64)], tol: f64) {
+    if anchors.is_empty() || contour.points.len() < 2 {
+        return;
+    }
+    const JUMP: f64 = 0.15;
+    let pts = std::mem::take(&mut contour.points);
+    let n = pts.len();
+    let mut out: Vec<(f64, f64)> = Vec::with_capacity(n);
+    let mut start = 0usize;
+    for i in 1..=n {
+        let brk = i == n || {
+            let (a, b) = (pts[i - 1], pts[i]);
+            (a.0 - b.0).hypot(a.1 - b.1) > JUMP
+        };
+        if brk {
+            let chain = &pts[start..i];
+            let near = chain.iter().any(|p| {
+                anchors
+                    .iter()
+                    .any(|x| (p.0 - x.0).hypot(p.1 - x.1) <= tol)
+            });
+            if near {
+                out.extend_from_slice(chain);
+            }
+            start = i;
+        }
+    }
+    contour.points = out;
+}
