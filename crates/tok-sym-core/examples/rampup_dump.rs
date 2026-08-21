@@ -39,6 +39,7 @@ fn main() {
                 "config": snap.magnetic_config,
                 "axis": [snap.axis_r, snap.axis_z],
                 "xpoint": [snap.xpoint_r, snap.xpoint_z],
+                "r0": eq.r0,
                 "shape": {
                     "epsilon": eq.shape.epsilon,
                     "kappa": eq.shape.kappa,
