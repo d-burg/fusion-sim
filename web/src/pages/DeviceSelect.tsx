@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { getDevices, type Device } from '../lib/wasm'
 import PlasmaBackdrop from '../components/PlasmaBackdrop'
@@ -96,6 +96,30 @@ function DeviceSilhouette({ device }: { device: Device }) {
   )
 }
 
+/**
+ * Column spans that leave no ragged row.
+ *
+ * The wide layout is a 12-column track carrying three cards per row (4 each).
+ * A trailing short row divides the full 12 between however many cards it has,
+ * so five devices read as 3-over-2 with no empty cell. Class strings are
+ * spelled out literally because Tailwind's scanner cannot see interpolation.
+ */
+const PER_ROW = 3
+const LG_SPAN: Record<number, string> = {
+  4: 'lg:col-span-4',
+  6: 'lg:col-span-6',
+  12: 'lg:col-span-12',
+}
+
+function rowSpans(i: number, n: number): string {
+  const tailStart = n - (n % PER_ROW || PER_ROW)
+  const inTail = i >= tailStart
+  const lg = LG_SPAN[12 / (inTail ? n - tailStart : PER_ROW)] ?? LG_SPAN[4]
+  // Two-column layout: an odd count leaves the last card alone, so widen it.
+  const md = n % 2 === 1 && i === n - 1 ? 'md:col-span-2' : ''
+  return `${md} ${lg}`
+}
+
 export default function DeviceSelect() {
   const navigate = useNavigate()
   const devices = useMemo(() => getDevices(), [])
@@ -103,6 +127,26 @@ export default function DeviceSelect() {
   // After "Skip tutorial" the page just sits on the hero — flash the
   // scroll-down affordance for a few seconds so the next step is obvious.
   const [flashScrollHint, setFlashScrollHint] = useState(false)
+  const navRef = useRef<HTMLElement>(null)
+
+  // The nav is sticky, so it still takes flow height above the hero. Publish
+  // that height so the hero can be viewport-height MINUS the nav — otherwise
+  // the hero's bottom (and the scroll affordance pinned to it) sits below the
+  // fold. Measured, not hardcoded: it changes at the sm: breakpoint and again
+  // when the mono webfont finishes loading.
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    const apply = () =>
+      document.documentElement.style.setProperty(
+        '--nav-h',
+        `${el.getBoundingClientRect().height}px`,
+      )
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Show tutorial prompt after 1 second
   useEffect(() => {
@@ -129,7 +173,10 @@ export default function DeviceSelect() {
   return (
     <div className="page-enter relative">
       {/* ── Top nav (persists above everything) ── */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between gap-4 px-6 sm:px-10 py-3 border-b border-gray-800 bg-[var(--c-base)]/85 backdrop-blur">
+      <nav
+        ref={navRef}
+        className="sticky top-0 z-50 flex items-center justify-between gap-4 px-6 sm:px-10 py-3 border-b border-gray-800 bg-[var(--c-base)]/85 backdrop-blur"
+      >
         <span className="hidden sm:inline font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
           fusionsimulator<span className="text-gray-600">.io</span>
         </span>
@@ -147,7 +194,7 @@ export default function DeviceSelect() {
       </nav>
 
       {/* ── Hero (pinned; the device panel parallax-slides over it) ── */}
-      <header className="sticky top-0 z-0 h-[100svh] px-6 sm:px-10 overflow-hidden flex items-center">
+      <header className="sticky top-0 z-0 h-[calc(100svh-var(--nav-h,44px))] px-6 sm:px-10 overflow-hidden flex items-center">
         <PlasmaBackdrop className="absolute inset-0 w-full h-full pointer-events-none" />
         {/* Fade the plasma into the page on the left so the wordmark stays crisp */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[var(--c-base)] via-[var(--c-base)]/60 to-transparent" />
@@ -167,8 +214,8 @@ export default function DeviceSelect() {
           onClick={() =>
             document.getElementById('device-panel')?.scrollIntoView({ behavior: 'smooth' })
           }
-          className={`absolute bottom-7 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5
-                      font-mono text-[10px] tracking-[0.18em] uppercase cursor-pointer transition-colors
+          className={`absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5
+                      px-8 py-3 font-mono text-[10px] tracking-[0.18em] uppercase cursor-pointer transition-colors
                       ${flashScrollHint
                         ? 'text-cyan-300 animate-bounce'
                         : 'text-gray-600 hover:text-cyan-400 scroll-hint'}`}
@@ -186,14 +233,15 @@ export default function DeviceSelect() {
           </div>
 
           {/* Hairline-tiled device row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--c-line)] border-y border-gray-800">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-px bg-[var(--c-line)] border-y border-gray-800">
             {devices.map((d, i) => {
               const meta = DEVICE_META[d.id] ?? { location: '', desc: '' }
               return (
                 <button
                   key={d.id}
                   onClick={() => navigate(`/program/${d.id}`)}
-                  className={`stagger-${i + 3} group bg-gray-900 p-6 text-left
+                  className={`stagger-${i + 3} ${rowSpans(i, devices.length)}
+                             group bg-gray-900 p-6 text-left
                              hover:bg-[var(--c-raised)] transition-colors duration-200 cursor-pointer
                              flex flex-col`}
                 >
