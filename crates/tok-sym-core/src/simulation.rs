@@ -29,23 +29,30 @@ pub type WaveformPoint = (f64, f64);
 /// symmetric with ramp-up, which is automatic here because the transition is
 /// a function of the ramp fraction alone.
 ///
-/// The X-point forms only once the column is clear of the wall: the centroid
-/// leaves the limiter over [`F_LIFT_START`, `F_DIV`] while the plasma is
-/// still a smooth limited ellipse, and at `F_DIV` — sitting on its fitted
-/// magnetic centre — it diverts. Ramp-down retraces this: it re-limits at
-/// `F_DIV` and is carried back onto the limiter by `F_LIFT_START`.
+/// X-point formation is the moment the column leaves the wall: at `F_DIV` the
+/// limited ellipse lifts off the inboard limiter and is diverted from the
+/// first instant, with its divertor legs already running to the targets. The
+/// centroid then walks out to the fitted magnetic centre over
+/// [`F_DIV`, `F_CENTRE`]. Ramp-down retraces this: the diverted plasma is
+/// carried back onto the limiter and re-limits on contact at `F_DIV`.
 const F_DIV: f64 = 0.30;
 
-/// Ramp fraction at which the limited column starts moving off the inboard
-/// limiter towards its fitted magnetic centre (reached at `F_DIV`). The
-/// window is deliberately short: the centroid move is a small fraction of
-/// the current ramp on real machines.
-const F_LIFT_START: f64 = 0.22;
+/// Ramp fraction by which the diverted plasma has reached its fitted magnetic
+/// centre. The window is deliberately short: the centroid move is a small
+/// fraction of the current ramp on real machines.
+const F_CENTRE: f64 = 0.38;
 
-/// Ramp fraction by which the boundary triangularity has faded in from the
-/// round limited shape to its programmed value after the X-point forms at
-/// `F_DIV`, so δ is continuous through the transition.
-const F_DELTA: f64 = 0.42;
+/// Ramp fraction by which the boundary triangularity has faded from its
+/// formation value (`DELTA_XPOINT_MIN`) to the programmed one.
+const F_DELTA: f64 = 0.48;
+
+/// Smallest boundary triangularity a diverted solve is given. The X-point
+/// boundary conditions put the X-point at x = 1 − 1.01·δ·ε, so as δ → 0 it
+/// slides under the axis and the system degenerates; a freshly formed
+/// X-point therefore starts at this δ (a modestly D-shaped boundary) rather
+/// than at the limited ellipse's zero. Forming an X-point is a topology
+/// change — this is the jump it makes.
+const DELTA_XPOINT_MIN: f64 = 0.2;
 
 /// Smooth 0→1 ramp (cubic smoothstep) of `x` over [0, 1].
 fn smoothstep01(x: f64) -> f64 {
@@ -767,18 +774,22 @@ impl Simulation {
         let ip_frac = self.ip_ramp_fraction(prog.ip);
 
         // Lift-off weight: 0 while the plasma rests on the limiter, 1 once it
-        // sits on its fitted magnetic centre (see F_LIFT_START / F_DIV). It
-        // reaches 1 exactly when the plasma is allowed to divert, so the
-        // X-point never forms while the column is still touching the wall.
-        let lift = smoothstep01((ip_frac - F_LIFT_START) / (F_DIV - F_LIFT_START));
-        // Triangularity fade after the X-point forms (see F_DELTA).
+        // sits on its fitted magnetic centre (see F_DIV / F_CENTRE). Any
+        // positive lift means the column has left the wall, and that is
+        // exactly when it is diverted.
+        let lift = smoothstep01((ip_frac - F_DIV) / (F_CENTRE - F_DIV));
+        // Triangularity fade from the X-point formation value to the
+        // programmed one (see F_DELTA).
         let delta_fade = smoothstep01((ip_frac - F_DIV) / (F_DELTA - F_DIV));
 
-        // A plasma below F_DIV of flat-top current is limited, no matter what
-        // the δ waveform is doing (on the wall below F_LIFT_START, lifting
-        // off in between); above it, a device still programmed to a round
-        // shape (|δ| < 0.1) also stays limited.
-        let config = if ip_frac < F_DIV || prog.delta.abs() < 0.1 {
+        // A plasma below F_DIV of flat-top current is limited on the wall;
+        // from F_DIV it is diverted, whatever the δ waveform is doing — the
+        // X-point forms at DELTA_XPOINT_MIN and the programmed δ takes over
+        // as it fades in. (The old '|δ| < 0.1 ⇒ limited' rule would keep a
+        // device whose δ waveform lags its Ip waveform — CENTAUR — limited
+        // while already lifting off the wall, which is exactly the state we
+        // must never show: a plasma off the limiter has legs.)
+        let config = if ip_frac < F_DIV {
             MagneticConfig::Limited
         } else if let Some(ref cfg_str) = self.program.config_override {
             match cfg_str.as_str() {
@@ -828,13 +839,19 @@ impl Simulation {
         // to be solved with the LSN X-point boundary conditions, which go
         // degenerate as the virtual X-point approaches the geometric centre.)
         //
-        // Once diverted, the boundary triangularity is faded in over
-        // [F_DIV, F_DELTA], so δ is continuous through the transition instead
-        // of jumping from 0 to its programmed value.
+        // Once diverted, the boundary triangularity starts at the X-point
+        // formation value and fades to the programmed one over
+        // [F_DIV, F_DELTA]. (At flat-top δ_fade = 1, so δ is the programmed
+        // value unless the device's own flat-top |δ| is below the floor.)
         let delta_eff = if config == MagneticConfig::Limited {
             0.0
         } else {
-            prog.delta * delta_fade
+            // The X-point's side (positive or negative triangularity) is the
+            // device's, not the instantaneous waveform's, which may still be
+            // ≈0 when the plasma diverts.
+            let sign = if self.device.delta_lower < 0.0 { -1.0 } else { 1.0 };
+            let target = prog.delta.abs().max(DELTA_XPOINT_MIN);
+            sign * (DELTA_XPOINT_MIN + (target - DELTA_XPOINT_MIN) * delta_fade)
         };
 
         // ── Strike-point sweep ──
@@ -960,13 +977,13 @@ impl Simulation {
 
         // ── Centroid trajectory: inboard limiter → fitted magnetic centre ──
         // While limited, the column rests against the inboard wall: its
-        // magnetic centre sits one minor radius outboard of the limiter, and
-        // it walks out to the device's fitted centre while still limited
-        // (weight `lift`, between F_LIFT_START and F_DIV of flat-top current),
-        // diverting only once it is clear of the wall. Because the transition
-        // is a function of the ramp fraction alone, ramp-down retraces it in
-        // reverse: the plasma re-limits at F_DIV and is carried back onto the
-        // limiter by F_LIFT_START.
+        // magnetic centre sits one minor radius outboard of the limiter; it
+        // diverts the instant it leaves the wall (F_DIV) and walks out to the
+        // device's fitted centre as a diverted plasma (weight `lift`, between
+        // F_DIV and F_CENTRE of flat-top current). Because the transition is
+        // a function of the ramp fraction alone, ramp-down retraces it in
+        // reverse: the diverted plasma is carried back onto the limiter and
+        // re-limits on contact at F_DIV.
         //
         // Implemented as a real move of the equilibrium centre, so the axis,
         // the flux surfaces, the solved separatrix and the wall-contact check
