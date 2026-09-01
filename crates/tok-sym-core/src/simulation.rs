@@ -29,26 +29,28 @@ pub type WaveformPoint = (f64, f64);
 /// symmetric with ramp-up, which is automatic here because the transition is
 /// a function of the ramp fraction alone.
 ///
-/// X-point formation is the moment the column leaves the wall: at `F_DIV` the
-/// limited ellipse lifts off the inboard limiter and is diverted from the
-/// first instant, with its divertor legs already running to the targets. The
-/// centroid then walks out to the fitted magnetic centre over
-/// [`F_DIV`, `F_CENTRE`]. Ramp-down retraces this: the diverted plasma is
-/// carried back onto the limiter and re-limits on contact at `F_DIV`.
-const F_DIV: f64 = 0.30;
+/// The trigger used here is ELONGATION, not current: the limited column stays
+/// a smooth ellipse tangent to the inboard limiter, swelling outward and
+/// elongating with the programmed κ, and diverts once its elongation has
+/// come this fraction of the way from round (κ = 1) to the programme's
+/// flat-top κ. X-point formation is the moment the column leaves the wall:
+/// the ellipse lifts off and is diverted from the first instant, with its
+/// divertor legs already running to the targets, and the diverted plasma
+/// then walks out to the fitted magnetic centre as the remaining elongation
+/// is applied. Ramp-down retraces this: the diverted plasma is carried back
+/// onto the limiter and re-limits on contact.
+///
+/// 0.6 puts X-point formation at κ ≈ 1.4–1.6 on these devices, later in the
+/// current ramp (≈60% of flat-top on DIII-D) than the ≈30% the ramp studies
+/// above report — a deliberate presentation choice so the elongated limited
+/// phase is actually visible; highly elongated limiter plasmas are run on
+/// real machines (JET, TCV).
+const KAPPA_DIV_FRAC: f64 = 0.6;
 
-/// Ramp fraction by which the diverted plasma has reached its fitted magnetic
-/// centre — the same point at which it reaches full size. The inboard gap is
-/// the controlled quantity: zero while limited, opening from the moment of
-/// X-point formation and reaching its flat-top value here, so the centre
-/// R0 = R_lim + a + gap glides outward monotonically and never faster than
-/// the plasma is growing. (A short window here made the whole plasma lurch
-/// outward at ~3 m/s right after diverting.)
-const F_CENTRE: f64 = 0.97;
-
-/// Ramp fraction by which the boundary triangularity has faded from its
-/// formation value (`DELTA_XPOINT_MIN`) to the programmed one.
-const F_DELTA: f64 = 0.48;
+/// Fraction of the post-formation elongation range over which the boundary
+/// triangularity fades from its formation value (`DELTA_XPOINT_MIN`) to the
+/// programmed one.
+const DELTA_FADE_SPAN: f64 = 0.3;
 
 /// Smallest boundary triangularity a diverted solve is given. The X-point
 /// boundary conditions put the X-point at x = 1 − 1.01·δ·ε, so as δ → 0 it
@@ -571,6 +573,29 @@ impl Simulation {
         &self.equilibrium
     }
 
+    /// Programmed elongation as a fraction of the way from round (κ = 1) to
+    /// the programme's peak κ — the trigger for X-point formation and the
+    /// progress variable of the lift-off trajectory (see KAPPA_DIV_FRAC).
+    /// Falls back to the current ramp fraction for a programme that never
+    /// elongates.
+    fn kappa_ramp_fraction(&self, prog_kappa: f64) -> f64 {
+        let kappa_peak = self
+            .program
+            .kappa
+            .iter()
+            .map(|&(_, v)| v)
+            .fold(1.0_f64, f64::max);
+        if kappa_peak <= 1.0 + 1e-9 {
+            return self.ip_ramp_fraction(self.program_ip_now());
+        }
+        ((prog_kappa - 1.0) / (kappa_peak - 1.0)).clamp(0.0, 1.0)
+    }
+
+    /// Programmed current at the current time.
+    fn program_ip_now(&self) -> f64 {
+        PulseProgram::interpolate(&self.program.ip, self.time)
+    }
+
     /// Programmed current as a fraction of the programme's peak current —
     /// the ramp variable for plasma size and the limited-phase inboard shift.
     /// Zero below the 0.1 MA breakdown threshold.
@@ -778,29 +803,30 @@ impl Simulation {
         let ip_frac = self.ip_ramp_fraction(prog.ip);
 
         // Lift-off weight: 0 while the plasma rests on the limiter, 1 once it
-        // sits on its fitted magnetic centre (see F_DIV / F_CENTRE). Any
+        // sits on its fitted magnetic centre (see KAPPA_DIV_FRAC). Any
         // positive lift means the column has left the wall, and that is
         // exactly when it is diverted.
         // Ease-out (fast start, gentle finish): the gap opens visibly the
         // instant the X-point forms and settles smoothly at full size. Read
         // in reverse for ramp-down, the plasma approaches the limiter slowly
         // and closes the last of the gap quickly before re-limiting.
-        let lift = {
-            let u = ((ip_frac - F_DIV) / (F_CENTRE - F_DIV)).clamp(0.0, 1.0);
-            1.0 - (1.0 - u) * (1.0 - u)
-        };
+        // Elongation progress: 0 round, 1 at the programme's flat-top κ.
+        let kappa_frac = self.kappa_ramp_fraction(prog.kappa);
+        // Progress through the diverted part of the elongation ramp.
+        let u_div = ((kappa_frac - KAPPA_DIV_FRAC) / (1.0 - KAPPA_DIV_FRAC)).clamp(0.0, 1.0);
+        let lift = 1.0 - (1.0 - u_div) * (1.0 - u_div);
         // Triangularity fade from the X-point formation value to the
-        // programmed one (see F_DELTA).
-        let delta_fade = smoothstep01((ip_frac - F_DIV) / (F_DELTA - F_DIV));
+        // programmed one (see DELTA_FADE_SPAN).
+        let delta_fade = smoothstep01(u_div / DELTA_FADE_SPAN);
 
-        // A plasma below F_DIV of flat-top current is limited on the wall;
-        // from F_DIV it is diverted, whatever the δ waveform is doing — the
+        // A plasma below KAPPA_DIV_FRAC of its elongation ramp is limited on
+        // the wall; past it, it is diverted whatever the δ waveform does — the
         // X-point forms at DELTA_XPOINT_MIN and the programmed δ takes over
         // as it fades in. (The old '|δ| < 0.1 ⇒ limited' rule would keep a
         // device whose δ waveform lags its Ip waveform — CENTAUR — limited
         // while already lifting off the wall, which is exactly the state we
         // must never show: a plasma off the limiter has legs.)
-        let config = if ip_frac < F_DIV {
+        let config = if kappa_frac < KAPPA_DIV_FRAC {
             MagneticConfig::Limited
         } else if let Some(ref cfg_str) = self.program.config_override {
             match cfg_str.as_str() {
@@ -852,7 +878,8 @@ impl Simulation {
         //
         // Once diverted, the boundary triangularity starts at the X-point
         // formation value and fades to the programmed one over
-        // [F_DIV, F_DELTA]. (At flat-top δ_fade = 1, so δ is the programmed
+        // the first DELTA_FADE_SPAN of the diverted elongation range. (At
+        // flat-top δ_fade = 1, so δ is the programmed
         // value unless the device's own flat-top |δ| is below the floor.)
         let delta_eff = if config == MagneticConfig::Limited {
             0.0
@@ -989,12 +1016,12 @@ impl Simulation {
         // ── Centroid trajectory: inboard limiter → fitted magnetic centre ──
         // While limited, the column rests against the inboard wall: its
         // magnetic centre sits one minor radius outboard of the limiter; it
-        // diverts the instant it leaves the wall (F_DIV) and walks out to the
-        // device's fitted centre as a diverted plasma (weight `lift`, between
-        // F_DIV and F_CENTRE of flat-top current). Because the transition is
-        // a function of the ramp fraction alone, ramp-down retraces it in
-        // reverse: the diverted plasma is carried back onto the limiter and
-        // re-limits on contact at F_DIV.
+        // diverts the instant it leaves the wall (KAPPA_DIV_FRAC of its
+        // elongation ramp) and walks out to the device's fitted centre as a
+        // diverted plasma (weight `lift`, over the rest of the elongation
+        // ramp). Because the transition is a function of the programmed
+        // waveforms alone, ramp-down retraces it in reverse: the diverted
+        // plasma is carried back onto the limiter and re-limits on contact.
         //
         // Implemented as a real move of the equilibrium centre, so the axis,
         // the flux surfaces, the solved separatrix and the wall-contact check
