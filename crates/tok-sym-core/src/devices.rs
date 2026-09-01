@@ -167,6 +167,13 @@ pub struct Device {
     /// excursion of order 0.1–0.2 m along the target, consistent with the
     /// published 0.3–0.4 m swept arcs.
     pub strike_sweep_delta: f64,
+    /// How elongated the start-up plasma gets before it diverts: the limited
+    /// ellipse on the centre stack forms its X-point once its programmed κ
+    /// has come this fraction of the way from round (κ = 1) to the
+    /// programme's flat-top κ (see simulation.rs, `kappa_ramp_fraction`).
+    /// 0.6 is the generic value; DIII-D is held limited a little longer so
+    /// its short 1.5 s ramp shows a clearly elongated limiter plasma.
+    pub divert_kappa_frac: f64,
     /// Wall outline for display: (R, Z) points in meters
     pub wall_outline: Vec<(f64, f64)>,
     /// Magnetic configuration
@@ -664,6 +671,7 @@ pub fn diiid() -> Device {
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
+        divert_kappa_frac: 0.7,
         wall_outline: diiid_wall(),
         config: MagneticConfig::LowerSingleNull,
         impurity_elm: ImpurityElmParams {
@@ -721,6 +729,7 @@ pub fn iter() -> Device {
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
+        divert_kappa_frac: 0.6,
         wall_outline: iter_wall(),
         config: MagneticConfig::LowerSingleNull,
         impurity_elm: ImpurityElmParams {
@@ -767,6 +776,7 @@ pub fn jet() -> Device {
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
+        divert_kappa_frac: 0.6,
         wall_outline: jet_wall(),
         config: MagneticConfig::LowerSingleNull,
         impurity_elm: ImpurityElmParams {
@@ -847,6 +857,7 @@ pub fn centaur() -> Device {
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
+        divert_kappa_frac: 0.6,
         wall_outline: centaur_wall(),
         config: MagneticConfig::DoubleNull,
         impurity_elm: ImpurityElmParams {

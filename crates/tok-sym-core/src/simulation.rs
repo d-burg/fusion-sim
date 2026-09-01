@@ -40,12 +40,11 @@ pub type WaveformPoint = (f64, f64);
 /// is applied. Ramp-down retraces this: the diverted plasma is carried back
 /// onto the limiter and re-limits on contact.
 ///
-/// 0.6 puts X-point formation at κ ≈ 1.4–1.6 on these devices, later in the
-/// current ramp (≈60% of flat-top on DIII-D) than the ≈30% the ramp studies
-/// above report — a deliberate presentation choice so the elongated limited
-/// phase is actually visible; highly elongated limiter plasmas are run on
-/// real machines (JET, TCV).
-const KAPPA_DIV_FRAC: f64 = 0.6;
+/// The fraction itself is per device (`Device::divert_kappa_frac`): 0.6 puts
+/// X-point formation at κ ≈ 1.4–1.6, later in the current ramp (≈60% of
+/// flat-top) than the ≈30% the ramp studies above report — a deliberate
+/// presentation choice so the elongated limited phase is actually visible;
+/// highly elongated limiter plasmas are run on real machines (JET, TCV).
 
 /// Fraction of the post-formation elongation range over which the boundary
 /// triangularity fades from its formation value (`DELTA_XPOINT_MIN`) to the
@@ -575,7 +574,7 @@ impl Simulation {
 
     /// Programmed elongation as a fraction of the way from round (κ = 1) to
     /// the programme's peak κ — the trigger for X-point formation and the
-    /// progress variable of the lift-off trajectory (see KAPPA_DIV_FRAC).
+    /// progress variable of the lift-off trajectory (see Device::divert_kappa_frac).
     /// Falls back to the current ramp fraction for a programme that never
     /// elongates.
     fn kappa_ramp_fraction(&self, prog_kappa: f64) -> f64 {
@@ -803,7 +802,7 @@ impl Simulation {
         let ip_frac = self.ip_ramp_fraction(prog.ip);
 
         // Lift-off weight: 0 while the plasma rests on the limiter, 1 once it
-        // sits on its fitted magnetic centre (see KAPPA_DIV_FRAC). Any
+        // sits on its fitted magnetic centre (see self.device.divert_kappa_frac). Any
         // positive lift means the column has left the wall, and that is
         // exactly when it is diverted.
         // Ease-out (fast start, gentle finish): the gap opens visibly the
@@ -813,20 +812,20 @@ impl Simulation {
         // Elongation progress: 0 round, 1 at the programme's flat-top κ.
         let kappa_frac = self.kappa_ramp_fraction(prog.kappa);
         // Progress through the diverted part of the elongation ramp.
-        let u_div = ((kappa_frac - KAPPA_DIV_FRAC) / (1.0 - KAPPA_DIV_FRAC)).clamp(0.0, 1.0);
+        let u_div = ((kappa_frac - self.device.divert_kappa_frac) / (1.0 - self.device.divert_kappa_frac)).clamp(0.0, 1.0);
         let lift = 1.0 - (1.0 - u_div) * (1.0 - u_div);
         // Triangularity fade from the X-point formation value to the
         // programmed one (see DELTA_FADE_SPAN).
         let delta_fade = smoothstep01(u_div / DELTA_FADE_SPAN);
 
-        // A plasma below KAPPA_DIV_FRAC of its elongation ramp is limited on
+        // A plasma below self.device.divert_kappa_frac of its elongation ramp is limited on
         // the wall; past it, it is diverted whatever the δ waveform does — the
         // X-point forms at DELTA_XPOINT_MIN and the programmed δ takes over
         // as it fades in. (The old '|δ| < 0.1 ⇒ limited' rule would keep a
         // device whose δ waveform lags its Ip waveform — CENTAUR — limited
         // while already lifting off the wall, which is exactly the state we
         // must never show: a plasma off the limiter has legs.)
-        let config = if kappa_frac < KAPPA_DIV_FRAC {
+        let config = if kappa_frac < self.device.divert_kappa_frac {
             MagneticConfig::Limited
         } else if let Some(ref cfg_str) = self.program.config_override {
             match cfg_str.as_str() {
@@ -1016,7 +1015,7 @@ impl Simulation {
         // ── Centroid trajectory: inboard limiter → fitted magnetic centre ──
         // While limited, the column rests against the inboard wall: its
         // magnetic centre sits one minor radius outboard of the limiter; it
-        // diverts the instant it leaves the wall (KAPPA_DIV_FRAC of its
+        // diverts the instant it leaves the wall (self.device.divert_kappa_frac of its
         // elongation ramp) and walks out to the device's fitted centre as a
         // diverted plasma (weight `lift`, over the rest of the elongation
         // ramp). Because the transition is a function of the programmed
@@ -1045,11 +1044,31 @@ impl Simulation {
             // inboard centre stack is used here as the generic rule for every
             // device, which is what JET, DIII-D and the compact machines do.)
             let z_half = (kappa_eq * a_phys).max(0.05);
+            let (z_lo, z_hi) = (self.equilibrium.z0 - z_half, self.equilibrium.z0 + z_half);
+            // Minimum R of the wall POLYGON inside the band — clip each edge
+            // to the band and take its end radii. Using vertices alone misses
+            // a centre stack drawn as one long segment (SPARC): a small
+            // plasma's band then holds only outboard vertices and the
+            // 'limiter' lands on the wrong side of the vessel.
+            let wall = &self.device.wall_outline;
             let mut r_lim = f64::INFINITY;
-            for &(r, z) in &self.device.wall_outline {
-                if (z - self.equilibrium.z0).abs() <= z_half {
-                    r_lim = r_lim.min(r);
+            for i in 0..wall.len() {
+                let (r_a, z_a) = wall[i];
+                let (r_b, z_b) = wall[(i + 1) % wall.len()];
+                let (za, zb) = (z_a.min(z_b), z_a.max(z_b));
+                if zb < z_lo || za > z_hi {
+                    continue;
                 }
+                let r_at = |z: f64| {
+                    if (z_b - z_a).abs() < 1e-12 {
+                        r_a.min(r_b)
+                    } else {
+                        r_a + (r_b - r_a) * (z - z_a) / (z_b - z_a)
+                    }
+                };
+                let lo = za.max(z_lo);
+                let hi = zb.min(z_hi);
+                r_lim = r_lim.min(r_at(lo)).min(r_at(hi));
             }
             if !r_lim.is_finite() {
                 // No wall point beside the column (degenerate outline): fall
