@@ -38,9 +38,13 @@ pub type WaveformPoint = (f64, f64);
 const F_DIV: f64 = 0.30;
 
 /// Ramp fraction by which the diverted plasma has reached its fitted magnetic
-/// centre. The window is deliberately short: the centroid move is a small
-/// fraction of the current ramp on real machines.
-const F_CENTRE: f64 = 0.38;
+/// centre — the same point at which it reaches full size. The inboard gap is
+/// the controlled quantity: zero while limited, opening from the moment of
+/// X-point formation and reaching its flat-top value here, so the centre
+/// R0 = R_lim + a + gap glides outward monotonically and never faster than
+/// the plasma is growing. (A short window here made the whole plasma lurch
+/// outward at ~3 m/s right after diverting.)
+const F_CENTRE: f64 = 0.97;
 
 /// Ramp fraction by which the boundary triangularity has faded from its
 /// formation value (`DELTA_XPOINT_MIN`) to the programmed one.
@@ -777,7 +781,14 @@ impl Simulation {
         // sits on its fitted magnetic centre (see F_DIV / F_CENTRE). Any
         // positive lift means the column has left the wall, and that is
         // exactly when it is diverted.
-        let lift = smoothstep01((ip_frac - F_DIV) / (F_CENTRE - F_DIV));
+        // Ease-out (fast start, gentle finish): the gap opens visibly the
+        // instant the X-point forms and settles smoothly at full size. Read
+        // in reverse for ramp-down, the plasma approaches the limiter slowly
+        // and closes the last of the gap quickly before re-limiting.
+        let lift = {
+            let u = ((ip_frac - F_DIV) / (F_CENTRE - F_DIV)).clamp(0.0, 1.0);
+            1.0 - (1.0 - u) * (1.0 - u)
+        };
         // Triangularity fade from the X-point formation value to the
         // programmed one (see F_DELTA).
         let delta_fade = smoothstep01((ip_frac - F_DIV) / (F_DELTA - F_DIV));
@@ -994,6 +1005,9 @@ impl Simulation {
         // plasma. Hold the physical minor radius the size ramp asks for and
         // recompute ε for the moved centre instead.
         let a_phys = epsilon * r0_nom;
+        // Designed clearance between the LCFS inboard edge and the limiter
+        // (∞ once the plasma is on its fitted centre); gates the contact check.
+        let mut inboard_gap = f64::INFINITY;
         let r0_eq = if lift >= 1.0 {
             r0_nom
         } else {
@@ -1021,9 +1035,18 @@ impl Simulation {
                     .fold(f64::INFINITY, f64::min);
             }
             if r_lim.is_finite() {
+                // Flat-top minor radius (the size ramp divided back out) and
+                // the inboard gap the fitted flat-top equilibrium has.
+                let a_full = (epsilon / size) * r0_nom;
+                let gap_nom = (r0_nom - a_full - r_lim).max(0.0);
+                let gap = if config == MagneticConfig::Limited {
+                    0.0
+                } else {
+                    lift * gap_nom
+                };
+                inboard_gap = gap;
                 // Never push the centre outboard of the fitted one.
-                let r_touch = (r_lim + a_phys).min(r0_nom);
-                r_touch + lift * (r0_nom - r_touch)
+                (r_lim + a_phys + gap).min(r0_nom)
             } else {
                 r0_nom
             }
@@ -1050,12 +1073,13 @@ impl Simulation {
         // If the bulk LCFS extends beyond the wall, force a disruption.
         // Only checked in diverted config (limited plasma intentionally
         // touches wall) and only when Ip is significant (near or at
-        // flat-top). `lift >= 1` additionally disarms it while the plasma is
-        // deliberately resting on, or lifting off, the limiter — during that
-        // window the boundary is centimetres from the wall by construction.
+        // flat-top). It is additionally disarmed while the designed inboard
+        // gap is under 3 cm — just after X-point formation the LCFS is
+        // millimetres from the limiter by construction, and the solved
+        // boundary deviates from its parametrization by about that much.
         // Once armed the check is exactly as strict as before.
         if config != MagneticConfig::Limited
-            && lift >= 1.0
+            && (lift >= 1.0 || inboard_gap >= 0.03)
             && !self.disruption.disrupted
             && prog.ip > 0.3 * self.device.ip_max
             && self.actual_ip > 0.1
