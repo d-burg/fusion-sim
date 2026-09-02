@@ -171,8 +171,8 @@ pub struct Device {
     /// ellipse on the centre stack forms its X-point once its programmed κ
     /// has come this fraction of the way from round (κ = 1) to the
     /// programme's flat-top κ (see simulation.rs, `kappa_ramp_fraction`).
-    /// 0.6 is the generic value; DIII-D is held limited a little longer so
-    /// its short 1.5 s ramp shows a clearly elongated limiter plasma.
+    /// 0.6 is the generic value; DIII-D and JET are held limited a little
+    /// longer so their short ramps show a clearly elongated limiter plasma.
     pub divert_kappa_frac: f64,
     /// Wall outline for display: (R, Z) points in meters
     pub wall_outline: Vec<(f64, f64)>,
@@ -776,7 +776,7 @@ pub fn jet() -> Device {
         strike_sweep_hz: 0.0,
         strike_sweep_z: 0.0,
         strike_sweep_delta: 0.0,
-        divert_kappa_frac: 0.6,
+        divert_kappa_frac: 0.7,
         wall_outline: jet_wall(),
         config: MagneticConfig::LowerSingleNull,
         impurity_elm: ImpurityElmParams {
