@@ -2,7 +2,7 @@
 //! how the equilibrium evolves from breakdown to flat-top exactly as the
 //! frontend sees it (same snapshot fields the equilibrium panel draws).
 //!
-//!   cargo run --release --example rampup_dump -- <device-id> <t1,t2,...|start:step:end> > out.json
+//!   cargo run --release --example rampup_dump -- <device-id> <t1,t2,...|start:step:end> [seed] > out.json
 use tok_sym_core::devices;
 use tok_sym_core::simulation::{PulseProgram, Simulation};
 
@@ -32,6 +32,11 @@ fn main() {
     let wall = device.wall_outline.clone();
     let program = PulseProgram::standard_hmode(&device);
     let mut sim = Simulation::new(device, program);
+    // Optional third argument: disruption RNG seed, to look at a ramp-down on a
+    // device whose default-seeded standard pulse happens to disrupt first.
+    if let Some(seed) = std::env::args().nth(3) {
+        sim.seed_disruption(seed.parse().expect("bad seed"));
+    }
     sim.start();
 
     let dt = 0.002;
