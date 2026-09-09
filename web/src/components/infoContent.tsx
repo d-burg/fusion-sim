@@ -22,11 +22,11 @@ function Cite({ doi, children }: { doi?: string; children: React.ReactNode }) {
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
-  return <div className="text-cyan-400 font-bold text-[11px] mt-2 mb-0.5">{children}</div>
+  return <div className="text-sm font-medium text-gray-200 mt-3 mb-1">{children}</div>
 }
 
 function Ref({ children }: { children: React.ReactNode }) {
-  return <p className="text-gray-500 text-[10px] italic mt-1">{children}</p>
+  return <p className="text-gray-500 text-xs italic mt-2">{children}</p>
 }
 
 /* ─── Equilibrium ────────────────────────────────────── */
@@ -40,7 +40,7 @@ export const equilibriumInfo = (
       plasma pressure gradient and the magnetic (Lorentz) force is
       described by the <b>Grad-Shafranov (GS) equation</b>:
     </p>
-    <p className="text-cyan-300 text-center my-1">
+    <p className="font-mono text-gray-200 text-center my-1">
       &Delta;*&psi; = &minus;R&thinsp;&mu;&#x2080;&thinsp;j<sub>&phi;</sub>
       = &minus;&frac12;&thinsp;dF&sup2;/d&psi; &minus; &mu;&#x2080;&thinsp;R&sup2;&thinsp;dP/d&psi;
     </p>
@@ -64,11 +64,11 @@ export const equilibriumInfo = (
     <Heading>Our Approximation: Cerfon-Freidberg</Heading>
     <p>
       This simulator uses the <b>Cerfon-Freidberg analytic solution</b>.
-      Under the <b>Solov'ev ansatz</b> &mdash; assuming p' and FF' are
-      constants &mdash; the GS equation becomes a linear PDE with an
+      Under the <b>Solov'ev ansatz</b>, assuming p' and FF' are
+      constants, the GS equation becomes a linear PDE with an
       exact analytic solution:
     </p>
-    <p className="text-cyan-300 text-center my-1">
+    <p className="font-mono text-gray-200 text-center my-1">
       &psi;(R,Z) = &psi;<sub>particular</sub>(R) + &Sigma;<sub>i=1..12</sub> c<sub>i</sub>&thinsp;&psi;<sub>i</sub>(R,Z)
     </p>
     <p>
@@ -303,18 +303,18 @@ export function traceInfoContent(traces: { key: string; base: string; sub: strin
         the pulse. Each trace is updated at the simulation timestep.
       </p>
       {traces.map(t => (
-        <div key={t.key} className="mb-2 pl-1 border-l-2" style={{ borderColor: t.color }}>
+        <div key={t.key} className="mb-2 pl-2 border-l" style={{ borderColor: t.color }}>
           <div className="flex items-center gap-1.5 mb-0.5">
             <span
               className="inline-block w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: t.color }}
             />
-            <span className="text-gray-200 font-bold text-[11px]">
+            <span className="text-sm font-medium text-gray-200">
               {t.base}<sub>{t.sub}</sub>
               {t.unit && <span className="text-gray-500 font-normal ml-1">[{t.unit}]</span>}
             </span>
           </div>
-          <p className="text-[10px] leading-relaxed">
+          <p className="text-sm leading-relaxed">
             {traceDescriptions[t.key] ?? 'No description available.'}
           </p>
         </div>
@@ -585,7 +585,7 @@ export const powerBalanceInfo = (
     <p>
       The plasma energy evolves according to the power balance:
     </p>
-    <p className="text-cyan-300 text-center my-1">
+    <p className="font-mono text-gray-200 text-center my-1">
       dW<sub>th</sub>/dt = P<sub>in</sub> &minus; P<sub>loss</sub> &minus; P<sub>rad</sub>
     </p>
     <p>
@@ -641,7 +641,7 @@ export const powerBalanceInfo = (
       The alpha heats the plasma (P<sub>α</sub> = P<sub>fus</sub>/5), while
       neutrons escape to blanket modules.
     </p>
-    <p className="text-cyan-300 text-center my-1">
+    <p className="font-mono text-gray-200 text-center my-1">
       Q = P<sub>fus</sub> / P<sub>heat</sub>
     </p>
     <p>

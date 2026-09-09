@@ -113,7 +113,7 @@ export default function ProfilePanel({
 
   if (!profiles || profiles.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-600 text-xs font-mono">
+      <div className="flex items-center justify-center h-full text-gray-600 text-sm">
         Profile data available after pulse
       </div>
     )

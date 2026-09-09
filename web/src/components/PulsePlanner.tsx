@@ -240,13 +240,15 @@ export default function PulsePlanner({
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-[#0d1117] border-l border-gray-700 z-50
+    <div className="fixed inset-y-0 right-0 w-96 bg-gray-900 border-l border-gray-700 z-50
                     flex flex-col shadow-2xl shadow-black/50">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-800">
+      {/* border-gray-700, not -800: `.border-b.border-gray-800` in index.css is
+          the top-nav treatment (translucent + backdrop-blur); this is a drawer
+          header, not a nav bar. */}
+      <div className="flex items-center justify-between p-3 border-b border-gray-700">
         <div>
-          <h2 className="panel-title">Pulse Planner</h2>
-          <p className="text-[9px] text-gray-600 mt-0.5">Click any trace to draw a custom waveform</p>
+          <h2 className="panel-title">Pulse planner</h2>
         </div>
         <button
           onClick={onClose}
@@ -260,7 +262,7 @@ export default function PulsePlanner({
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {/* Preset selector */}
         <div>
-          <label className="text-[10px] text-gray-500 uppercase tracking-wider">Base preset</label>
+          <label className="text-xs text-gray-500">Base preset</label>
           <div className="flex rounded overflow-hidden border border-gray-700 mt-1">
             {(deviceId === 'centaur'
               ? (['hmode', 'density_limit'] as PresetId[])
@@ -269,7 +271,7 @@ export default function PulsePlanner({
               <button
                 key={p}
                 onClick={() => onPresetChange(p)}
-                className={`flex-1 px-2 py-1.5 text-xs font-semibold transition-colors cursor-pointer
+                className={`flex-1 px-2 py-1.5 text-sm transition-colors cursor-pointer
                   ${
                     basePreset === p
                       ? 'bg-amber-600 text-white'
@@ -287,7 +289,7 @@ export default function PulsePlanner({
         {/* Magnetic config selector — DIII-D only */}
         {deviceId === 'diiid' && (
           <div>
-            <label className="text-[10px] text-gray-500 uppercase tracking-wider">Magnetic configuration</label>
+            <label className="text-xs text-gray-500">Magnetic configuration</label>
             <div className="flex rounded overflow-hidden border border-gray-700 mt-1">
               {([
                 ['LowerSingleNull', 'Lower SN'],
@@ -297,7 +299,7 @@ export default function PulsePlanner({
                 <button
                   key={cfg}
                   onClick={() => onConfigChange(configOverride === cfg ? null : cfg)}
-                  className={`flex-1 px-2 py-1.5 text-xs font-semibold transition-colors cursor-pointer
+                  className={`flex-1 px-2 py-1.5 text-sm transition-colors cursor-pointer
                     ${
                       configOverride === cfg
                         ? 'bg-purple-600 text-white'
@@ -315,7 +317,7 @@ export default function PulsePlanner({
 
         {/* Duration */}
         <div>
-          <label className="text-[10px] text-gray-500 uppercase tracking-wider">Duration</label>
+          <label className="text-xs text-gray-500">Duration</label>
           <div className="flex items-center gap-2 mt-1">
             <input
               type="range"
@@ -334,9 +336,9 @@ export default function PulsePlanner({
               value={effectiveDuration}
               onChange={(e) => onDurationChange(parseFloat(e.target.value) || baseProgram.duration)}
               className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs
-                         text-cyan-400 font-mono text-right focus:outline-none focus:border-cyan-600"
+                         text-cyan-400 font-mono tabular-nums text-right focus:outline-none focus:border-cyan-600"
             />
-            <span className="text-[10px] text-gray-500 w-4">s</span>
+            <span className="text-xs text-gray-500 w-4">s</span>
           </div>
         </div>
 
@@ -349,17 +351,14 @@ export default function PulsePlanner({
           return (
             <div key={param.key}>
               <div className="flex items-center justify-between">
-                <label className="text-[10px] text-gray-500 uppercase tracking-wider">
+                <label className="text-xs text-gray-500">
                   {param.label}
                 </label>
                 <button
                   onClick={() => setDrawingParam(param.key)}
-                  className="relative cursor-pointer hover:opacity-100 opacity-70 transition-opacity hover:ring-1 hover:ring-cyan-600 rounded group"
+                  className="relative cursor-pointer rounded"
                   title="Click to draw waveform"
                 >
-                  <span className="absolute -top-1 -right-1 text-[7px] text-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    ✎
-                  </span>
                   <WaveformSparkline waveform={waveform} color={color} />
                 </button>
               </div>
@@ -391,19 +390,19 @@ export default function PulsePlanner({
                     })
                   }
                   className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs
-                             text-cyan-400 font-mono text-right focus:outline-none focus:border-cyan-600"
+                             text-cyan-400 font-mono tabular-nums text-right focus:outline-none focus:border-cyan-600"
                 />
-                <span className="text-[10px] text-gray-500 w-14 truncate">{param.unit}</span>
+                <span className="text-xs text-gray-500 w-14 truncate">{param.unit}</span>
               </div>
             </div>
           )
         })}
 
         {/* Device info */}
-        <div className="text-[10px] text-gray-600 space-y-0.5 pt-2 border-t border-gray-800">
+        <div className="text-xs text-gray-600 space-y-0.5 pt-2 border-t border-gray-800">
           <div>Device: {device.name}</div>
-          <div>R₀ = {device.r0.toFixed(2)} m, a = {device.a.toFixed(2)} m</div>
-          <div>Bₜ,max = {device.bt_max.toFixed(1)} T, Iₚ,max = {device.ip_max.toFixed(1)} MA</div>
+          <div>R₀ = <span className="font-mono tabular-nums">{device.r0.toFixed(2)}</span> m, a = <span className="font-mono tabular-nums">{device.a.toFixed(2)}</span> m</div>
+          <div>Bₜ,max = <span className="font-mono tabular-nums">{device.bt_max.toFixed(1)}</span> T, Iₚ,max = <span className="font-mono tabular-nums">{device.ip_max.toFixed(1)}</span> MA</div>
         </div>
       </div>
 
@@ -411,17 +410,17 @@ export default function PulsePlanner({
       <div className="p-3 border-t border-gray-800 space-y-2">
         <button
           onClick={() => { onOverridesChange({}); onDurationChange(null); onConfigChange(null) }}
-          className="w-full px-4 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-semibold
+          className="w-full px-4 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm
                      transition-colors cursor-pointer"
         >
-          ↺ Reset Parameters
+          ↺ Reset parameters
         </button>
         <button
           onClick={handleRun}
-          className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-sm font-bold
+          className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-sm
                      transition-colors cursor-pointer"
         >
-          ▶ Run Pulse
+          ▶ Run pulse
         </button>
       </div>
 

@@ -123,7 +123,7 @@ export default function StatusPanel({
 
   if (!snapshot) {
     return (
-      <div className="p-3 font-mono text-sm text-gray-600 flex items-center justify-center h-full">
+      <div className="p-3 text-sm text-gray-600 flex items-center justify-center h-full">
         Awaiting pulse…
       </div>
     )
@@ -132,11 +132,11 @@ export default function StatusPanel({
   const s = snapshot
 
   return (
-    <div className="px-3 py-1 font-mono text-xs h-full overflow-y-auto flex flex-col">
+    <div className="px-3 py-1 text-xs h-full overflow-y-auto flex flex-col">
       {/* Top row: mode badge + disruption risk */}
       <div className="flex items-center gap-2 mb-0.5 shrink-0">
         <span
-          className={`px-1.5 py-px rounded text-[10px] font-bold shrink-0 ${
+          className={`px-1.5 py-px rounded text-[10px] font-semibold tracking-wider shrink-0 ${
             s.disrupted
               ? 'bg-red-900 text-red-300'
               : s.in_hmode
@@ -155,12 +155,12 @@ export default function StatusPanel({
               <button
                 onClick={() => canShowProfiles && setShowProfiles(!showProfiles)}
                 disabled={!canShowProfiles}
-                className={`px-2.5 py-1 rounded text-[11px] font-bold tracking-wide transition-colors ${
+                className={`px-2.5 py-1 rounded text-sm font-medium border transition-colors ${
                   !canShowProfiles
-                    ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
+                    ? 'bg-gray-800/50 border-transparent text-gray-600 cursor-not-allowed'
                     : showProfiles
-                      ? 'bg-purple-700 text-purple-200 cursor-pointer'
-                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700 cursor-pointer'
+                      ? 'bg-gray-800 border-[var(--c-accent)] text-cyan-300 cursor-pointer'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200 cursor-pointer'
                 }`}
                 title={!canShowProfiles ? 'Available after pulse completes or when paused' : ''}
               >
@@ -168,7 +168,7 @@ export default function StatusPanel({
               </button>
               {showProfiles && (
                 <>
-                  <label className="flex items-center gap-0.5 text-[10px] text-gray-500 cursor-pointer">
+                  <label className="flex items-center gap-0.5 text-xs text-gray-500 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={showThomson}
@@ -177,7 +177,7 @@ export default function StatusPanel({
                     />
                     TS
                   </label>
-                  <label className="flex items-center gap-0.5 text-[10px] text-gray-500 cursor-pointer">
+                  <label className="flex items-center gap-0.5 text-xs text-gray-500 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={showPressure}
@@ -189,7 +189,7 @@ export default function StatusPanel({
                 </>
               )}
           </>
-          <span className="text-[10px] text-gray-500">
+          <span className="text-xs text-gray-500">
             {s.status}
           </span>
         </div>
@@ -313,7 +313,7 @@ function PowerBalance({ snapshot: s, fusion, usesIch }: { snapshot: Snapshot; fu
     <div className="grid grid-cols-2 gap-x-4">
       {/* Input column */}
       <div>
-        <div className="text-[10px] text-gray-600 leading-none mb-1 uppercase tracking-wider">Input</div>
+        <div className="text-xs text-gray-600 leading-none mb-1">Input</div>
         {inputItems.map((item, i) => (
           <PowerBar key={i} label={<>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
@@ -321,16 +321,16 @@ function PowerBalance({ snapshot: s, fusion, usesIch }: { snapshot: Snapshot; fu
 
       {/* Output column */}
       <div>
-        <div className="text-[10px] text-gray-600 leading-none mb-1 uppercase tracking-wider">Output</div>
+        <div className="text-xs text-gray-600 leading-none mb-1">Output</div>
         {outputItems.map((item, i) => (
           <PowerBar key={i} label={item.fullLabel ? item.label : <>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
       </div>
 
       {/* Shared P_in / P_out totals row */}
-      <div className="col-span-2 flex justify-between text-[10px] text-gray-500 border-t border-gray-800/50 pt-1 mt-0.5 leading-tight">
-        <span>P<sub>in</sub> <span className="tabular-nums">{pInputTotal.toFixed(1)} MW</span></span>
-        <span>P<sub>out</sub> <span className="tabular-nums">{pOutputTotal.toFixed(1)} MW</span></span>
+      <div className="col-span-2 flex justify-between text-xs text-gray-500 border-t border-gray-800/50 pt-1 mt-0.5 leading-tight">
+        <span>P<sub>in</sub> <span className="font-mono tabular-nums">{pInputTotal.toFixed(1)} MW</span></span>
+        <span>P<sub>out</sub> <span className="font-mono tabular-nums">{pOutputTotal.toFixed(1)} MW</span></span>
       </div>
     </div>
   )
@@ -359,14 +359,15 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
   const pFus = smoothPFus.current
 
   // Color coding for Q
+  // Colour marks a real threshold crossing (breakeven, Q≥10), nothing else.
   const qColor = q >= 10 ? 'text-emerald-400'
     : q >= 1 ? 'text-cyan-400'
     : q >= 0.01 ? 'text-gray-300'
     : 'text-gray-500'
 
-  const borderColor = q >= 10 ? 'border-emerald-500/40 bg-emerald-500/5'
-    : q >= 1 ? 'border-cyan-500/40 bg-cyan-500/5'
-    : 'border-gray-700/50 bg-gray-800/50'
+  const borderColor = q >= 10 ? 'border-emerald-500/40'
+    : q >= 1 ? 'border-cyan-500/40'
+    : 'border-gray-700/50'
 
   // Format P_fus with fixed width: 4 digits left of decimal + unit
   // Uses fixed-width formatting to prevent box width changes
@@ -378,12 +379,12 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
 
   return (
     <div className={`rounded border px-2.5 py-1.5 text-center min-w-[84px] shrink-0 ${borderColor}`}>
-      <div className="text-[10px] text-gray-500 leading-tight">Q<sub>plasma</sub></div>
-      <div className={`text-lg font-bold tabular-nums leading-tight ${qColor}`}>
+      <div className="text-xs text-gray-500 leading-tight">Q<sub>plasma</sub></div>
+      <div className={`text-lg font-mono font-semibold tabular-nums leading-tight ${qColor}`}>
         {formatQ(q)}
       </div>
-      <div className="text-[9px] text-gray-500 leading-none mt-0.5 tabular-nums whitespace-nowrap">
-        <span className="text-gray-500">P<sub>fus</sub></span> {pFusStr}
+      <div className="text-xs text-gray-500 leading-none mt-0.5 whitespace-nowrap">
+        <span>P<sub>fus</sub></span> <span className="font-mono tabular-nums">{pFusStr}</span>
       </div>
     </div>
   )
@@ -420,7 +421,7 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
   const numBars = 8
   const activeBars = Math.round(signal * numBars)
 
-  // Glow animation for active detector
+  // Detector above threshold — shown as a static state tag, not a blink
   const isActive = rate > 1e10
 
   // Format power — always show to prevent layout shifts
@@ -429,29 +430,37 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
     : '—'
 
   return (
-    <div className="flex-1 rounded border border-gray-700/50 bg-gray-800/30 px-2.5 py-1.5 min-w-0">
-      {/* Header */}
+    <div className="flex-1 min-w-0 pr-2.5">
+      {/* Header — a static state tag, not a blinking lamp */}
       <div className="flex items-center gap-1 mb-1">
-        <span className={`text-[11px] ${isActive ? 'text-yellow-500' : 'text-gray-600'}`}>☢</span>
         <span className="panel-title">Neutron diagnostic</span>
         <InfoPopup title="Neutron Diagnostics" position="left">{neutronDiagnosticInfo}</InfoPopup>
-        {isActive && (
-          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse shrink-0" />
-        )}
+        <span className="ml-auto flex items-center gap-1 shrink-0">
+          <span
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ backgroundColor: isActive ? 'var(--c-ok)' : 'var(--c-line-strong)' }}
+          />
+          <span
+            className="text-[10px] uppercase tracking-wider"
+            style={{ color: isActive ? 'var(--c-ok)' : 'var(--c-ink-faint)' }}
+          >
+            {isActive ? 'Active' : 'Idle'}
+          </span>
+        </span>
       </div>
 
       {/* Signal bar */}
       <div className="flex gap-0.5 mb-1">
         {Array.from({ length: numBars }, (_, i) => {
           const barActive = i < activeBars
-          const barColor = i < 3 ? '#22c55e' : i < 6 ? '#eab308' : '#ef4444'
+          const barColor = i < 3 ? 'var(--c-ok)' : i < 6 ? 'var(--c-warn)' : 'var(--c-bad)'
           return (
             <div
               key={i}
               className="flex-1 h-2.5 rounded-sm transition-all duration-300"
               style={{
-                backgroundColor: barActive ? barColor : '#1f2937',
-                opacity: barActive ? 1 : 0.3,
+                backgroundColor: barActive ? barColor : 'var(--c-line)',
+                opacity: barActive ? 1 : 0.6,
               }}
             />
           )
@@ -460,10 +469,10 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
 
       {/* Values — fixed-layout flex to prevent side-to-side jitter */}
       <div className="flex items-center justify-between">
-        <span className={`text-[11px] tabular-nums ${isActive ? 'text-gray-200' : 'text-gray-500'}`}>
-          {rate > 0 ? formatNeutronRate(rate) : '—'} n/s
+        <span className={`text-xs ${isActive ? 'text-gray-200' : 'text-gray-500'}`}>
+          <span className="font-mono tabular-nums">{rate > 0 ? formatNeutronRate(rate) : '—'}</span> n/s
         </span>
-        <span className="text-[10px] text-gray-500 tabular-nums">
+        <span className="text-xs text-gray-500 font-mono tabular-nums">
           {powerStr}
         </span>
       </div>
@@ -491,23 +500,21 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
   // Dynamic scale: 25 MW/m² normally, expands for large ELM spikes
   const maxQ = Math.max(25, q * 1.2)
   const fracQ = Math.min(q / maxQ, 1)
-  const qBarColor = q > 15 ? '#ef4444' : q > W_RECRYST_QFLUX ? '#f97316' : q > 5 ? '#eab308' : '#22c55e'
+  const qBarColor = q > W_RECRYST_QFLUX ? 'var(--c-bad)' : q > 5 ? 'var(--c-warn)' : 'var(--c-ok)'
 
   // ── Temperature bar (tungsten only) ──
   // Dynamic scale: 2000°C normally, expands if ELMs push higher
   const maxTemp = Math.max(2000, tSurface * 1.2)
   const fracT = Math.min(tSurface / maxTemp, 1)
-  const tempBarColor = tSurface > W_RECRYST_TEMP ? '#ef4444' : tSurface > 1000 ? '#f97316' : tSurface > 600 ? '#eab308' : '#22c55e'
+  const tempBarColor = tSurface > W_RECRYST_TEMP ? 'var(--c-bad)' : tSurface > 600 ? 'var(--c-warn)' : 'var(--c-ok)'
   const isTempWarning = isW && tSurface > W_RECRYST_TEMP
 
-  // Flash state for warning light
   const isWarning = (isW && q > W_RECRYST_QFLUX) || isTempWarning
-  const [flashOn, setFlashOn] = useState(true)
-  useEffect(() => {
-    if (!isWarning) return
-    const id = setInterval(() => setFlashOn(v => !v), 400)
-    return () => clearInterval(id)
-  }, [isWarning])
+
+  // Bars can use the saturated token; the numeric readouts next to them are
+  // small text, so they use the AA-safe ink variant of the alarm red.
+  const qInkColor = q > W_RECRYST_QFLUX ? 'var(--c-bad-ink)' : q > 5 ? 'var(--c-warn)' : 'var(--c-ok)'
+  const tempInkColor = tSurface > W_RECRYST_TEMP ? 'var(--c-bad-ink)' : tSurface > 600 ? 'var(--c-warn)' : 'var(--c-ok)'
 
   return (
     <div className="border-t border-gray-800 pt-1.5">
@@ -516,17 +523,17 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
           Divertor
           <InfoPopup title="Divertor Thermal Loading" position="right">{divertorInfo}</InfoPopup>
         </span>
-        <span className="text-[10px] text-gray-600 tabular-nums">
-          λ<sub>q</sub>={lambda.toFixed(1)} mm
+        <span className="text-xs text-gray-600">
+          λ<sub>q</sub>=<span className="font-mono tabular-nums">{lambda.toFixed(1)}</span> mm
         </span>
-        <span className="text-[10px] text-gray-600 tabular-nums ml-auto">
-          f<sub>det</sub>={fDet.toFixed(2)}
+        <span className="text-xs text-gray-600 ml-auto">
+          f<sub>det</sub>=<span className="font-mono tabular-nums">{fDet.toFixed(2)}</span>
         </span>
       </div>
 
       {/* Heat flux bar */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-gray-500 w-6 text-right shrink-0">q<sub>⊥</sub></span>
+        <span className="text-xs text-gray-500 w-6 text-right shrink-0">q<sub>⊥</sub></span>
         <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden relative">
           <div
             className="h-full rounded-full transition-all duration-200"
@@ -540,18 +547,18 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
             />
           )}
         </div>
-        <span className="text-[10px] tabular-nums w-12 text-right shrink-0"
-          style={{ color: qBarColor }}
+        <span className="text-xs font-mono tabular-nums w-12 text-right shrink-0"
+          style={{ color: qInkColor }}
         >
           {q.toFixed(1)}
         </span>
-        <span className="text-[9px] text-gray-600 shrink-0">MW/m²</span>
+        <span className="text-xs text-gray-600 shrink-0">MW/m²</span>
       </div>
 
       {/* Surface temperature bar — tungsten machines only */}
       {isW && (
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[10px] text-gray-500 w-6 text-right shrink-0">T<sub>s</sub></span>
+          <span className="text-xs text-gray-500 w-6 text-right shrink-0">T<sub>s</sub></span>
           <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden relative">
             <div
               className="h-full rounded-full transition-all duration-200"
@@ -563,12 +570,12 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
               style={{ left: `${(W_RECRYST_TEMP / maxTemp) * 100}%` }}
             />
           </div>
-          <span className="text-[10px] tabular-nums w-12 text-right shrink-0"
-            style={{ color: tempBarColor }}
+          <span className="text-xs font-mono tabular-nums w-12 text-right shrink-0"
+            style={{ color: tempInkColor }}
           >
             {tSurface.toFixed(0)}
           </span>
-          <span className="text-[9px] text-gray-600 shrink-0">°C</span>
+          <span className="text-xs text-gray-600 shrink-0">°C</span>
         </div>
       )}
 
@@ -578,13 +585,9 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
         <div className="flex items-center gap-1 mt-0.5" style={{ minHeight: 14, visibility: isWarning ? 'visible' : 'hidden' }}>
           <span
             className="w-2 h-2 rounded-full shrink-0"
-            style={{
-              backgroundColor: flashOn ? '#ef4444' : '#7f1d1d',
-              boxShadow: flashOn ? '0 0 6px #ef4444' : 'none',
-              transition: 'all 0.15s',
-            }}
+            style={{ backgroundColor: 'var(--c-bad)' }}
           />
-          <span className="text-[9px] text-red-400/80">W recrystallization risk</span>
+          <span className="text-xs text-red-400">W recrystallization risk</span>
         </div>
       )}
     </div>
@@ -597,11 +600,14 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
 function DisruptionRisk({ risk }: { risk: number }) {
   const pct = Math.min(risk * 100, 100)
   const barColor =
-    pct > 80 ? '#ef4444' : pct > 60 ? '#f97316' : pct > 30 ? '#eab308' : '#22c55e'
+    pct > 60 ? 'var(--c-bad)' : pct > 30 ? 'var(--c-warn)' : 'var(--c-ok)'
+  // Small text needs the AA-safe ink variant of the alarm red.
+  const inkColor =
+    pct > 60 ? 'var(--c-bad-ink)' : pct > 30 ? 'var(--c-warn)' : 'var(--c-ok)'
 
   return (
     <div className="flex items-center gap-1.5 flex-1 min-w-0">
-      <span className="text-[10px] text-gray-500">Disruption risk</span>
+      <span className="text-xs text-gray-500">Disruption risk</span>
       <div className="w-24 h-2.5 bg-gray-800 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-300"
@@ -609,8 +615,8 @@ function DisruptionRisk({ risk }: { risk: number }) {
         />
       </div>
       <span
-        className="text-[10px] font-bold tabular-nums w-8"
-        style={{ color: barColor }}
+        className="text-xs font-mono font-medium tabular-nums w-8"
+        style={{ color: inkColor }}
       >
         {pct.toFixed(0)}%
       </span>
@@ -638,9 +644,9 @@ function Param({
   return (
     <div className="flex justify-between items-baseline leading-none py-px">
       <span className="text-gray-500">{label}</span>
-      <span className={`${color} tabular-nums`}>
-        <span className="inline-block min-w-[3.5em] text-right">{formatted}</span>
-        <span className="text-gray-600 ml-0.5 text-[10px] inline-block min-w-[2.5em] unit-label">{unit}</span>
+      <span className={color}>
+        <span className="font-mono tabular-nums inline-block min-w-[3.5em] text-right">{formatted}</span>
+        <span className="text-gray-600 ml-0.5 text-xs inline-block min-w-[2.5em] unit-label">{unit}</span>
       </span>
     </div>
   )
@@ -660,14 +666,14 @@ function PowerBar({
   const frac = total > 0 ? Math.min(value / total, 1) : 0
   return (
     <div className="flex items-center gap-1.5 leading-none py-0.5">
-      <span className="text-[10px] text-gray-500 w-10 text-right shrink-0 unit-label">{label}</span>
+      <span className="text-xs text-gray-500 w-10 text-right shrink-0 unit-label">{label}</span>
       <div className="flex-1 h-2.5 bg-gray-800 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-200"
           style={{ width: `${frac * 100}%`, backgroundColor: color }}
         />
       </div>
-      <span className="text-[10px] text-gray-400 w-10 text-right shrink-0 tabular-nums">
+      <span className="text-xs text-gray-400 font-mono tabular-nums w-10 text-right shrink-0">
         {value.toFixed(1)}
       </span>
     </div>

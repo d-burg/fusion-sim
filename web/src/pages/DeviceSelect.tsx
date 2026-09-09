@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { getDevices, type Device } from '../lib/wasm'
 import PlasmaBackdrop from '../components/PlasmaBackdrop'
@@ -15,17 +15,17 @@ const DEVICE_META: Record<string, { location: string; status?: string; desc: str
   },
   centaur: {
     location: 'Conceptual design',
-    desc: 'Compact negative-triangularity breakeven tokamak — ELM-free Q > 1 at 10.9 T with HTS magnets.',
+    desc: 'Compact negative-triangularity breakeven tokamak. ELM-free Q > 1 at 10.9 T with HTS magnets.',
   },
   iter: {
     location: 'Cadarache, France',
     status: 'Under construction',
-    desc: "The world's largest tokamak — designed to demonstrate 500 MW of fusion power (Q ≥ 10).",
+    desc: "The world's largest tokamak, designed to demonstrate 500 MW of fusion power (Q ≥ 10).",
   },
   jet: {
     location: 'Culham, UK',
     status: 'Decommissioned',
-    desc: "Europe's largest tokamak — holds the world record for fusion energy with its ITER-Like Wall.",
+    desc: "Europe's largest tokamak. Holds the world record for fusion energy with its ITER-Like Wall.",
   },
 }
 
@@ -37,7 +37,7 @@ const DEVICE_LIMITERS: Record<string, [number, number][]> = {
 }
 
 /** SVG cross-section silhouette from limiter geometry (or wall outline fallback). */
-function DeviceSilhouette({ device }: { device: Device }) {
+function DeviceSilhouette({ device, large = false }: { device: Device; large?: boolean }) {
   const wall = DEVICE_LIMITERS[device.id] ?? device.wall_outline
   if (wall.length === 0) return null
 
@@ -59,16 +59,16 @@ function DeviceSilhouette({ device }: { device: Device }) {
       .join(' ') + ' Z'
 
   // Scale stroke width to viewBox so all devices appear equally bright.
-  // Target ~1px at the rendered size: the SVG is h-32 (128px),
-  // so strokeWidth ≈ viewBox extent / 128.
+  // Target ~1px at the rendered size, so strokeWidth ≈ viewBox extent / px height.
+  const pxHeight = large ? 192 : 128
   const extent = Math.max(w, h)
-  const sw = extent / 128
+  const sw = extent / pxHeight
   const markerR = extent * 0.006
 
   return (
     <svg
       viewBox={`${rMin - pad} ${-zMax - pad} ${w} ${h}`}
-      className="w-full h-32 opacity-30 group-hover:opacity-60 transition-opacity"
+      className={`w-full ${large ? 'h-48' : 'h-32'} opacity-40`}
       preserveAspectRatio="xMidYMid meet"
     >
       <path
@@ -76,14 +76,14 @@ function DeviceSilhouette({ device }: { device: Device }) {
         fill="none"
         stroke="currentColor"
         strokeWidth={sw}
-        className="text-cyan-400"
+        className="text-gray-300"
       />
       {/* Magnetic axis marker */}
       <circle
         cx={device.r0}
         cy={0}
         r={markerR}
-        className="fill-cyan-400 opacity-50"
+        className="fill-current text-gray-300 opacity-60"
       />
     </svg>
   )
@@ -92,16 +92,10 @@ function DeviceSilhouette({ device }: { device: Device }) {
 export default function DeviceSelect() {
   const navigate = useNavigate()
   const devices = useMemo(() => getDevices(), [])
-  const [showTutorialPrompt, setShowTutorialPrompt] = useState(false)
-
-  // Show tutorial prompt after 1 second
-  useEffect(() => {
-    // Don't show if user has already seen or dismissed the tutorial
-    const dismissed = sessionStorage.getItem('tutorial-dismissed')
-    if (dismissed) return
-    const t = setTimeout(() => setShowTutorialPrompt(true), 1000)
-    return () => clearTimeout(t)
-  }, [])
+  // Offer the tour inline unless the user already took or dismissed it.
+  const [showTutorialPrompt, setShowTutorialPrompt] = useState(
+    () => !sessionStorage.getItem('tutorial-dismissed'),
+  )
 
   const handleStartTutorial = () => {
     setShowTutorialPrompt(false)
@@ -118,10 +112,10 @@ export default function DeviceSelect() {
     <div className="page-enter relative">
       {/* ── Top nav (persists above everything) ── */}
       <nav className="sticky top-0 z-50 flex items-center justify-between gap-4 px-6 sm:px-10 py-3 border-b border-gray-800 bg-[var(--c-base)]/85 backdrop-blur">
-        <span className="hidden sm:inline font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+        <span className="hidden sm:inline font-mono text-xs tracking-[0.16em] text-gray-300">
           fusionsimulator<span className="text-gray-600">.io</span>
         </span>
-        <div className="flex items-center gap-5 font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500">
+        <div className="flex items-center gap-5 text-sm text-gray-500">
           <Link to="/bibliography" className="hover:text-cyan-400 transition-colors">Bibliography</Link>
           <a
             href="https://github.com/d-burg/fusion-sim"
@@ -135,7 +129,7 @@ export default function DeviceSelect() {
       </nav>
 
       {/* ── Hero (pinned; the device panel parallax-slides over it) ── */}
-      <header className="sticky top-0 z-0 h-[100svh] px-6 sm:px-10 overflow-hidden flex items-center">
+      <header className="sticky top-0 z-0 h-[70svh] px-6 sm:px-10 overflow-hidden flex items-center">
         <PlasmaBackdrop className="absolute inset-0 w-full h-full pointer-events-none" />
         {/* Fade the plasma into the page on the left so the wordmark stays crisp */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[var(--c-base)] via-[var(--c-base)]/60 to-transparent" />
@@ -143,68 +137,88 @@ export default function DeviceSelect() {
           <h1 className="stagger-1 whitespace-nowrap text-[clamp(1.7rem,8.5vw,4.5rem)] font-bold tracking-tight text-white">
             fusionsimulator<span className="text-gray-600">.io</span>
           </h1>
-          <p className="stagger-2 mt-4 text-gray-400 text-base sm:text-lg font-mono tracking-tight">
+          <p className="stagger-2 mt-4 text-gray-400 text-base sm:text-lg">
             Real-time tokamak plasma simulator
           </p>
-          <p className="stagger-2 mt-2 text-gray-600 text-[11px] font-mono tracking-wider uppercase">
-            0D transport &middot; MHD equilibrium &middot; ELM dynamics &middot; Fusion diagnostics
-          </p>
-        </div>
-        {/* Scroll affordance */}
-        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 font-mono text-[10px] tracking-[0.18em] uppercase text-gray-600 scroll-hint">
-          <span>Select a device</span>
-          <span className="text-base leading-none">↓</span>
         </div>
       </header>
 
       {/* ── Device selection (slides up over the pinned hero) ── */}
-      <main className="relative z-10 bg-[var(--c-base)] border-t border-gray-800 shadow-[0_-28px_60px_rgba(0,0,0,0.6)] px-6 sm:px-10 pt-12 pb-16">
+      <main className="relative z-10 bg-[var(--c-base)] border-t border-gray-800 px-6 sm:px-10 pt-12 pb-16">
         <div className="max-w-6xl mx-auto">
-          <div className="panel-title pb-2 mb-px">
-            <span className="panel-num">01 · </span>Select a device
-          </div>
+          <div className="panel-title pb-2 mb-px">Select a device</div>
 
-          {/* Hairline-tiled device row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--c-line)] border-y border-gray-800">
+          {/* Inline tour offer (dismissable) */}
+          {showTutorialPrompt && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-x border-gray-800 bg-gray-900 px-4 py-3">
+              <p className="text-sm text-gray-400 flex-1 min-w-[16rem]">
+                New here? A 2-minute guided tour walks through each control-room panel
+                using DIII-D in H-mode as a reference pulse.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleStartTutorial}
+                  className="bg-cyan-600 px-3 py-1.5 text-sm text-white cursor-pointer transition-colors"
+                >
+                  Take the guided tour
+                </button>
+                <button
+                  onClick={handleSkipTutorial}
+                  className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors cursor-pointer"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Hairline-tiled device row; the first machine reads as primary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--c-line)] border-y border-gray-800">
             {devices.map((d, i) => {
               const meta = DEVICE_META[d.id] ?? { location: '', desc: '' }
+              const primary = i === 0
               return (
                 <button
                   key={d.id}
                   onClick={() => navigate(`/program/${d.id}`)}
                   className={`stagger-${i + 3} group bg-gray-900 p-6 text-left
                              hover:bg-[var(--c-raised)] transition-colors duration-200 cursor-pointer
-                             flex flex-col`}
+                             flex ${primary ? 'md:col-span-3 md:flex-row md:items-center md:gap-8' : ''} flex-col`}
                 >
                   {/* Cross-section silhouette */}
-                  <div className="h-40">
-                    <DeviceSilhouette device={d} />
+                  <div className={primary ? 'md:w-72 shrink-0' : 'h-40'}>
+                    <DeviceSilhouette device={d} large={primary} />
                   </div>
 
-                  {/* Machine name */}
-                  <h2 className="font-mono text-xl font-bold tracking-tight text-white group-hover:text-cyan-400 transition-colors mt-3">
-                    {d.name}
-                  </h2>
-                  <div className="font-mono text-[10px] uppercase tracking-wider text-gray-600 mb-3 mt-0.5">
-                    {meta.location}{meta.status ? ` · ${meta.status}` : ''}
-                  </div>
+                  <div className="flex flex-col flex-1">
+                    {/* Machine name */}
+                    <h2
+                      className={`font-mono ${primary ? 'text-3xl md:mt-0' : 'text-xl'} font-bold tracking-tight
+                                  text-white group-hover:text-cyan-400 transition-colors mt-3`}
+                    >
+                      {d.name}
+                    </h2>
+                    <div className="text-xs text-gray-500 mb-3 mt-0.5">
+                      {meta.location}{meta.status ? ` · ${meta.status}` : ''}
+                    </div>
 
-                  {/* Stats */}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400 mb-3 font-mono tabular-nums">
-                    <span>R₀ = {d.r0.toFixed(2)} m</span>
-                    <span>a = {d.a.toFixed(2)} m</span>
-                    <span>Iₚ ≤ {d.ip_max} MA</span>
-                    <span>Bₜ ≤ {d.bt_max} T</span>
-                  </div>
+                    {/* Stats */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400 mb-3 font-mono tabular-nums">
+                      <span>R₀ = {d.r0.toFixed(2)} m</span>
+                      <span>a = {d.a.toFixed(2)} m</span>
+                      <span>Iₚ ≤ {d.ip_max} MA</span>
+                      <span>Bₜ ≤ {d.bt_max} T</span>
+                    </div>
 
-                  {/* Description */}
-                  <p className="text-gray-500 text-sm leading-relaxed flex-grow">
-                    {meta.desc}
-                  </p>
+                    {/* Description */}
+                    <p className={`text-gray-500 leading-relaxed flex-grow ${primary ? 'text-base max-w-2xl' : 'text-sm'}`}>
+                      {meta.desc}
+                    </p>
 
-                  {/* Arrow */}
-                  <div className="mt-4 font-mono text-[11px] uppercase tracking-wider text-gray-600 group-hover:text-cyan-400 transition-colors">
-                    Select →
+                    {/* Arrow */}
+                    <div className="mt-4 text-sm text-gray-500 group-hover:text-cyan-400 transition-colors">
+                      Select →
+                    </div>
                   </div>
                 </button>
               )
@@ -212,21 +226,21 @@ export default function DeviceSelect() {
           </div>
 
           {/* Footer */}
-          <footer className="mt-12 space-y-4 text-[11px] leading-relaxed">
-            <div className="border-l-2 border-gray-700 pl-4 py-1 text-gray-500 max-w-3xl">
-              <span className="font-mono uppercase tracking-wider text-gray-400">Disclaimer</span>
-              {' — '}This simulator uses zero-dimensional scaling laws and analytic approximations
-              (0D power balance, IPB98(y,2) confinement scaling, Cerfon-Freidberg equilibrium).
+          <footer className="mt-12 space-y-4 text-xs leading-relaxed">
+            <div className="border-l border-gray-800 pl-4 py-1 text-gray-500 max-w-3xl">
+              <span className="font-medium text-gray-300">Disclaimer:</span> This simulator uses
+              zero-dimensional scaling laws and analytic approximations (0D power balance,
+              IPB98(y,2) confinement scaling, Cerfon-Freidberg equilibrium).
               Results are designed for <em>qualitative educational use</em> and should not be
               interpreted as engineering predictions or used for reactor design.
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-gray-600 pt-2">
-              <span>Open-source · Educational</span>
-              <span className="text-gray-700">·</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 pt-2">
+              <span>Open-source, educational</span>
+              <span className="text-gray-500">·</span>
               <Link to="/bibliography" className="hover:text-cyan-400 transition-colors">
-                Physics Bibliography
+                Physics bibliography
               </Link>
-              <span className="text-gray-700">·</span>
+              <span className="text-gray-500">·</span>
               <a
                 href="https://github.com/d-burg/fusion-sim"
                 target="_blank"
@@ -235,73 +249,15 @@ export default function DeviceSelect() {
               >
                 GitHub
               </a>
-              <span className="text-gray-700">·</span>
-              <span>v{__APP_VERSION__}</span>
+              <span className="text-gray-500">·</span>
+              <span className="font-mono tabular-nums">v{__APP_VERSION__}</span>
             </div>
-            <p className="font-mono text-[10px] text-gray-700">
+            <p className="text-xs text-gray-500">
               © 2026 Daniel Burgess · Columbia Fusion Research Center
             </p>
           </footer>
         </div>
       </main>
-
-      {/* ─── Tutorial prompt overlay ─── */}
-      {showTutorialPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm
-                        animate-[fadeIn_0.3s_ease-out]">
-          <div className="bg-gray-950 border border-gray-700 rounded-lg shadow-2xl
-                          max-w-md w-full mx-4 overflow-hidden animate-[slideUp_0.4s_ease-out]">
-            {/* Accent bar */}
-            <div className="h-0.5 bg-cyan-500" />
-
-            <div className="p-6">
-              <div className="text-center mb-4">
-                <svg
-                  className="w-9 h-9 mx-auto mb-3 text-cyan-400"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.25}
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
-                  <ellipse cx="12" cy="12" rx="10" ry="4.2" />
-                  <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(60 12 12)" />
-                  <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(120 12 12)" />
-                </svg>
-                <h2 className="text-xl font-bold text-white mb-1">New to Fusion?</h2>
-                <p className="text-gray-400 text-sm">
-                  Take a 2-minute guided tour of the control room to learn
-                  what each panel does, how tokamaks work, and what your
-                  objectives are.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <button
-                  onClick={handleStartTutorial}
-                  className="w-full px-4 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm
-                             font-semibold transition-colors cursor-pointer text-white
-                             flex items-center justify-center gap-2"
-                >
-                  Take the Guided Tour →
-                </button>
-                <button
-                  onClick={handleSkipTutorial}
-                  className="w-full px-4 py-2 text-gray-500 hover:text-gray-300 text-sm
-                             transition-colors cursor-pointer"
-                >
-                  Skip — I know what I'm doing
-                </button>
-              </div>
-
-              <p className="text-center text-gray-600 text-[10px] mt-4">
-                The tour will load DIII-D in H-mode as a reference pulse
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

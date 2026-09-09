@@ -169,7 +169,7 @@ export default function ControlRoom() {
           <select
             value={activeDevice}
             onChange={(e) => handleDeviceChange(e.target.value)}
-            className="bg-gray-800 border border-gray-700 text-cyan-400 text-[11px] sm:text-xs font-bold
+            className="bg-gray-800 border border-gray-700 text-sm font-medium
                        rounded px-1 sm:px-1.5 py-1 cursor-pointer hover:border-cyan-600
                        focus:outline-none focus:border-cyan-500 transition-colors"
           >
@@ -184,7 +184,7 @@ export default function ControlRoom() {
           <select
             value={activePreset}
             onChange={(e) => handlePresetChange(e.target.value as PresetId)}
-            className="bg-gray-800 border border-gray-700 text-amber-400 text-[11px] sm:text-xs font-bold
+            className="bg-gray-800 border border-gray-700 text-sm font-medium
                        rounded px-1 sm:px-1.5 py-1 cursor-pointer hover:border-amber-600
                        focus:outline-none focus:border-amber-500 transition-colors"
           >
@@ -202,7 +202,7 @@ export default function ControlRoom() {
                 <button
                   key={f}
                   onClick={() => handleFuelChange(f)}
-                  className={`px-1.5 sm:px-2 py-1 text-[10px] sm:text-[11px] font-semibold transition-colors cursor-pointer
+                  className={`px-1.5 sm:px-2 py-1 text-sm font-medium transition-colors cursor-pointer
                     ${fuelType === f
                       ? 'bg-emerald-600 text-white'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
@@ -221,7 +221,7 @@ export default function ControlRoom() {
           {!running ? (
             <button
               onClick={controls.start}
-              className="px-2 sm:px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-[11px] sm:text-xs font-semibold
+              className="px-2 sm:px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-sm
                          transition-colors cursor-pointer flex items-center justify-center gap-1 min-w-[4.5rem] sm:min-w-[5rem]"
             >
               ▶ Start
@@ -229,7 +229,7 @@ export default function ControlRoom() {
           ) : (
             <button
               onClick={controls.pause}
-              className="px-2 sm:px-3 py-1 bg-amber-600 hover:bg-amber-500 rounded text-[11px] sm:text-xs font-semibold
+              className="px-2 sm:px-3 py-1 bg-amber-600 hover:bg-amber-500 rounded text-sm
                          transition-colors cursor-pointer flex items-center justify-center gap-1 min-w-[4.5rem] sm:min-w-[5rem]"
             >
               ⏸ Pause
@@ -240,7 +240,7 @@ export default function ControlRoom() {
           <button
             onClick={controls.reset}
             aria-hidden={running && hasCustomProgram}
-            className={`px-2 sm:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[11px] sm:text-xs font-semibold
+            className={`px-2 sm:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm
                        transition-colors cursor-pointer ${running && hasCustomProgram ? 'invisible' : ''}`}
           >
             ↺ Reset
@@ -252,14 +252,14 @@ export default function ControlRoom() {
               <button
                 key={s}
                 onClick={() => handleSpeedChange(s)}
-                className={`px-1 sm:px-1.5 py-1 text-[10px] sm:text-[11px] font-semibold transition-colors cursor-pointer
+                className={`px-1 sm:px-1.5 py-1 text-sm transition-colors cursor-pointer
                   ${
                     activeSpeed === s
                       ? 'bg-gray-600 text-white'
                       : 'bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
                   }`}
               >
-                {s}x
+                <span className="font-mono tabular-nums">{s}</span>x
               </button>
             ))}
           </div>
@@ -267,7 +267,7 @@ export default function ControlRoom() {
           {/* Edit Program button */}
           <button
             onClick={() => setShowPlanner(!showPlanner)}
-            className="px-1.5 sm:px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] sm:text-[11px] font-semibold
+            className="px-1.5 sm:px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-sm
                        transition-colors cursor-pointer flex items-center justify-center gap-1 sm:min-w-[4.25rem]"
           >
             {showPlanner ? (
@@ -283,10 +283,12 @@ export default function ControlRoom() {
 
         {/* Time readout + Settings */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end">
-          <div className="font-mono text-[10px] sm:text-xs text-gray-400 tabular-nums whitespace-nowrap">
-            t={time.toFixed(3)}s / {duration.toFixed(1)}s
+          <div className="text-xs text-gray-400 whitespace-nowrap">
+            t=<span className="font-mono tabular-nums">{time.toFixed(3)}</span>s
+            {' / '}
+            <span className="font-mono tabular-nums">{duration.toFixed(1)}</span>s
             {finished && (
-              <span className="ml-1 text-[9px] sm:text-[10px] text-gray-600">
+              <span className="ml-1 text-xs text-gray-600">
                 {scrubTime !== null ? '(scrub)' : '(done)'}
               </span>
             )}
@@ -297,14 +299,19 @@ export default function ControlRoom() {
 
       {/* ─── Main grid ─── */}
       <div className="flex-1 overflow-x-auto">
-      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[1.1fr_1fr] gap-px min-h-0 bg-[var(--c-line)]">
-        {/* Top-left: Equilibrium cross-section (single cell) */}
-        <div data-tutorial="equilibrium" className="stagger-1 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+      {/* The equilibrium is the primary object: it owns the full-height left
+          column (~40% of the width, ~40% of the total area — more than any
+          other cell). Everything else is secondary and sits to its right.
+          Cells carry no card chrome; the 1px grid gap over the base colour
+          does all the separating. */}
+      <div className="min-w-[768px] h-full grid grid-cols-[1.6fr_1.5fr_0.9fr] grid-rows-[1.05fr_1fr] gap-px min-h-0 bg-[var(--c-line)]">
+        {/* Left column, full height: equilibrium cross-section (primary) */}
+        <div data-tutorial="equilibrium" className="stagger-1 panel-cell row-span-2">
           <EquilibriumCanvas snapshot={displaySnapshot} wallJson={wallJson} limiterPoints={limiterPoints} />
         </div>
 
         {/* Top row, cols 2-3: Unified trace panel */}
-        <div data-tutorial="traces" className="stagger-2 col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="traces" className="stagger-2 panel-cell col-span-2">
           <UnifiedTracePanel
             history={history}
             programJson={programJson}
@@ -317,8 +324,8 @@ export default function ControlRoom() {
           />
         </div>
 
-        {/* Bottom row, cols 1-2: Status panel (extends under equilibrium) */}
-        <div data-tutorial="status" className="stagger-3 col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        {/* Bottom row, col 2: Status panel */}
+        <div data-tutorial="status" className="stagger-3 panel-cell">
           <StatusPanel
             snapshot={displaySnapshot}
             finished={finished}
@@ -331,8 +338,8 @@ export default function ControlRoom() {
           />
         </div>
 
-        {/* Bottom-right: 3D port view */}
-        <div data-tutorial="portview" className="stagger-4 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        {/* Bottom row, col 3: 3D port view */}
+        <div data-tutorial="portview" className="stagger-4 panel-cell">
           <PortView
             snapshot={plasmaSnapshot}
             limiterPoints={limiterPoints}

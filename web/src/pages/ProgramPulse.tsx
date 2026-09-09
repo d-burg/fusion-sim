@@ -24,8 +24,8 @@ const ALL_PRESETS: { id: PresetId; name: string; desc: string; color: string }[]
   },
   {
     id: 'density_limit',
-    name: 'Density Limit',
-    desc: 'Over-fuelled plasma — pushes past the Greenwald limit. Will it disrupt?',
+    name: 'Density limit',
+    desc: 'Over-fuelled plasma that pushes past the Greenwald limit. Will it disrupt?',
     color: 'red',
   },
 ]
@@ -35,13 +35,13 @@ const CENTAUR_PRESETS: typeof ALL_PRESETS = [
   {
     id: 'hmode',
     name: 'NT-edge',
-    desc: 'Negative-triangularity edge mode — ELM-free high confinement',
+    desc: 'Negative-triangularity edge mode with ELM-free high confinement',
     color: 'cyan',
   },
   {
     id: 'density_limit',
-    name: 'Density Limit',
-    desc: 'Over-fuelled plasma — pushes past the Greenwald limit. Will it disrupt?',
+    name: 'Density limit',
+    desc: 'Over-fuelled plasma that pushes past the Greenwald limit. Will it disrupt?',
     color: 'red',
   },
 ]
@@ -116,11 +116,11 @@ function WaveformRow({
   return (
     <div className="flex items-center gap-3">
       <div
-        className="w-20 text-right text-xs text-gray-500 shrink-0 cursor-help"
+        className="w-20 text-right font-mono text-xs text-gray-400 shrink-0 cursor-help"
         title={unit ? `${title} (${unit})` : title}
       >
         {label}
-        {unit && <span className="text-gray-600 ml-1">({unit})</span>}
+        {unit && <span className="text-gray-500 ml-1">({unit})</span>}
       </div>
       <div className="flex-1 bg-gray-950 rounded px-2 py-1">
         <Sparkline points={points} duration={duration} color={color} />
@@ -163,26 +163,20 @@ export default function ProgramPulse() {
       <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800">
         <button
           onClick={() => navigate('/')}
-          className="font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500 hover:text-cyan-400 transition-colors cursor-pointer"
+          className="text-sm text-gray-500 hover:text-cyan-400 transition-colors cursor-pointer"
         >
           ← Device selection
         </button>
-        <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+        <span className="font-mono text-xs tracking-[0.16em] text-gray-300">
           fusionsimulator<span className="text-gray-600">.io</span>
         </span>
       </nav>
 
       <main className="flex-1 w-full max-w-5xl mx-auto px-6 sm:px-10 py-12">
         {/* Header */}
-        <div className="panel-title mb-2">
-          <span className="panel-num">02 · </span>Program pulse
-        </div>
-        <h1 className="font-mono text-3xl sm:text-4xl font-bold tracking-tight text-white mb-2">
+        <h1 className="font-mono text-3xl sm:text-4xl font-bold tracking-tight text-white mb-10">
           {device.name}
         </h1>
-        <p className="text-gray-500 text-sm font-mono mb-10">
-          Select a scenario, review the waveforms, then run.
-        </p>
 
         {/* Scenario selector — hairline-tiled */}
         <div className="panel-title pb-2 mb-px">Scenario</div>
@@ -197,10 +191,10 @@ export default function ProgramPulse() {
                   ${isSelected ? 'bg-[var(--c-raised)]' : 'bg-gray-900 hover:bg-[var(--c-raised)]'}`}
               >
                 {isSelected && <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-500" />}
-                <h3 className={`font-mono text-[11px] uppercase tracking-wider mb-1.5 ${isSelected ? 'text-cyan-400' : 'text-gray-300'}`}>
+                <h3 className={`text-sm font-medium mb-1.5 ${isSelected ? 'text-white' : 'text-gray-400'}`}>
                   {p.name}
                 </h3>
-                <p className="text-gray-500 text-xs leading-relaxed">{p.desc}</p>
+                <p className={`text-sm leading-relaxed ${isSelected ? 'text-gray-400' : 'text-gray-500'}`}>{p.desc}</p>
               </button>
             )
           })}
@@ -211,8 +205,8 @@ export default function ProgramPulse() {
           <div className="mb-10">
             <div className="flex items-baseline justify-between mb-3 border-b border-gray-800 pb-2">
               <h2 className="panel-title">Programmed waveforms</h2>
-              <span className="text-xs text-gray-500 font-mono tabular-nums">
-                Duration {program.duration.toFixed(1)} s
+              <span className="text-xs text-gray-500">
+                Duration <span className="font-mono tabular-nums text-gray-400">{program.duration.toFixed(1)} s</span>
               </span>
             </div>
 

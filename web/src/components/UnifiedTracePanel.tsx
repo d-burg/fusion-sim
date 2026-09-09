@@ -593,11 +593,11 @@ export default function UnifiedTracePanel({
         </InfoPopup>
         <button
           onClick={() => setDropdownOpen((v) => !v)}
-          className="px-2 py-0.5 text-[10px] font-mono rounded
+          className="px-2 py-0.5 text-xs rounded
                      bg-gray-800/80 text-gray-300 border border-gray-600/50
                      hover:bg-gray-700/80 hover:text-white transition-colors"
         >
-          Traces ({selectedKeys.size})
+          Traces (<span className="font-mono tabular-nums">{selectedKeys.size}</span>)
         </button>
         {dropdownOpen && (
           <div
@@ -608,7 +608,7 @@ export default function UnifiedTracePanel({
             {ALL_TRACES.map((t) => (
               <label
                 key={t.key}
-                className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 cursor-pointer text-[11px] font-mono"
+                className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 cursor-pointer text-xs"
               >
                 <input
                   type="checkbox"

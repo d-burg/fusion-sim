@@ -13,16 +13,25 @@ interface TutorialStep {
   placement: 'right' | 'left' | 'center' | 'bottom-right' | 'bottom-left'
 }
 
+/** Same glyph the control room's Edit button uses. */
+function EditIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931ZM19.5 7.125 16.875 4.5" />
+    </svg>
+  )
+}
+
 const STEPS: TutorialStep[] = [
   /* ─── 0: Welcome ─── */
   {
     target: null,
-    title: 'Welcome to the Fusion Simulator',
+    title: 'Welcome to the fusion simulator',
     placement: 'center',
     content: (
       <>
         <p>
-          You are looking at the <b>control room</b> of a tokamak — a
+          You are looking at the <b>control room</b> of a tokamak, a
           donut-shaped device that confines a superheated plasma with powerful
           magnetic fields to produce energy from nuclear fusion, the same
           process that powers the Sun.
@@ -37,11 +46,11 @@ const STEPS: TutorialStep[] = [
         </p>
         <p className="mt-2">
           Each simulation run is called a <b>pulse</b>. You
-          will program the heating power, plasma current, density, and shaping —
+          will program the heating power, plasma current, density, and shaping,
           then watch the plasma respond in real time. Your job is to keep the
           plasma stable, avoid disruptions, and maximize fusion performance.
         </p>
-        <p className="mt-2 text-gray-400 text-[10px]">
+        <p className="mt-2 text-gray-500">
           Let's walk through each panel so you know what you're looking at.
         </p>
       </>
@@ -51,19 +60,19 @@ const STEPS: TutorialStep[] = [
   /* ─── 1: Equilibrium ─── */
   {
     target: '[data-tutorial="equilibrium"]',
-    title: 'Equilibrium Cross-Section',
+    title: 'Equilibrium cross-section',
     placement: 'right',
     content: (
       <>
         <p>
-          This is a <b>poloidal cross-section</b> of the tokamak — imagine
+          This is a <b>poloidal cross-section</b> of the tokamak: imagine
           slicing the donut vertically. You're looking at a 2D slice of the
           3D torus.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Flux Surfaces</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Flux surfaces</p>
         <p>
-          The colored contours are <b>flux surfaces</b> — nested, closed
+          The colored contours are <b>flux surfaces</b>: nested, closed
           surfaces of constant magnetic flux. Because transport along
           field lines is much faster than across them, temperature and
           density are roughly constant on each flux surface. The hot core
@@ -71,26 +80,26 @@ const STEPS: TutorialStep[] = [
           outside.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Separatrix & X-Point</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Separatrix and X-point</p>
         <p>
-          The outermost closed flux surface — the <b>separatrix</b> (red
-          outline) — is the boundary between confined and unconfined plasma.
+          The <b>separatrix</b> (red outline) is the outermost closed flux
+          surface, the boundary between confined and unconfined plasma.
           At the bottom, the separatrix forms an <b>X-point</b> where the
           poloidal magnetic field is zero. Field lines outside the
           separatrix are "open" and guide escaping particles and heat
           downward to the <b>divertor</b> target plates.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Plasma Shape</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Plasma shape</p>
         <p>
           The shape of the plasma cross-section is characterized by its
-          <b> elongation (κ)</b> — how tall vs. wide it is — and its
-          <b> triangularity (δ)</b> — how D-shaped it is. Elongated,
+          <b> elongation (κ)</b>, how tall it is versus wide, and its
+          <b> triangularity (δ)</b>, how D-shaped it is. Elongated,
           D-shaped plasmas are more stable and confine energy better.
           The shape is controlled by currents in external shaping coils.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Strike Points</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Strike points</p>
         <p>
           The points where the separatrix intersects the divertor plates
           are called <b>strike points</b>. The exhaust heat is concentrated
@@ -104,7 +113,7 @@ const STEPS: TutorialStep[] = [
   /* ─── 2: Traces Overview ─── */
   {
     target: '[data-tutorial="traces"]',
-    title: 'Time Traces',
+    title: 'Time traces',
     placement: 'bottom-left',
     content: (
       <>
@@ -122,20 +131,20 @@ const STEPS: TutorialStep[] = [
           traces using the dropdown at the top-left of the panel.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Reading the Traces</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Reading the traces</p>
         <p>
           The horizontal axis is time (seconds). The dashed lines show
-          the <b>programmed targets</b> — what you asked for. The solid
+          the <b>programmed targets</b>, what you asked for. The solid
           lines show the <b>actual plasma response</b>. The plasma doesn't
-          always follow the program — it has its own physics. If the solid
+          always follow the program; it has its own physics. If the solid
           line diverges far from the dashed line, you may be pushing the
           plasma too hard.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Scrubbing</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Scrubbing</p>
         <p>
           After a pulse finishes, you can click and drag on this panel
-          to <b>scrub</b> through time — replaying the equilibrium and
+          to <b>scrub</b> through time, replaying the equilibrium and
           diagnostics at any moment in the pulse.
         </p>
       </>
@@ -145,7 +154,7 @@ const STEPS: TutorialStep[] = [
   /* ─── 3: Plasma Parameters & Power Balance ─── */
   {
     target: '[data-tutorial="status"]',
-    title: 'Plasma Parameters & Power Balance',
+    title: 'Plasma parameters and power balance',
     placement: 'bottom-right',
     content: (
       <>
@@ -154,7 +163,7 @@ const STEPS: TutorialStep[] = [
           It's organized into several sections:
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Core Parameters</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Core parameters</p>
         <p>
           The plasma current <b>I<sub>p</sub></b> (MA), toroidal
           field <b>B<sub>t</sub></b> (T), central electron
@@ -166,7 +175,7 @@ const STEPS: TutorialStep[] = [
           density for fusion, but the plasma has limits on how far you can push.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Power Balance</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Power balance</p>
         <p>
           Power goes <i>in</i> through ohmic heating (resistive), neutral beam injection
           (NBI), and electron cyclotron heating (ECH). Power comes <i>out</i> as
@@ -176,7 +185,7 @@ const STEPS: TutorialStep[] = [
           sense of the power flows.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Stability & Disruption Risk</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Stability and disruption risk</p>
         <p>
           Key stability metrics like <b>q<sub>95</sub></b> (safety factor),
           <b> β<sub>N</sub></b> (normalized beta), and <b>f<sub>GW</sub></b> (Greenwald fraction) tell you how close the plasma is to known
@@ -186,10 +195,10 @@ const STEPS: TutorialStep[] = [
           The disruption risk gauge turns red when you're in danger.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Fusion Performance</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Fusion performance</p>
         <p>
           The neutron diagnostic shows the fusion reaction rate and
-          <b> Q<sub>plasma</sub></b> — the ratio of fusion power produced to
+          <b> Q<sub>plasma</sub></b>, the ratio of fusion power produced to
           heating power supplied. Q = 1 is "breakeven"; Q = 10 is the
           ITER target. On smaller machines running D-D fuel, Q will be
           tiny — but on ITER with D-T fuel, the energy of the reactions puts us in a regime where generating electricity from fusion becomes a possibility.
@@ -201,27 +210,27 @@ const STEPS: TutorialStep[] = [
   /* ─── 4: Divertor ─── */
   {
     target: '[data-tutorial="status"]',
-    title: 'Divertor Temperature',
+    title: 'Divertor temperature',
     placement: 'bottom-right',
     content: (
       <>
         <p>
           Within the status panel, the <b>divertor diagnostics</b> section
-          deserves special attention — it's one of the biggest engineering
+          deserves special attention. It covers one of the biggest engineering
           challenges in fusion.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">The Exhaust Problem</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">The exhaust problem</p>
         <p>
           All the power that crosses the separatrix flows along field lines
-          in a thin <b>scrape-off layer</b> (SOL) — typically only a few
-          millimeters wide — and slams into the divertor target plates.
+          in a thin <b>scrape-off layer</b> (SOL), typically only a few
+          millimeters wide, and slams into the divertor target plates.
           This concentrates megawatts of power onto a tiny area, creating
           heat fluxes comparable to a rocket nozzle or the surface of the
           Sun (~10 MW/m²).
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Peak Heat Flux & Surface Temperature</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Peak heat flux and surface temperature</p>
         <p>
           The panel shows the <b>peak heat flux</b> (MW/m²) at the strike
           point and the resulting <b>surface temperature</b> of the divertor
@@ -229,7 +238,7 @@ const STEPS: TutorialStep[] = [
           pressurized water.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Why This Matters</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Why this matters</p>
         <p>
           Tungsten undergoes <b>recrystallization</b> above ~1200–1300°C,
           which makes it brittle and prone to cracking under thermal cycling.
@@ -240,7 +249,7 @@ const STEPS: TutorialStep[] = [
           spread the heat over a larger area.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Detachment</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Detachment</p>
         <p>
           The ideal operating regime is <b>detachment</b>, where the divertor
           plasma becomes cold and dense enough that most exhaust power is
@@ -255,20 +264,20 @@ const STEPS: TutorialStep[] = [
   /* ─── 5: Port View ─── */
   {
     target: '[data-tutorial="portview"]',
-    title: '3D Port View',
+    title: '3D port view',
     placement: 'left',
     content: (
       <>
         <p>
           This is a <b>3D view</b> looking through a diagnostic port into the
-          tokamak vessel — similar to what a visible-light camera would see in
+          tokamak vessel, similar to what a visible-light camera would see in
           a real experiment.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">What You're Seeing</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">What you're seeing</p>
         <p>
           The glowing column in the center is the <b>plasma</b>. The color
-          and intensity reflect the plasma state — it glows brighter with
+          and intensity reflect the plasma state: it glows brighter with
           higher temperature and density.
         </p>
         <p className="mt-1">
@@ -279,7 +288,7 @@ const STEPS: TutorialStep[] = [
           visualized spatially.
         </p>
 
-        <p className="mt-2 text-cyan-300 font-semibold text-[11px]">In a Real Tokamak</p>
+        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">In a real tokamak</p>
         <p>
           Real tokamaks have cameras that capture visible and infrared images
           through shielded viewports. Engineers use infrared thermography to
@@ -293,11 +302,11 @@ const STEPS: TutorialStep[] = [
   /* ─── 6: Objective ─── */
   {
     target: null,
-    title: 'Your Mission',
+    title: 'Your mission',
     placement: 'center',
     content: (
       <>
-        <p className="text-cyan-300 font-semibold">
+        <p className="text-sm font-medium text-gray-200">
           Run pulses in a fusion power plant that:
         </p>
         <ul className="list-disc list-inside mt-1 space-y-1">
@@ -318,7 +327,7 @@ const STEPS: TutorialStep[] = [
           <li>
             <b>Achieve sufficient fusion power</b> — maximize the neutron
             rate and <b>Q<sub>plasma</sub></b>. This requires high temperature,
-            high density, and good confinement — all while staying within
+            high density, and good confinement, all while staying within
             stability limits.
           </li>
           <li>
@@ -328,8 +337,8 @@ const STEPS: TutorialStep[] = [
           </li>
         </ul>
 
-        <div className="mt-3 p-2 bg-gray-800/60 rounded border border-gray-700/50">
-          <p className="text-cyan-300 font-semibold text-[11px] mb-1">Strategy Tip</p>
+        <div className="mt-3 p-2 bg-gray-800 border border-gray-700">
+          <p className="text-sm font-medium text-gray-200 mb-1">Strategy tip</p>
           <p>
             The <b>smaller and lower-field</b> the device, the better for
             testing scenarios in a lower-consequence environment. A disruption
@@ -340,20 +349,26 @@ const STEPS: TutorialStep[] = [
             risk from individual disruptions and even ELMs — but also the
             higher the potential fusion performance and Q.
           </p>
-          <p className="mt-1 text-amber-400 font-semibold">
+          <p className="mt-1 font-medium text-gray-200">
             Start small and work your way up. Good luck.
           </p>
         </div>
 
-        <div className="mt-3 p-2 bg-gray-800/40 rounded border border-gray-700/30 text-[10px] text-gray-400">
-          <p className="font-semibold text-gray-300 mb-1">Quick Controls Recap</p>
+        <div className="mt-3 p-2 bg-gray-800 border border-gray-700 text-xs text-gray-400">
+          <p className="text-sm font-medium text-gray-200 mb-1">Quick controls recap</p>
           <ul className="space-y-0.5">
-            <li><b>▶ Start / ⏸ Pause</b> — run or pause the pulse</li>
-            <li><b>Speed buttons</b> — 0.5x to 2x playback speed</li>
-            <li><b>Device dropdown</b> — switch between tokamaks (DIII-D, JET, ITER, CENTAUR)</li>
-            <li><b>Preset buttons</b> — H-mode, L-mode, or Density Limit scenarios</li>
-            <li><b>📋 Edit</b> — open the pulse planner to customize the program</li>
-            <li><b>After pulse</b> — click on the trace panel to scrub through time</li>
+            <li><b>▶ Start / ⏸ Pause</b>: run or pause the pulse</li>
+            <li><b>Speed buttons</b>: 0.5x to 2x playback speed</li>
+            <li><b>Device dropdown</b>: switch between tokamaks (DIII-D, JET, ITER, CENTAUR)</li>
+            <li><b>Preset buttons</b>: H-mode, L-mode, or Density limit scenarios</li>
+            <li>
+              <b className="inline-flex items-center gap-1 align-middle">
+                <EditIcon />
+                Edit
+              </b>
+              : open the pulse planner to customize the program
+            </li>
+            <li><b>After pulse</b>: click on the trace panel to scrub through time</li>
           </ul>
         </div>
       </>
@@ -557,8 +572,8 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
       {/* Highlight border glow around target */}
       {highlightRect && (
         <div
-          className="absolute border-2 border-cyan-400/60 rounded-lg pointer-events-none
-                     shadow-[0_0_20px_rgba(34,211,238,0.3)] transition-all duration-500"
+          className="absolute border border-amber-400 pointer-events-none
+                     transition-all duration-500"
           style={{
             top: highlightRect.top - 3,
             left: highlightRect.left - 3,
@@ -571,30 +586,32 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
       {/* Explanation card */}
       <div
         ref={cardRef}
-        className={`absolute bg-gray-950/95 border border-cyan-500/30 rounded-lg shadow-2xl
-                   shadow-cyan-500/10 backdrop-blur-sm overflow-y-auto
+        className={`absolute bg-gray-900 border border-gray-700 shadow-2xl overflow-y-auto
                    ${dragging ? '' : 'transition-all duration-500'} tutorial-card`}
         style={cardStyle}
       >
         {/* Header (drag handle) */}
         <div
-          className="sticky top-0 bg-gray-950/95 backdrop-blur-sm px-4 pt-3 pb-2 border-b border-gray-800/50 z-10 select-none"
+          className="sticky top-0 bg-gray-900 px-4 pt-3 pb-2 border-b border-gray-800 z-10 select-none"
           style={{ cursor: dragging ? 'grabbing' : 'grab' }}
           onMouseDown={onHeaderMouseDown}
         >
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
-              <span className="text-gray-600 text-[10px] mr-0.5" title="Drag to reposition">⠿</span>
-              <span className="text-[10px] text-cyan-500 font-mono">
+              <span className="text-gray-500 text-xs mr-0.5" title="Drag to reposition">⠿</span>
+              <span className="font-mono tabular-nums text-xs text-gray-500">
                 {step + 1}/{STEPS.length}
               </span>
-              <h3 className="text-cyan-400 font-bold text-sm">{currentStep.title}</h3>
+              <h3 className="text-base font-medium text-white">{currentStep.title}</h3>
             </div>
             <button
               onClick={skip}
-              className="text-gray-500 hover:text-white text-xs transition-colors cursor-pointer"
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-white transition-colors cursor-pointer"
             >
-              Skip tour ✕
+              Skip tour
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
           {/* Step dots */}
@@ -615,17 +632,17 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
         </div>
 
         {/* Body */}
-        <div className="px-4 py-3 text-gray-300 text-xs leading-relaxed">
+        <div className="px-4 py-3 text-sm text-gray-400 leading-relaxed">
           {currentStep.content}
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-950/95 backdrop-blur-sm px-4 py-2 border-t border-gray-800/50
+        <div className="sticky bottom-0 bg-gray-900 px-4 py-2 border-t border-gray-800
                         flex items-center justify-between z-10">
           <button
             onClick={prev}
             disabled={step === 0}
-            className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors cursor-pointer
+            className={`px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer
               ${step === 0
                 ? 'text-gray-600 cursor-not-allowed'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800'
@@ -635,10 +652,10 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
           </button>
           <button
             onClick={next}
-            className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 rounded text-xs font-semibold
+            className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-sm font-medium
                        transition-colors cursor-pointer text-white"
           >
-            {step === STEPS.length - 1 ? 'Start Operating →' : 'Next →'}
+            {step === STEPS.length - 1 ? 'Start operating →' : 'Next →'}
           </button>
         </div>
       </div>

@@ -27,7 +27,10 @@
   /* Ink */
   --c-ink:         #e7e8ea;  /* primary text — off-white, not #fff */
   --c-ink-dim:     #9aa0a6;
-  --c-ink-faint:   #6b7177;
+  /* Faintest tier still has to clear WCAG AA for small text: #8a9096 is
+     5.51:1 on --c-surface, 5.01:1 on --c-raised, 5.95:1 on --c-base.
+     (The old #6b7177 was 3.60:1 on --c-surface — a fail.) */
+  --c-ink-faint:   #8a9096;
   /* Accent — restrained warm amber; reserved for action/active/focus */
   --c-accent:      #e0a23a;
   --c-accent-hi:   #efb358;
@@ -35,6 +38,10 @@
   --c-ok:          #57a773;
   --c-warn:        #d8a23a;
   --c-bad:         #c8553d;
+  /* --c-bad as *ink* is only 4.08:1 on --c-surface (AA fail for small text),
+     so alarm TEXT uses a lifted variant; fills/borders keep --c-bad.
+     #dd7059 = 5.54:1 on --c-surface, 5.03:1 on --c-raised. */
+  --c-bad-ink:     #dd7059;
 
   /* Legacy aliases — kept so any component reading these via var() still
      resolves to the new palette. */
@@ -70,9 +77,24 @@ body {
 .font-mono { font-family: var(--font-mono); }
 .tabular-nums { font-variant-numeric: tabular-nums lining-nums; }
 
-/* Smallest labels: bump 1px for legibility (no forced uppercase) */
-.text-\[9px\]  { font-size: 10px; }
-.text-\[10px\] { font-size: 11px; }
+/* ── Type scale: exactly three body sizes ─────────────────────────
+   The markup carries a long tail of arbitrary sizes (7/8/9/10/11px) that
+   rendered as four class names collapsing onto two sizes 1px apart — a flat,
+   uniformly grey texture with no hierarchy. Collapse them deliberately
+   instead, onto three tiers that are actually distinguishable:
+
+     11px  compact labels, units and dense readouts   (.text-[7..11px], .text-xs)
+     13px  default UI text: buttons, nav, menu items, panel titles  (.text-sm)
+     16px  prose paragraphs                                          (.text-base)
+
+   Display headings (.text-lg and up) are left alone. */
+.text-\[7px\], .text-\[8px\], .text-\[9px\], .text-\[10px\], .text-\[11px\], .text-xs,
+.sm\:text-\[10px\], .sm\:text-\[11px\], .sm\:text-xs {
+  font-size: 11px;
+  line-height: 1.35;
+}
+.text-sm   { font-size: 13px; line-height: 1.4; }
+.text-base { font-size: 16px; line-height: 1.5; }
 
 /* ═══════════════════════════════════════════════════════════════════
    SIGNATURE LAYER  (the default look)
@@ -103,11 +125,15 @@ body {
    shadow. Separation comes from the base-bg showing through a 1px grid
    gap (set on the grid container) — a hairline-tiled instrument field,
    not a deck of rounded cards. */
-.bg-gray-900.border.border-gray-700.rounded-lg {
+.bg-gray-900.border.border-gray-700.rounded-lg,
+.panel-cell {
   background: var(--c-surface);
   border: none;
   border-radius: 0;
   box-shadow: none;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* ── Top bar & dividers ───────────────────────────────────────── */
@@ -126,18 +152,18 @@ body {
 .rounded-t, .rounded-b, .rounded-t-lg, .rounded-b-lg { border-radius: 0; }
 
 /* ── Buttons ──────────────────────────────────────────────────────
-   Monochrome at rest, warm to amber on hover/active (kaldera). Thin
-   uppercase letter-spaced mono — the tasteful technical-caps look,
-   NOT chunky bold sans caps. */
+   Monochrome at rest, warm to amber on hover/active. Language is sans
+   (IBM Plex Sans) at the 13px UI tier, sentence case — mono is reserved
+   for numerals and readouts, not for control labels. */
 button.bg-cyan-600,
 button.bg-amber-600,
 button.bg-gray-700,
 button.bg-purple-700,
 button.bg-emerald-600 {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  text-transform: none;
+  letter-spacing: 0;
   border-radius: 0;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
@@ -173,15 +199,15 @@ button.bg-emerald-600 {
   color: var(--c-ink);
 }
 
-/* ── Selects — technical mono caps ────────────────────────────── */
+/* ── Selects — sans, sentence case (they carry device/scenario names) ── */
 select.bg-gray-800 {
   background: var(--c-raised);
   border: 1px solid var(--c-line);
   border-radius: 0;
   color: var(--c-ink);
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: var(--font-sans);
+  text-transform: none;
+  letter-spacing: 0;
 }
 select.bg-gray-800:hover { border-color: var(--c-line-strong); }
 
@@ -268,31 +294,44 @@ input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); 
 .text-gray-400 { color: var(--c-ink-dim); }
 .text-gray-500 { color: var(--c-ink-dim); }
 .text-gray-600 { color: var(--c-ink-faint); }
-/* Old cyan accents → amber accent (incl. the ".io", links, active text) */
-/* Monochrome at rest; amber only on hover (links, icons, accent text) */
-.text-cyan-400 { color: var(--c-ink-dim); }
+/* text-gray-700 was NOT remapped, so it fell through to Tailwind's #364153
+   (≈1.8:1 on --c-base). Pin it to the faint tier like gray-600. */
+.text-gray-700 { color: var(--c-ink-faint); }
+
+/* Selected / active text. These previously resolved to --c-ink-dim, the exact
+   same value as .text-gray-300/400/500 — so "selected" and "not selected"
+   were pixel-identical. Full ink is the selected state; amber stays for
+   hover/focus on real controls. */
+.text-cyan-400 { color: var(--c-ink); }
 .text-cyan-300 { color: var(--c-ink); }
 .text-cyan-600 { color: var(--c-ink-dim); }
+
+/* Semantic state colours → tokens (never decorative; only real state) */
+.text-emerald-400 { color: var(--c-ok); }
+.text-yellow-400, .text-yellow-500 { color: var(--c-warn); }
+.text-red-300, .text-red-400 { color: var(--c-bad-ink); }
 .group:hover .group-hover\:text-cyan-400 { color: var(--c-accent); }
 .hover\:text-cyan-400:hover  { color: var(--c-accent); }
 .hover\:text-cyan-300:hover  { color: var(--c-accent); }
 
-/* ── Technical labels (kaldera) — thin uppercase letter-spaced mono ──
-   Existing eyebrow labels already use tracking-wider/widest; render them
-   in mono to complete the instrument-label look. */
-.tracking-wider, .tracking-widest { font-family: var(--font-mono); }
+/* NOTE: there used to be a `.tracking-wider, .tracking-widest {
+   font-family: var(--font-mono) }` rule here. It silently turned every
+   letter-spaced string in the app into monospace (19 call sites), which is
+   why nothing could be emphasised. Mono is now opt-in per value span
+   (`font-mono` on the number itself), never inherited from a container. */
 
-/* Panel / section headers — applied via className in JSX. The optional
-   number prefix (".panel-num") echoes kaldera's "01 · LASER" markers. */
+/* Panel / section headers — applied via className in JSX. Sentence case,
+   sans, full ink, no letter-spacing and no "01 ·" number prefix: a heading
+   should read as a heading, not as an instrument decal. */
 .panel-title {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.13em;
+  font-family: var(--font-sans);
+  text-transform: none;
+  letter-spacing: 0;
   font-weight: 500;
-  font-size: 11px;
-  color: var(--c-ink-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--c-ink);
 }
-.panel-num { color: var(--c-ink-faint); }
 
 /* ── Badges / Q display ───────────────────────────────────────── */
 .bg-cyan-900 {
@@ -366,18 +405,10 @@ a:focus-visible {
   animation: traceSweep 5s linear 0.5s both;
 }
 
-/* Landing scroll affordance — gentle bounce (keeps the -50% X centering) */
-@keyframes scrollHint {
-  0%, 100% { opacity: 0.45; transform: translate(-50%, 0); }
-  50%      { opacity: 0.85; transform: translate(-50%, 5px); }
-}
-.scroll-hint { animation: scrollHint 2s ease-in-out infinite; }
-
-/* Hero: a single, faint, STATIC plasma tint — a quiet nod, not a bloom */
-.hero-glow {
-  background-image:
-    radial-gradient(ellipse 45% 40% at 50% 45%, color-mix(in srgb, var(--c-accent) 7%, transparent) 0%, transparent 70%);
-}
+/* Landing scroll affordance — static caret. It used to bounce forever; an
+   affordance that never stops moving is noise, not information.
+   (Keeps the -50% X centering the markup relies on.) */
+.scroll-hint { opacity: 0.6; transform: translate(-50%, 0); }
 
 @media (prefers-reduced-motion: reduce) {
   .stagger-1, .stagger-2, .stagger-3, .stagger-4, .stagger-5, .stagger-6,
@@ -400,11 +431,14 @@ html[data-theme="retro"] {
   --c-raised: #111511;
   --c-line: #1f3a1f;
   --c-line-strong: #2f5a2f;
+  /* Three legible phosphor steps on --c-surface #0b0e0b:
+     ink 10.66:1, dim 8.38:1, faint 5.50:1 (the old faint #157015 was 3.11:1). */
   --c-ink: #33dd33;       /* softened phosphor green (was #33ff33) */
-  --c-ink-dim: #1f9a1f;
-  --c-ink-faint: #157015;
+  --c-ink-dim: #46c246;
+  --c-ink-faint: #2a9d2a;
   --c-accent: #33ff33;
   --c-accent-hi: #66ff66;
+  --c-bad-ink: var(--c-bad);
 }
 
 [data-theme="retro"] body {
@@ -417,12 +451,16 @@ html[data-theme="retro"] {
 [data-theme="retro"] .text-gray-300,
 [data-theme="retro"] .text-gray-400 { color: var(--c-ink-dim); }
 [data-theme="retro"] .text-gray-500 { color: var(--c-ink-faint); }
-[data-theme="retro"] .text-gray-600 { color: var(--c-ink-faint); }
+[data-theme="retro"] .text-gray-600,
+[data-theme="retro"] .text-gray-700 { color: var(--c-ink-faint); }
 [data-theme="retro"] .text-white,
-[data-theme="retro"] .text-cyan-400 { color: var(--c-ink); }
+[data-theme="retro"] .text-cyan-400,
+[data-theme="retro"] .text-cyan-300 { color: var(--c-ink); }
+[data-theme="retro"] .panel-title { color: var(--c-ink); font-family: var(--font-mono); }
 
 /* Square the corners for the instrument look */
-[data-theme="retro"] .bg-gray-900.border.border-gray-700.rounded-lg {
+[data-theme="retro"] .bg-gray-900.border.border-gray-700.rounded-lg,
+[data-theme="retro"] .panel-cell {
   background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: 0;
