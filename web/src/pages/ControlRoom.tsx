@@ -299,14 +299,13 @@ export default function ControlRoom() {
 
       {/* ─── Main grid ─── */}
       <div className="flex-1 overflow-x-auto">
-      {/* The equilibrium is the primary object: it owns the full-height left
-          column (~40% of the width, ~40% of the total area — more than any
-          other cell). Everything else is secondary and sits to its right.
-          Cells carry no card chrome; the 1px grid gap over the base colour
-          does all the separating. */}
-      <div className="min-w-[768px] h-full grid grid-cols-[1.6fr_1.5fr_0.9fr] grid-rows-[1.05fr_1fr] gap-px min-h-0 bg-[var(--c-line)]">
-        {/* Left column, full height: equilibrium cross-section (primary) */}
-        <div data-tutorial="equilibrium" className="stagger-1 panel-cell row-span-2">
+      {/* Balanced 2x3: equilibrium top-left, traces across the top right,
+          status spanning the bottom under the equilibrium, port view bottom
+          right. Cells carry no card chrome; the 1px grid gap over the base
+          colour does all the separating. */}
+      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[1.1fr_1fr] gap-px min-h-0 bg-[var(--c-line)]">
+        {/* Top-left: Equilibrium cross-section (single cell) */}
+        <div data-tutorial="equilibrium" className="stagger-1 panel-cell">
           <EquilibriumCanvas snapshot={displaySnapshot} wallJson={wallJson} limiterPoints={limiterPoints} />
         </div>
 
@@ -324,8 +323,8 @@ export default function ControlRoom() {
           />
         </div>
 
-        {/* Bottom row, col 2: Status panel */}
-        <div data-tutorial="status" className="stagger-3 panel-cell">
+        {/* Bottom row, cols 1-2: Status panel (extends under equilibrium) */}
+        <div data-tutorial="status" className="stagger-3 panel-cell col-span-2">
           <StatusPanel
             snapshot={displaySnapshot}
             finished={finished}
@@ -338,7 +337,7 @@ export default function ControlRoom() {
           />
         </div>
 
-        {/* Bottom row, col 3: 3D port view */}
+        {/* Bottom-right: 3D port view */}
         <div data-tutorial="portview" className="stagger-4 panel-cell">
           <PortView
             snapshot={plasmaSnapshot}
