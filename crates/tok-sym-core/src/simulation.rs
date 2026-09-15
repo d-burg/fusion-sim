@@ -175,7 +175,15 @@ impl PulseProgram {
             _         => (0.05, 0.15, 0.80, 0.90),
         };
         let (f_heat_on, f_heat_full, f_heat_off0, f_heat_off) = match device.id.as_str() {
-            "iter"    => (0.10, 0.12, 0.85, 0.88),
+            // ITER: keep the auxiliary heating on into the early ramp-down and
+            // taper it out over the first 4 s (0.88→0.92). With heating cut to
+            // zero at 0.88 — the same instant Ip starts down, while density
+            // holds to 0.95 — Prad/Pin jumped to ~0.74 and the radiation-
+            // fraction risk sat at 1/s for the 1.4 s before the ramp-down
+            // trigger suppression engages, so ~3/4 of pulses that reached the
+            // ramp-down died there. Real terminations keep heating on to
+            // control the H–L transition (Politzer NF 2010; de Vries NF 2018).
+            "iter"    => (0.10, 0.12, 0.88, 0.92),
             "centaur" => (0.18, 0.22, 0.68, 0.80), // ICRH on during flat-top, off before Ip ramp-down
             _         => (0.20, 0.25, 0.75, 0.80),
         };
