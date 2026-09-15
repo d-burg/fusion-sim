@@ -129,7 +129,7 @@ export default function DeviceSelect() {
       </nav>
 
       {/* ── Hero (pinned; the device panel parallax-slides over it) ── */}
-      <header className="sticky top-0 z-0 h-[70svh] px-6 sm:px-10 overflow-hidden flex items-center">
+      <header className="sticky top-0 z-0 landing-hero px-6 sm:px-10 overflow-hidden flex items-center">
         <PlasmaBackdrop className="absolute inset-0 w-full h-full pointer-events-none" />
         {/* Fade the plasma into the page on the left so the wordmark stays crisp */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[var(--c-base)] via-[var(--c-base)]/60 to-transparent" />

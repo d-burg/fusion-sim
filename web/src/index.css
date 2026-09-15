@@ -136,6 +136,19 @@ body {
   min-height: 0;
 }
 
+/* Landing hero height.
+   The hero is sized so the fold lands just BELOW the first device card
+   rather than through it. Everything under the hero is fixed-height
+   (nav 43px + section title + tour banner + the 240px primary card +
+   24px of breathing room = 28rem), so reserving that much leaves the
+   whole DIII-D card visible and the top edge of the next row peeking —
+   which is the scroll cue, in place of a decorative animated one.
+   The 200px floor keeps the wordmark readable on short viewports
+   (a 1366x768 laptop lands near 640px of viewport height). */
+.landing-hero {
+  height: max(200px, calc(100svh - 28rem));
+}
+
 /* ── Top bar & dividers ───────────────────────────────────────── */
 .border-b.border-gray-800 {
   border-color: var(--c-line);
