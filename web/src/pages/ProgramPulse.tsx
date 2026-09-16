@@ -79,7 +79,7 @@ type Channel = {
 }
 
 /** Shared column template: symbol, plot, readout. */
-const COLS = 'grid-cols-[6rem_1fr_9rem]'
+const COLS = 'grid-cols-[6rem_1fr_11rem]'
 
 /** Tick spacing that gives roughly 5–10 ticks across the pulse. */
 function tickStep(duration: number): number {
@@ -200,7 +200,7 @@ function Strip({
   )
 
   return (
-    <div className={`grid ${COLS} items-center gap-3 bg-gray-900 py-1.5 px-3`}>
+    <div className={`group grid ${COLS} items-center gap-3 bg-gray-900 py-1.5 px-3`}>
       {onEdit ? (
         <button
           type="button"
@@ -208,7 +208,7 @@ function Strip({
           title={`Edit ${ch.title}`}
           aria-label={`Edit ${ch.title}`}
           className="col-span-2 grid grid-cols-subgrid items-center gap-3 cursor-pointer
-                     hover:bg-[var(--c-raised)] transition-colors"
+                     group-hover:bg-[var(--c-raised)] transition-colors"
         >
           {symbol}
           {plot}
@@ -220,7 +220,7 @@ function Strip({
         </>
       )}
 
-      <div className="flex items-center justify-end gap-2 text-xs tabular-nums whitespace-nowrap">
+      <div className="flex items-center justify-end gap-3 text-xs tabular-nums whitespace-nowrap">
         {programmed ? (
           <span>
             <span className="font-mono text-gray-300">{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}</span>
@@ -228,6 +228,24 @@ function Strip({
           </span>
         ) : (
           <span className="text-gray-600">not programmed</span>
+        )}
+        {/* Editable channels carry a visible Edit control at rest, so the
+            affordance is on the row itself rather than in a sentence
+            elsewhere. Display-only channels (Bt, P_ICH) simply lack it. */}
+        {onEdit && !edited && (
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${ch.title}`}
+            className="flex items-center gap-1 text-gray-500 group-hover:text-cyan-400
+                       hover:text-cyan-400 transition-colors cursor-pointer leading-none"
+          >
+            <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor"
+                 strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+              <path d="M11.5 2.5l2 2L5.5 13H3.5v-2z" />
+            </svg>
+            Edit
+          </button>
         )}
         {edited && <span className="text-xs text-amber-400">edited</span>}
         {edited && onReset && (
@@ -497,7 +515,6 @@ export default function ProgramPulse() {
             <div className="flex items-center justify-between gap-6 mb-2">
               <h2 className="panel-title">Programmed waveforms</h2>
               <div className="flex items-center gap-4">
-                <span className="text-xs text-gray-500">Select a channel to redraw it</span>
                 <label className="flex items-center gap-1.5 text-xs text-gray-500">
                   Duration
                   <input
