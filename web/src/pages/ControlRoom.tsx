@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useSimulation } from '../lib/useSimulation'
 import { getDevices, type PresetId } from '../lib/wasm'
+import type { MagneticConfig, OverrideValue, ProgramHandoff } from '../lib/program'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
 import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
@@ -42,6 +43,11 @@ export default function ControlRoom() {
   const routePreset = (searchParams.get('preset') || 'hmode') as PresetId
   const showTutorial = searchParams.get('tutorial') === 'true'
 
+  // A programme edited on the pulse page arrives as router state.
+  const location = useLocation()
+  const rawHandoff = (location.state ?? null) as ProgramHandoff | null
+  const handoff = typeof rawHandoff?.programJson === 'string' ? rawHandoff : null
+
   // Local state so user can switch without navigating
   const [tutorialActive, setTutorialActive] = useState(showTutorial)
   const [activeDevice, setActiveDevice] = useState(routeDeviceId ?? 'diiid')
@@ -49,12 +55,13 @@ export default function ControlRoom() {
   const [showPlanner, setShowPlanner] = useState(false)
   const [activeSpeed, setActiveSpeed] = useState(1.0)
 
-  // Persistent Pulse Planner state — survives open/close of the drawer
-  const [plannerOverrides, setPlannerOverrides] = useState<Record<string, number | import('../lib/wasm').WaveformPoint[] | null>>({})
-  const [plannerDuration, setPlannerDuration] = useState<number | null>(null)
-  const [plannerPreset, setPlannerPreset] = useState<PresetId>(routePreset)
-  const [hasCustomProgram, setHasCustomProgram] = useState(false)
-  const [configOverride, setConfigOverride] = useState<'LowerSingleNull' | 'DoubleNull' | 'UpperSingleNull' | null>(null)
+  // Persistent Pulse Planner state — survives open/close of the drawer, and
+  // is seeded from the hand-off so the planner opens on the edited programme.
+  const [plannerOverrides, setPlannerOverrides] = useState<Record<string, OverrideValue>>(handoff?.overrides ?? {})
+  const [plannerDuration, setPlannerDuration] = useState<number | null>(handoff?.durationOverride ?? null)
+  const [plannerPreset, setPlannerPreset] = useState<PresetId>(handoff?.presetId ?? routePreset)
+  const [hasCustomProgram, setHasCustomProgram] = useState(!!handoff)
+  const [configOverride, setConfigOverride] = useState<MagneticConfig | null>(handoff?.configOverride ?? null)
   const defaultFuel = (id: string): 'DD' | 'DT' => (id === 'iter' || id === 'jet') ? 'DT' : 'DD'
   const [fuelType, setFuelType] = useState<'DD' | 'DT'>(defaultFuel(activeDevice))
 
@@ -70,6 +77,17 @@ export default function ControlRoom() {
     scrubTime,
     finished,
   } = state
+
+  // Load a programme edited on the pulse page. runProgram builds the sim but
+  // leaves it stopped, so the control room waits on Start as it always does.
+  // Deliberately NOT guarded with a ref: under StrictMode's mount/unmount/
+  // remount, useSimulation recreates the preset sim on the remount, so a
+  // once-only guard would leave the preset loaded. Loading the same JSON
+  // twice is harmless (the previous handle is freed).
+  useEffect(() => {
+    if (!handoff) return
+    controls.runProgram(activeDevice, handoff.programJson)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Set initial fuel type for devices that default to DT
   useEffect(() => {
