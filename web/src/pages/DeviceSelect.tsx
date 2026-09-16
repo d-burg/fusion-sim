@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { getDevices, type Device } from '../lib/wasm'
 import PlasmaBackdrop from '../components/PlasmaBackdrop'
@@ -108,6 +108,40 @@ export default function DeviceSelect() {
     sessionStorage.setItem('tutorial-dismissed', '1')
   }
 
+  // Devices sit in a single horizontally scrolling row so the list can
+  // grow without wrapping into a mostly-empty second row. The nudge
+  // buttons only render when the row actually overflows; a partly
+  // visible tile at the edge is the primary "there is more" cue.
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [strip, setStrip] = useState({ left: false, right: false })
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el) return
+    const update = () => {
+      const max = el.scrollWidth - el.clientWidth
+      setStrip({ left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 })
+    }
+    // ResizeObserver fires once on observe, which covers the initial state.
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    el.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [devices.length])
+
+  const nudge = (dir: 1 | -1) => {
+    const el = stripRef.current
+    if (!el) return
+    const tile = el.firstElementChild as HTMLElement | null
+    const step = (tile?.getBoundingClientRect().width ?? 260) + 1
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollBy({ left: dir * step, behavior: reduce ? 'auto' : 'smooth' })
+  }
+
   return (
     <div className="page-enter relative">
       {/* ── Top nav (persists above everything) ── */}
@@ -146,7 +180,33 @@ export default function DeviceSelect() {
       {/* ── Device selection (slides up over the pinned hero) ── */}
       <main className="relative z-10 bg-[var(--c-base)] border-t border-gray-800 px-6 sm:px-10 pt-12 pb-16">
         <div className="max-w-6xl mx-auto">
-          <div className="panel-title pb-2 mb-px">Select a device</div>
+          <div className="flex items-end justify-between pb-2 mb-px">
+            <div className="panel-title">Select a device</div>
+            {(strip.left || strip.right) && (
+              <div className="flex gap-px" role="group" aria-label="Scroll the device list">
+                <button
+                  type="button"
+                  onClick={() => nudge(-1)}
+                  disabled={!strip.left}
+                  aria-label="Previous devices"
+                  className="px-2.5 py-0.5 text-sm text-gray-400 bg-gray-900 hover:text-gray-200
+                             disabled:opacity-30 disabled:cursor-default cursor-pointer transition-colors"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  onClick={() => nudge(1)}
+                  disabled={!strip.right}
+                  aria-label="Next devices"
+                  className="px-2.5 py-0.5 text-sm text-gray-400 bg-gray-900 hover:text-gray-200
+                             disabled:opacity-30 disabled:cursor-default cursor-pointer transition-colors"
+                >
+                  →
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Inline tour offer (dismissable) */}
           {showTutorialPrompt && (
@@ -172,18 +232,24 @@ export default function DeviceSelect() {
             </div>
           )}
 
-          {/* Hairline-tiled device grid. Every machine gets the same tile:
-              devices are parallel choices, not a ranking. The grid auto-fits
-              so adding a device adds a column until the row is full, then
-              wraps; the partial second row is the scroll cue. */}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-px bg-[var(--c-line)] border-y border-gray-800">
+          {/* Hairline-tiled device strip. Every machine gets the same tile:
+              devices are parallel choices, not a ranking. Tiles stretch to
+              fill the row while they fit (4 at the current width) and hold a
+              260px minimum once they don't, so the row scrolls sideways with
+              a partly visible tile at the edge instead of wrapping. */}
+          <div
+            ref={stripRef}
+            className="grid grid-flow-col auto-cols-[minmax(260px,1fr)] gap-px bg-[var(--c-line)]
+                       border-y border-gray-800 overflow-x-auto snap-x snap-proximity
+                       [scrollbar-width:thin] [scrollbar-color:var(--c-line-strong)_transparent]"
+          >
             {devices.map((d, i) => {
               const meta = DEVICE_META[d.id] ?? { location: '', desc: '' }
               return (
                 <button
                   key={d.id}
                   onClick={() => navigate(`/program/${d.id}`)}
-                  className={`stagger-${i + 3} group bg-gray-900 p-5 text-left
+                  className={`stagger-${Math.min(i + 3, 6)} group snap-start bg-gray-900 p-5 text-left
                              hover:bg-[var(--c-raised)] transition-colors duration-200 cursor-pointer
                              flex flex-col`}
                 >
