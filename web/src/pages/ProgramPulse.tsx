@@ -50,83 +50,204 @@ function getPresets(deviceId: string) {
   return deviceId === 'centaur' ? CENTAUR_PRESETS : ALL_PRESETS
 }
 
-// ── Mini sparkline SVG for a waveform ────────────────────────────
-// Uses a wide viewBox (600px) to minimize aspect ratio distortion
-// when the SVG is scaled to fill its container.
-function Sparkline({
-  points,
-  duration,
-  color = '#22d3ee',
-  height = 32,
-}: {
-  points: WaveformPoint[]
-  duration: number
-  color?: string
-  height?: number
-}) {
-  if (points.length < 2) return null
+// ── Programmed-waveform strip chart ──────────────────────────────
+// A stack of time-aligned strips on one shared time axis, the way a pulse
+// schedule is shown on a plasma-control-system display. Each strip is
+// scaled from zero to its own peak so the shape of the programme is honest;
+// the breakpoints that define the piecewise-linear programme are drawn as
+// markers, because they are the data. The x-scale is shared, so ticks and
+// phase boundaries line up across every strip.
 
-  const vals = points.map((p) => p[1])
-  const vMin = Math.min(...vals, 0)
-  const vMax = Math.max(...vals) * 1.1 || 1
-
-  const w = 600 // wide viewBox to match typical rendered aspect ratio
-  const h = height
-  const pad = 2
-  const toX = (t: number) => pad + (t / duration) * (w - 2 * pad)
-  const toY = (v: number) => pad + (h - 2 * pad) - ((v - vMin) / (vMax - vMin)) * (h - 2 * pad)
-
-  const d = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(1)}`)
-    .join(' ')
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }}>
-      <path
-        className="trace-sweep"
-        pathLength={1}
-        d={d}
-        fill="none"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-// ── Waveform row in the detail panel ─────────────────────────────
-function WaveformRow({
-  label,
-  unit,
-  title,
-  points,
-  duration,
-  color,
-}: {
-  label: string
+type Channel = {
+  key: string
+  symbol: React.ReactNode
   unit: string
   title: string
   points: WaveformPoint[]
+}
+
+/** Tick spacing that gives roughly 5–10 ticks across the pulse. */
+function tickStep(duration: number): number {
+  const candidates = [0.5, 1, 2, 5, 10, 20, 50]
+  return candidates.find((c) => duration / c <= 10) ?? 100
+}
+
+/** Ramp-up end and ramp-down start, taken from the Ip programme. */
+function flatTop(ip: WaveformPoint[]): { start: number; end: number } | null {
+  const max = Math.max(...ip.map((p) => p[1]))
+  if (!(max > 0)) return null
+  const near = ip.filter((p) => p[1] >= 0.98 * max)
+  if (near.length === 0) return null
+  const start = near[0][0]
+  const end = near[near.length - 1][0]
+  return end > start ? { start, end } : null
+}
+
+const VB_W = 1000 // viewBox width; preserveAspectRatio="none" stretches it
+const STRIP_H = 36
+
+function Strip({
+  ch,
+  duration,
+  ticks,
+  phases,
+}: {
+  ch: Channel
   duration: number
-  color: string
+  ticks: number[]
+  phases: { start: number; end: number } | null
 }) {
-  const peak = Math.max(...points.map((p) => p[1]))
+  const vals = ch.points.map((p) => p[1])
+  const programmed = vals.some((v) => v !== 0)
+  // Scale from zero to the channel's extremum, keeping the sign so a
+  // negative-triangularity programme reads as a dip below the baseline
+  // rather than being mistaken for an unprogrammed channel.
+  const lo = Math.min(0, ...vals) * 1.08
+  const hi = Math.max(0, ...vals) * 1.08
+  const range = hi - lo || 1
+  const extremum = vals.reduce((a, v) => (Math.abs(v) > Math.abs(a) ? v : a), 0)
+  const padY = 4
+  const toX = (t: number) => (t / duration) * VB_W
+  const toY = (v: number) => padY + (STRIP_H - 2 * padY) * (1 - (v - lo) / range)
+  const d = ch.points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(2)}`)
+    .join(' ')
+
   return (
-    <div className="flex items-center gap-3">
+    <div className="grid grid-cols-[6rem_1fr_5.5rem] items-center gap-3 bg-gray-900 py-1.5 px-3">
       <div
-        className="w-20 text-right font-mono text-xs text-gray-400 shrink-0 cursor-help"
-        title={unit ? `${title} (${unit})` : title}
+        className={`text-sm text-right cursor-help ${programmed ? 'text-gray-300' : 'text-gray-600'}`}
+        title={ch.unit ? `${ch.title} (${ch.unit})` : ch.title}
       >
-        {label}
-        {unit && <span className="text-gray-500 ml-1">({unit})</span>}
+        {ch.symbol}
       </div>
-      <div className="flex-1 bg-gray-950 rounded px-2 py-1">
-        <Sparkline points={points} duration={duration} color={color} />
+
+      <svg
+        viewBox={`0 0 ${VB_W} ${STRIP_H}`}
+        preserveAspectRatio="none"
+        className="w-full block"
+        style={{ height: STRIP_H }}
+        aria-label={`${ch.title} programme`}
+      >
+        {/* Shared time grid */}
+        {ticks.map((t) => (
+          <line
+            key={t}
+            x1={toX(t)} x2={toX(t)} y1={0} y2={STRIP_H}
+            stroke="var(--c-line)" vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {/* Flat-top boundaries, slightly stronger */}
+        {phases && [phases.start, phases.end].map((t) => (
+          <line
+            key={`ph-${t}`}
+            x1={toX(t)} x2={toX(t)} y1={0} y2={STRIP_H}
+            stroke="var(--c-line-strong)" vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {/* Zero baseline */}
+        <line
+          x1={0} x2={VB_W} y1={toY(0)} y2={toY(0)}
+          stroke="var(--c-line)" vectorEffect="non-scaling-stroke"
+        />
+        {programmed && (
+          <>
+            <path
+              d={d}
+              fill="none"
+              stroke="var(--c-ink-dim)"
+              strokeWidth={1.25}
+              strokeLinejoin="miter"
+              vectorEffect="non-scaling-stroke"
+            />
+            {/* Breakpoints: zero-length round-capped dashes stay circular
+                under the non-uniform scaling, unlike <circle>. */}
+            {ch.points.map((p, i) => (
+              <path
+                key={i}
+                d={`M ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(2)} h 0.001`}
+                stroke="var(--c-ink)"
+                strokeWidth={4}
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </>
+        )}
+      </svg>
+
+      <div className="text-right text-xs tabular-nums whitespace-nowrap">
+        {programmed ? (
+          <>
+            <span className="font-mono text-gray-300">{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}</span>
+            {ch.unit && <span className="text-gray-500 ml-1">{ch.unit}</span>}
+          </>
+        ) : (
+          <span className="text-gray-600">not programmed</span>
+        )}
       </div>
-      <div className="w-14 text-right text-xs text-gray-400 font-mono shrink-0">
-        {peak.toFixed(1)}
+    </div>
+  )
+}
+
+function ProgramChart({ program }: { program: PulseProgram }) {
+  const duration = program.duration
+  const step = tickStep(duration)
+  const ticks: number[] = []
+  for (let t = 0; t <= duration + 1e-9; t += step) ticks.push(+t.toFixed(3))
+  const phases = flatTop(program.ip)
+  const pct = (t: number) => `${((t / duration) * 100).toFixed(2)}%`
+
+  const channels: Channel[] = [
+    { key: 'ip', symbol: <><i>I</i><sub>p</sub></>, unit: 'MA', title: 'Plasma current', points: program.ip },
+    { key: 'bt', symbol: <><i>B</i><sub>t</sub></>, unit: 'T', title: 'Toroidal magnetic field', points: program.bt },
+    { key: 'ne', symbol: <><i>n̄</i><sub>e</sub></>, unit: '10²⁰ m⁻³', title: 'Line-averaged electron density', points: program.ne_target },
+    { key: 'nbi', symbol: <><i>P</i><sub>NBI</sub></>, unit: 'MW', title: 'Neutral beam injection power', points: program.p_nbi },
+    { key: 'ech', symbol: <><i>P</i><sub>ECH</sub></>, unit: 'MW', title: 'Electron cyclotron heating power', points: program.p_ech },
+    { key: 'ich', symbol: <><i>P</i><sub>ICH</sub></>, unit: 'MW', title: 'Ion cyclotron heating power', points: program.p_ich },
+    { key: 'kappa', symbol: <i>κ</i>, unit: '', title: 'Elongation', points: program.kappa },
+    { key: 'delta', symbol: <i>δ</i>, unit: '', title: 'Triangularity', points: program.delta },
+  ]
+
+  return (
+    <div className="border-y border-gray-800">
+      {/* Phase header, aligned to the plot column */}
+      {phases && (
+        <div className="grid grid-cols-[6rem_1fr_5.5rem] gap-3 px-3 pt-2 pb-1 text-xs text-gray-500">
+          <div />
+          <div className="relative h-4">
+            <span className="absolute" style={{ left: 0 }}>ramp-up</span>
+            <span className="absolute" style={{ left: pct(phases.start), paddingLeft: '0.4rem' }}>flat-top</span>
+            <span className="absolute" style={{ left: pct(phases.end), paddingLeft: '0.4rem' }}>ramp-down</span>
+          </div>
+          <div />
+        </div>
+      )}
+
+      <div className="grid gap-px bg-[var(--c-line)]">
+        {channels.map((ch) => (
+          <Strip key={ch.key} ch={ch} duration={duration} ticks={ticks} phases={phases} />
+        ))}
+      </div>
+
+      {/* Shared time axis */}
+      <div className="grid grid-cols-[6rem_1fr_5.5rem] gap-3 px-3 pt-1.5 pb-2 text-xs text-gray-500">
+        <div className="text-right"><i>t</i> (s)</div>
+        <div className="relative h-4 font-mono tabular-nums">
+          {ticks.map((t, i) => (
+            <span
+              key={t}
+              className="absolute"
+              style={{
+                left: pct(t),
+                transform: i === ticks.length - 1 ? 'translateX(-100%)' : i === 0 ? 'none' : 'translateX(-50%)',
+              }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+        <div />
       </div>
     </div>
   )
@@ -154,9 +275,6 @@ export default function ProgramPulse() {
     )
   }
 
-  const accentColor =
-    selected === 'hmode' ? '#e0a23a' : selected === 'lmode' ? '#56B4E9' : '#c8553d'
-
   return (
     <div className="page-enter min-h-screen flex flex-col">
       {/* ── Top nav ── */}
@@ -180,7 +298,7 @@ export default function ProgramPulse() {
 
         {/* Scenario selector — hairline-tiled */}
         <div className="panel-title pb-2 mb-px">Scenario</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--c-line)] border-y border-gray-800 mb-10">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-px bg-[var(--c-line)] border-y border-gray-800 mb-10">
           {getPresets(deviceId ?? '').map((p) => {
             const isSelected = p.id === selected
             return (
@@ -203,23 +321,14 @@ export default function ProgramPulse() {
         {/* Waveform detail */}
         {program && (
           <div className="mb-10">
-            <div className="flex items-baseline justify-between mb-3 border-b border-gray-800 pb-2">
+            <div className="flex items-baseline justify-between mb-2">
               <h2 className="panel-title">Programmed waveforms</h2>
               <span className="text-xs text-gray-500">
                 Duration <span className="font-mono tabular-nums text-gray-400">{program.duration.toFixed(1)} s</span>
               </span>
             </div>
 
-            <div className="space-y-2" key={selected}>
-              <WaveformRow label="Iₚ" unit="MA" title="Plasma current" points={program.ip} duration={program.duration} color={accentColor} />
-              <WaveformRow label="Bₜ" unit="T" title="Toroidal magnetic field" points={program.bt} duration={program.duration} color={accentColor} />
-              <WaveformRow label="n̄ₑ" unit="10²⁰m⁻³" title="Line-averaged electron density" points={program.ne_target} duration={program.duration} color={accentColor} />
-              <WaveformRow label="P_NBI" unit="MW" title="Neutral beam injection power" points={program.p_nbi} duration={program.duration} color={accentColor} />
-              <WaveformRow label="P_ECH" unit="MW" title="Electron cyclotron heating power" points={program.p_ech} duration={program.duration} color={accentColor} />
-              <WaveformRow label="P_ICH" unit="MW" title="Ion cyclotron heating power" points={program.p_ich} duration={program.duration} color={accentColor} />
-              <WaveformRow label="κ" unit="" title="Elongation" points={program.kappa} duration={program.duration} color={accentColor} />
-              <WaveformRow label="δ" unit="" title="Triangularity" points={program.delta} duration={program.duration} color={accentColor} />
-            </div>
+            <ProgramChart key={selected} program={program} />
           </div>
         )}
 

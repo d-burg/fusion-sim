@@ -410,15 +410,6 @@ a:focus-visible {
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .tutorial-card { animation: slideUp 0.4s ease-out; }
 
-/* Waveform "play forward" — draw each trace left→right over 5s, 0.5s after
-   mount. Paths set pathLength=1 so the dash math is geometry-independent. */
-@keyframes traceSweep { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-.trace-sweep {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: traceSweep 5s linear 0.5s both;
-}
-
 /* Landing scroll affordance — static caret. It used to bounce forever; an
    affordance that never stops moving is noise, not information.
    (Keeps the -50% X centering the markup relies on.) */
@@ -427,7 +418,6 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .stagger-1, .stagger-2, .stagger-3, .stagger-4, .stagger-5, .stagger-6,
   .page-enter, .tutorial-card { animation: none; }
-  .trace-sweep { animation: none; stroke-dashoffset: 0; }
   .scroll-hint { animation: none; }
 }
 
