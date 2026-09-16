@@ -137,16 +137,17 @@ body {
 }
 
 /* Landing hero height.
-   The hero is sized so the fold lands just BELOW the first device card
-   rather than through it. Everything under the hero is fixed-height
-   (nav 43px + section title + tour banner + the 240px primary card +
-   24px of breathing room = 28rem), so reserving that much leaves the
-   whole DIII-D card visible and the top edge of the next row peeking —
-   which is the scroll cue, in place of a decorative animated one.
-   The 200px floor keeps the wordmark readable on short viewports
-   (a 1366x768 laptop lands near 640px of viewport height). */
+   The hero is sized so the fold lands just BELOW the first row of device
+   tiles rather than through it. Everything under the hero is fixed-height
+   (nav 43px + section padding + title + tour banner + a 327px tile row +
+   ~30px of breathing room = 34rem), so reserving that much shows the whole
+   first row of devices; once more devices wrap to a second row, its top
+   edge peeks above the fold and is the scroll cue — no animated hint.
+   The 200px floor keeps the wordmark readable on short viewports (a
+   1366x768 laptop lands near 640px), where the row is partly cropped but
+   every silhouette and name is still visible. */
 .landing-hero {
-  height: max(200px, calc(100svh - 28rem));
+  height: max(200px, calc(100svh - 34rem));
 }
 
 /* ── Top bar & dividers ───────────────────────────────────────── */

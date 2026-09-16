@@ -37,7 +37,7 @@ const DEVICE_LIMITERS: Record<string, [number, number][]> = {
 }
 
 /** SVG cross-section silhouette from limiter geometry (or wall outline fallback). */
-function DeviceSilhouette({ device, large = false }: { device: Device; large?: boolean }) {
+function DeviceSilhouette({ device }: { device: Device }) {
   const wall = DEVICE_LIMITERS[device.id] ?? device.wall_outline
   if (wall.length === 0) return null
 
@@ -60,7 +60,7 @@ function DeviceSilhouette({ device, large = false }: { device: Device; large?: b
 
   // Scale stroke width to viewBox so all devices appear equally bright.
   // Target ~1px at the rendered size, so strokeWidth ≈ viewBox extent / px height.
-  const pxHeight = large ? 192 : 128
+  const pxHeight = 96
   const extent = Math.max(w, h)
   const sw = extent / pxHeight
   const markerR = extent * 0.006
@@ -68,7 +68,7 @@ function DeviceSilhouette({ device, large = false }: { device: Device; large?: b
   return (
     <svg
       viewBox={`${rMin - pad} ${-zMax - pad} ${w} ${h}`}
-      className={`w-full ${large ? 'h-48' : 'h-32'} opacity-40`}
+      className="w-full h-24 opacity-40"
       preserveAspectRatio="xMidYMid meet"
     >
       <path
@@ -172,53 +172,49 @@ export default function DeviceSelect() {
             </div>
           )}
 
-          {/* Hairline-tiled device row; the first machine reads as primary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--c-line)] border-y border-gray-800">
+          {/* Hairline-tiled device grid. Every machine gets the same tile:
+              devices are parallel choices, not a ranking. The grid auto-fits
+              so adding a device adds a column until the row is full, then
+              wraps; the partial second row is the scroll cue. */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-px bg-[var(--c-line)] border-y border-gray-800">
             {devices.map((d, i) => {
               const meta = DEVICE_META[d.id] ?? { location: '', desc: '' }
-              const primary = i === 0
               return (
                 <button
                   key={d.id}
                   onClick={() => navigate(`/program/${d.id}`)}
-                  className={`stagger-${i + 3} group bg-gray-900 p-6 text-left
+                  className={`stagger-${i + 3} group bg-gray-900 p-5 text-left
                              hover:bg-[var(--c-raised)] transition-colors duration-200 cursor-pointer
-                             flex ${primary ? 'md:col-span-3 md:flex-row md:items-center md:gap-8' : ''} flex-col`}
+                             flex flex-col`}
                 >
                   {/* Cross-section silhouette */}
-                  <div className={primary ? 'md:w-72 shrink-0' : 'h-40'}>
-                    <DeviceSilhouette device={d} large={primary} />
+                  <DeviceSilhouette device={d} />
+
+                  {/* Machine name */}
+                  <h2 className="font-mono text-lg font-bold tracking-tight text-white
+                                 group-hover:text-cyan-400 transition-colors mt-3">
+                    {d.name}
+                  </h2>
+                  <div className="text-xs text-gray-500 mt-0.5 mb-3">
+                    {meta.location}{meta.status ? ` · ${meta.status}` : ''}
                   </div>
 
-                  <div className="flex flex-col flex-1">
-                    {/* Machine name */}
-                    <h2
-                      className={`font-mono ${primary ? 'text-3xl md:mt-0' : 'text-xl'} font-bold tracking-tight
-                                  text-white group-hover:text-cyan-400 transition-colors mt-3`}
-                    >
-                      {d.name}
-                    </h2>
-                    <div className="text-xs text-gray-500 mb-3 mt-0.5">
-                      {meta.location}{meta.status ? ` · ${meta.status}` : ''}
-                    </div>
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs text-gray-400 mb-3 font-mono tabular-nums">
+                    <span>R₀ = {d.r0.toFixed(2)} m</span>
+                    <span>a = {d.a.toFixed(2)} m</span>
+                    <span>Iₚ ≤ {d.ip_max} MA</span>
+                    <span>Bₜ ≤ {d.bt_max} T</span>
+                  </div>
 
-                    {/* Stats */}
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400 mb-3 font-mono tabular-nums">
-                      <span>R₀ = {d.r0.toFixed(2)} m</span>
-                      <span>a = {d.a.toFixed(2)} m</span>
-                      <span>Iₚ ≤ {d.ip_max} MA</span>
-                      <span>Bₜ ≤ {d.bt_max} T</span>
-                    </div>
+                  {/* Description */}
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    {meta.desc}
+                  </p>
 
-                    {/* Description */}
-                    <p className={`text-gray-500 leading-relaxed flex-grow ${primary ? 'text-base max-w-2xl' : 'text-sm'}`}>
-                      {meta.desc}
-                    </p>
-
-                    {/* Arrow */}
-                    <div className="mt-4 text-sm text-gray-500 group-hover:text-cyan-400 transition-colors">
-                      Select →
-                    </div>
+                  {/* Arrow */}
+                  <div className="mt-auto pt-4 text-sm text-gray-500 group-hover:text-cyan-400 transition-colors">
+                    Select →
                   </div>
                 </button>
               )
