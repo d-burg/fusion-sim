@@ -136,7 +136,7 @@ function Strip({
 
   const symbol = (
     <div
-      className={`text-sm text-right ${onEdit ? '' : 'cursor-help'} ${programmed ? 'text-gray-300' : 'text-gray-600'}`}
+      className={`text-sm text-right ${onEdit ? '' : 'cursor-help'} ${programmed ? 'text-gray-300' : 'text-gray-600'} self-center`}
       title={onEdit ? undefined : ch.unit ? `${ch.title} (${ch.unit})` : ch.title}
     >
       {ch.symbol}
@@ -147,8 +147,7 @@ function Strip({
     <svg
       viewBox={`0 0 ${VB_W} ${STRIP_H}`}
       preserveAspectRatio="none"
-      className="w-full block"
-      style={{ height: STRIP_H }}
+      className="w-full h-full block"
       aria-label={`${ch.title} programme`}
     >
       {/* Shared time grid */}
@@ -200,14 +199,14 @@ function Strip({
   )
 
   return (
-    <div className={`group grid ${COLS} items-center gap-3 bg-gray-900 py-1.5 px-3`}>
+    <div className={`group grid ${COLS} items-stretch gap-3 bg-gray-900 py-1 px-3 min-h-0`}>
       {onEdit ? (
         <button
           type="button"
           onClick={onEdit}
           title={`Edit ${ch.title}`}
           aria-label={`Edit ${ch.title}`}
-          className="col-span-2 grid grid-cols-subgrid items-center gap-3 cursor-pointer
+          className="col-span-2 grid grid-cols-subgrid items-stretch gap-3 cursor-pointer min-h-0
                      group-hover:bg-[var(--c-raised)] transition-colors"
         >
           {symbol}
@@ -220,7 +219,7 @@ function Strip({
         </>
       )}
 
-      <div className="flex items-center justify-end gap-3 text-xs tabular-nums whitespace-nowrap">
+      <div className="flex items-center justify-end gap-3 text-xs tabular-nums whitespace-nowrap self-center">
         {programmed ? (
           <span>
             <span className="font-mono text-gray-300">{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}</span>
@@ -298,7 +297,7 @@ function ProgramChart({
   ]
 
   return (
-    <div className="border-y border-gray-800">
+    <div className="border-y border-gray-800 flex flex-col h-full min-h-0">
       {/* Phase header, aligned to the plot column */}
       {phases && (
         <div className={`grid ${COLS} gap-3 px-3 pt-2 pb-1 text-xs text-gray-500`}>
@@ -312,7 +311,10 @@ function ProgramChart({
         </div>
       )}
 
-      <div className="grid gap-px bg-[var(--c-line)]">
+      {/* Equal-height rows that fill whatever height the page gives the chart;
+          the SVGs stretch with them (non-uniform scaling, non-scaling strokes).
+          Below 1.75rem per row the chart scrolls rather than crushing. */}
+      <div className="flex-1 min-h-0 grid auto-rows-[minmax(1.75rem,1fr)] gap-px bg-[var(--c-line)] overflow-y-auto">
         {channels.map((ch) => {
           const p = ch.param
           const ov = p ? overrides[p.key] : undefined
@@ -439,9 +441,9 @@ export default function ProgramPulse() {
   }
 
   return (
-    <div className="page-enter min-h-screen flex flex-col">
+    <div className="page-enter h-screen flex flex-col overflow-hidden">
       {/* ── Top nav ── */}
-      <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800">
+      <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 shrink-0">
         <button
           onClick={() => navigate('/')}
           className="text-sm text-gray-500 hover:text-cyan-400 transition-colors cursor-pointer"
@@ -453,29 +455,31 @@ export default function ProgramPulse() {
         </span>
       </nav>
 
-      <main className="flex-1 w-full max-w-5xl mx-auto px-6 sm:px-10 py-12">
-        {/* Header */}
-        <h1 className="font-mono text-3xl sm:text-4xl font-bold tracking-tight text-white mb-10">
-          {device.name}
-        </h1>
+      {/* Two columns, no page scroll: setup on the left with Run pinned to its
+          foot, the programme filling the rest. */}
+      <main className="flex-1 min-h-0 grid grid-cols-[17rem_1fr] gap-px bg-[var(--c-line)]">
+        <aside className="bg-[var(--c-base)] min-h-0 overflow-y-auto flex flex-col px-5 pt-5 pb-5">
+          <h1 className="font-mono text-2xl font-bold tracking-tight text-white mb-5">
+            {device.name}
+          </h1>
 
-        {/* Scenario selector — hairline-tiled */}
+        {/* Scenario list — vertical hairline tiles; selection is the left bar */}
         <div className="panel-title pb-2 mb-px">Scenario</div>
-        <div className={`grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-px bg-[var(--c-line)] border-y border-gray-800 ${deviceId === 'diiid' ? 'mb-6' : 'mb-10'}`}>
+        <div className="grid gap-px bg-[var(--c-line)] border-y border-gray-800 mb-5">
           {getPresets(deviceId ?? '').map((p) => {
             const isSelected = p.id === selected
             return (
               <button
                 key={p.id}
                 onClick={() => selectScenario(p.id)}
-                className={`relative p-4 text-left transition-colors cursor-pointer
+                className={`relative px-3 py-2.5 text-left transition-colors cursor-pointer
                   ${isSelected ? 'bg-[var(--c-raised)]' : 'bg-gray-900 hover:bg-[var(--c-raised)]'}`}
               >
-                {isSelected && <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-500" />}
-                <h3 className={`text-sm font-medium mb-1.5 ${isSelected ? 'text-white' : 'text-gray-400'}`}>
+                {isSelected && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-cyan-500" />}
+                <h3 className={`text-sm font-medium mb-1 ${isSelected ? 'text-white' : 'text-gray-400'}`}>
                   {p.name}
                 </h3>
-                <p className={`text-sm leading-relaxed ${isSelected ? 'text-gray-400' : 'text-gray-500'}`}>{p.desc}</p>
+                <p className={`text-xs leading-relaxed ${isSelected ? 'text-gray-400' : 'text-gray-500'}`}>{p.desc}</p>
               </button>
             )
           })}
@@ -483,9 +487,9 @@ export default function ProgramPulse() {
 
         {/* Magnetic configuration — DIII-D runs all three divertor shapes */}
         {deviceId === 'diiid' && (
-          <div className="mb-10">
+          <div className="mb-5">
             <div className="panel-title pb-2 mb-px">Magnetic configuration</div>
-            <div className="inline-grid grid-cols-3 gap-px bg-[var(--c-line)] border-y border-gray-800">
+            <div className="grid gap-px bg-[var(--c-line)] border-y border-gray-800">
               {([
                 ['LowerSingleNull', 'Lower single null'],
                 ['DoubleNull', 'Double null'],
@@ -497,10 +501,10 @@ export default function ProgramPulse() {
                     key={cfg}
                     type="button"
                     onClick={() => setConfigOverride(cfg === 'LowerSingleNull' ? null : cfg)}
-                    className={`relative px-5 py-2 text-sm transition-colors cursor-pointer
+                    className={`relative px-3 py-1.5 text-sm text-left transition-colors cursor-pointer
                       ${isSelected ? 'bg-[var(--c-raised)] text-white' : 'bg-gray-900 text-gray-400 hover:bg-[var(--c-raised)]'}`}
                   >
-                    {isSelected && <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-500" />}
+                    {isSelected && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-cyan-500" />}
                     {label}
                   </button>
                 )
@@ -509,14 +513,12 @@ export default function ProgramPulse() {
           </div>
         )}
 
-        {/* Waveform detail */}
-        {program && base && (
-          <div className="mb-10">
-            <div className="flex items-center justify-between gap-6 mb-2">
-              <h2 className="panel-title">Programmed waveforms</h2>
-              <div className="flex items-center gap-4">
+          {/* Duration + reset */}
+          {program && (
+            <div className="mb-5">
+              <div className="panel-title pb-2 mb-px">Duration</div>
+              <div className="flex items-center justify-between gap-3 border-y border-gray-800 bg-gray-900 px-3 py-1.5">
                 <label className="flex items-center gap-1.5 text-xs text-gray-500">
-                  Duration
                   <input
                     type="number"
                     min={1}
@@ -529,37 +531,46 @@ export default function ProgramPulse() {
                   />
                   s
                 </label>
-                {/* Kept in the layout while hidden so the chart never shifts. */}
+                {/* Kept in the layout while hidden so nothing shifts. */}
                 <button
                   type="button"
                   onClick={resetAll}
                   aria-hidden={!modified}
                   tabIndex={modified ? 0 : -1}
-                  className={`text-sm text-gray-500 hover:text-gray-300 transition-colors cursor-pointer
+                  className={`text-xs text-gray-500 hover:text-gray-300 transition-colors cursor-pointer
                     ${modified ? '' : 'invisible'}`}
                 >
                   Reset to preset
                 </button>
               </div>
             </div>
+          )}
 
-            <ProgramChart
-              key={selected}
-              program={program}
-              overrides={overrides}
-              onEdit={setEditing}
-              onReset={resetChannel}
-            />
-          </div>
-        )}
+          {/* Run — pinned to the foot of the column, always on screen */}
+          <button
+            onClick={handleRun}
+            className="mt-auto w-full bg-cyan-600 px-4 py-3 text-base cursor-pointer"
+          >
+            ▶ {modified ? 'Run edited pulse' : 'Run pulse'}
+          </button>
+        </aside>
 
-        {/* Run button */}
-        <button
-          onClick={handleRun}
-          className="bg-cyan-600 px-8 py-3 text-base cursor-pointer"
-        >
-          ▶ {modified ? 'Run edited pulse' : 'Run pulse'}
-        </button>
+        <section className="bg-[var(--c-base)] min-h-0 flex flex-col px-6 pt-4 pb-4">
+          {program && base && (
+            <>
+              <h2 className="panel-title pb-2 shrink-0">Programmed waveforms</h2>
+              <div className="flex-1 min-h-0">
+                <ProgramChart
+                  key={selected}
+                  program={program}
+                  overrides={overrides}
+                  onEdit={setEditing}
+                  onReset={resetChannel}
+                />
+              </div>
+            </>
+          )}
+        </section>
       </main>
 
       {/* Channel editor */}
