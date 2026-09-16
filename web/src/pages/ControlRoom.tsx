@@ -297,13 +297,23 @@ export default function ControlRoom() {
         </div>
       </div>
 
+      {/* ─── Pulse progress: a hairline under the top bar. It used to be a
+          6px bar below the grid, where the bottom row could overrun it and
+          the last status readouts ended up underneath. ─── */}
+      <div className="h-px bg-gray-900 shrink-0" aria-hidden="true">
+        <div
+          className="h-full bg-cyan-500 transition-[width] duration-100"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
       {/* ─── Main grid ─── */}
-      <div className="flex-1 overflow-x-auto">
+      <div className="flex-1 min-h-0 overflow-x-auto">
       {/* Balanced 2x3: equilibrium top-left, traces across the top right,
           status spanning the bottom under the equilibrium, port view bottom
           right. Cells carry no card chrome; the 1px grid gap over the base
           colour does all the separating. */}
-      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[1.1fr_1fr] gap-px min-h-0 bg-[var(--c-line)]">
+      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)] gap-px min-h-0 bg-[var(--c-line)]">
         {/* Top-left: Equilibrium cross-section (single cell) */}
         <div data-tutorial="equilibrium" className="stagger-1 panel-cell">
           <EquilibriumCanvas snapshot={displaySnapshot} wallJson={wallJson} limiterPoints={limiterPoints} />
@@ -349,14 +359,6 @@ export default function ControlRoom() {
           />
         </div>
       </div>
-      </div>
-
-      {/* ─── Progress bar ─── */}
-      <div className="h-1.5 bg-gray-900">
-        <div
-          className="h-full bg-cyan-500 transition-all duration-100"
-          style={{ width: `${progress}%` }}
-        />
       </div>
 
       {/* ─── Pulse Planner drawer ─── */}
