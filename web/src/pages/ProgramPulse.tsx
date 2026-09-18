@@ -459,7 +459,7 @@ export default function ProgramPulse() {
   }
 
   return (
-    <div className="page-enter min-h-screen md:h-screen flex flex-col md:overflow-hidden pb-16 md:pb-0">
+    <div className="page-enter min-h-screen md:h-screen flex flex-col md:overflow-hidden pb-20 md:pb-0">
       {/* ── Top nav ── */}
       <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 shrink-0">
         <button
@@ -564,14 +564,19 @@ export default function ProgramPulse() {
             </div>
           )}
 
-          {/* Run — pinned to the foot of the column, always on screen */}
-          <button
-            onClick={handleRun}
-            className="fixed bottom-0 inset-x-0 z-40 md:static md:z-auto md:mt-auto w-full
-                       bg-cyan-600 px-4 py-3 text-base cursor-pointer"
-          >
-            ▶ {modified ? 'Run edited pulse' : 'Run pulse'}
-          </button>
+          {/* Run — always on screen. From md up it is pinned to the foot of this
+              column. On phones it sits in an opaque bar fixed to the foot of the
+              viewport: the primary button is an outline with a transparent fill,
+              so floating it bare over the chart let the strips show through. */}
+          <div className="fixed bottom-0 inset-x-0 z-40 p-3 bg-[var(--c-base)] border-t border-gray-800
+                          md:static md:z-auto md:p-0 md:border-0 md:bg-transparent md:mt-auto">
+            <button
+              onClick={handleRun}
+              className="w-full bg-cyan-600 px-4 py-3 text-base cursor-pointer"
+            >
+              ▶ {modified ? 'Run edited pulse' : 'Run pulse'}
+            </button>
+          </div>
         </aside>
 
         <section className="bg-[var(--c-base)] min-h-0 flex flex-col px-3 md:px-6 pt-4 pb-4">
