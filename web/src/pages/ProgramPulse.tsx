@@ -79,7 +79,7 @@ type Channel = {
 }
 
 /** Shared column template: symbol, plot, readout. */
-const COLS = 'grid-cols-[6rem_1fr_11rem]'
+const COLS = 'grid-cols-[2.75rem_1fr_4.5rem] md:grid-cols-[6rem_1fr_11rem]'
 
 /** Tick spacing that gives roughly 5–10 ticks across the pulse. */
 function tickStep(duration: number): number {
@@ -199,14 +199,14 @@ function Strip({
   )
 
   return (
-    <div className={`group grid ${COLS} items-stretch gap-3 bg-gray-900 py-1 px-3 min-h-0`}>
+    <div className={`group grid ${COLS} items-stretch gap-2 md:gap-3 bg-gray-900 py-1 px-2 md:px-3 min-h-0`}>
       {onEdit ? (
         <button
           type="button"
           onClick={onEdit}
           title={`Edit ${ch.title}`}
           aria-label={`Edit ${ch.title}`}
-          className="col-span-2 grid grid-cols-subgrid items-stretch gap-3 cursor-pointer min-h-0
+          className="col-span-2 grid grid-cols-subgrid items-stretch gap-2 md:gap-3 cursor-pointer min-h-0
                      group-hover:bg-[var(--c-raised)] transition-colors"
         >
           {symbol}
@@ -219,14 +219,17 @@ function Strip({
         </>
       )}
 
-      <div className="flex items-center justify-end gap-3 text-xs tabular-nums whitespace-nowrap self-center">
+      <div className="flex items-center justify-end gap-2 md:gap-3 text-xs tabular-nums whitespace-nowrap self-center">
         {programmed ? (
           <span>
             <span className="font-mono text-gray-300">{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}</span>
-            {ch.unit && <span className="text-gray-500 ml-1">{ch.unit}</span>}
+            {ch.unit && <span className="hidden md:inline text-gray-500 ml-1">{ch.unit}</span>}
           </span>
         ) : (
-          <span className="text-gray-600">not programmed</span>
+          <>
+            <span className="hidden md:inline text-gray-600">not programmed</span>
+            <span className="md:hidden text-gray-600" aria-label="not programmed">–</span>
+          </>
         )}
         {/* Editable channels carry a visible Edit control at rest, so the
             affordance is on the row itself rather than in a sentence
@@ -243,7 +246,7 @@ function Strip({
                  strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
               <path d="M11.5 2.5l2 2L5.5 13H3.5v-2z" />
             </svg>
-            Edit
+            <span className="hidden md:inline">Edit</span>
           </button>
         )}
         {edited && <span className="text-xs text-amber-400">edited</span>}
@@ -300,12 +303,27 @@ function ProgramChart({
     <div className="border-y border-gray-800 flex flex-col h-full min-h-0">
       {/* Phase header, aligned to the plot column */}
       {phases && (
-        <div className={`grid ${COLS} gap-3 px-3 pt-2 pb-1 text-xs text-gray-500`}>
+        <div className={`grid ${COLS} gap-2 md:gap-3 px-2 md:px-3 pt-2 pb-1 text-xs text-gray-500`}>
           <div />
+          {/* One box per phase band. Each box is a size container, and its
+              label only renders when the band is wide enough to hold it, so
+              labels can never overlap or wrap on a narrow plot. */}
           <div className="relative h-4">
-            <span className="absolute" style={{ left: 0 }}>ramp-up</span>
-            <span className="absolute" style={{ left: pct(phases.start), paddingLeft: '0.4rem' }}>flat-top</span>
-            <span className="absolute" style={{ left: pct(phases.end), paddingLeft: '0.4rem' }}>ramp-down</span>
+            {([
+              ['ramp-up', 0, phases.start],
+              ['flat-top', phases.start, phases.end],
+              ['ramp-down', phases.end, duration],
+            ] as [string, number, number][]).map(([label, from, to]) => (
+              <div
+                key={label}
+                className="@container absolute top-0 bottom-0 overflow-hidden"
+                style={{ left: pct(from), width: pct(to - from) }}
+              >
+                <span className={`hidden @[4.25rem]:inline whitespace-nowrap ${from > 0 ? 'pl-1.5' : ''}`}>
+                  {label}
+                </span>
+              </div>
+            ))}
           </div>
           <div />
         </div>
@@ -334,7 +352,7 @@ function ProgramChart({
       </div>
 
       {/* Shared time axis */}
-      <div className={`grid ${COLS} gap-3 px-3 pt-1.5 pb-2 text-xs text-gray-500`}>
+      <div className={`grid ${COLS} gap-2 md:gap-3 px-2 md:px-3 pt-1.5 pb-2 text-xs text-gray-500`}>
         <div className="text-right"><i>t</i> (s)</div>
         <div className="relative h-4 font-mono tabular-nums">
           {ticks.map((t, i) => (
@@ -441,7 +459,7 @@ export default function ProgramPulse() {
   }
 
   return (
-    <div className="page-enter h-screen flex flex-col overflow-hidden">
+    <div className="page-enter min-h-screen md:h-screen flex flex-col md:overflow-hidden pb-16 md:pb-0">
       {/* ── Top nav ── */}
       <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 shrink-0">
         <button
@@ -457,8 +475,8 @@ export default function ProgramPulse() {
 
       {/* Two columns, no page scroll: setup on the left with Run pinned to its
           foot, the programme filling the rest. */}
-      <main className="flex-1 min-h-0 grid grid-cols-[17rem_1fr] gap-px bg-[var(--c-line)]">
-        <aside className="bg-[var(--c-base)] min-h-0 overflow-y-auto flex flex-col px-5 pt-5 pb-5">
+      <main className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[17rem_1fr] gap-px bg-[var(--c-line)]">
+        <aside className="bg-[var(--c-base)] min-h-0 md:overflow-y-auto flex flex-col px-5 pt-5 pb-5">
           <h1 className="font-mono text-2xl font-bold tracking-tight text-white mb-5">
             {device.name}
           </h1>
@@ -549,17 +567,18 @@ export default function ProgramPulse() {
           {/* Run — pinned to the foot of the column, always on screen */}
           <button
             onClick={handleRun}
-            className="mt-auto w-full bg-cyan-600 px-4 py-3 text-base cursor-pointer"
+            className="fixed bottom-0 inset-x-0 z-40 md:static md:z-auto md:mt-auto w-full
+                       bg-cyan-600 px-4 py-3 text-base cursor-pointer"
           >
             ▶ {modified ? 'Run edited pulse' : 'Run pulse'}
           </button>
         </aside>
 
-        <section className="bg-[var(--c-base)] min-h-0 flex flex-col px-6 pt-4 pb-4">
+        <section className="bg-[var(--c-base)] min-h-0 flex flex-col px-3 md:px-6 pt-4 pb-4">
           {program && base && (
             <>
               <h2 className="panel-title pb-2 shrink-0">Programmed waveforms</h2>
-              <div className="flex-1 min-h-0">
+              <div className="h-[30rem] md:h-auto md:flex-1 min-h-0">
                 <ProgramChart
                   key={selected}
                   program={program}
