@@ -459,7 +459,7 @@ export default function ProgramPulse() {
   }
 
   return (
-    <div className="page-enter min-h-screen md:h-screen flex flex-col md:overflow-hidden pb-20 md:pb-0">
+    <div className="page-enter min-h-screen md:tall:h-screen flex flex-col md:tall:overflow-hidden pb-20 md:tall:pb-0">
       {/* ── Top nav ── */}
       <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 shrink-0">
         <button
@@ -473,10 +473,11 @@ export default function ProgramPulse() {
         </span>
       </nav>
 
-      {/* Two columns, no page scroll: setup on the left with Run pinned to its
-          foot, the programme filling the rest. */}
+      {/* Two columns from md up. The no-scroll, fills-the-viewport version needs
+          height too (the `tall` variant): a landscape phone is md-wide but only
+          ~390px tall, and there the page scrolls with Run fixed to the foot. */}
       <main className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[17rem_1fr] gap-px bg-[var(--c-line)]">
-        <aside className="bg-[var(--c-base)] min-h-0 md:overflow-y-auto flex flex-col px-5 pt-5 pb-5">
+        <aside className="bg-[var(--c-base)] min-h-0 md:tall:overflow-y-auto flex flex-col px-5 pt-5 pb-5">
           <h1 className="font-mono text-2xl font-bold tracking-tight text-white mb-5">
             {device.name}
           </h1>
@@ -564,12 +565,13 @@ export default function ProgramPulse() {
             </div>
           )}
 
-          {/* Run — always on screen. From md up it is pinned to the foot of this
-              column. On phones it sits in an opaque bar fixed to the foot of the
+          {/* Run — always on screen. When the viewport is both md-wide and tall
+              it is pinned to the foot of this column. Otherwise (phones in either
+              orientation) it sits in an opaque bar fixed to the foot of the
               viewport: the primary button is an outline with a transparent fill,
               so floating it bare over the chart let the strips show through. */}
           <div className="fixed bottom-0 inset-x-0 z-40 p-3 bg-[var(--c-base)] border-t border-gray-800
-                          md:static md:z-auto md:p-0 md:border-0 md:bg-transparent md:mt-auto">
+                          md:tall:static md:tall:z-auto md:tall:p-0 md:tall:border-0 md:tall:bg-transparent md:tall:mt-auto">
             <button
               onClick={handleRun}
               className="w-full bg-cyan-600 px-4 py-3 text-base cursor-pointer"
@@ -583,7 +585,7 @@ export default function ProgramPulse() {
           {program && base && (
             <>
               <h2 className="panel-title pb-2 shrink-0">Programmed waveforms</h2>
-              <div className="h-[30rem] md:h-auto md:flex-1 min-h-0">
+              <div className="h-[30rem] md:tall:h-auto md:tall:flex-1 min-h-0">
                 <ProgramChart
                   key={selected}
                   program={program}

@@ -12,6 +12,11 @@
    Colours intentionally use a PRIVATE --c-* namespace (NOT Tailwind's
    reserved --color-*), because Tailwind v4 strips redefinitions of its
    --color-* theme vars made outside @theme — which broke the retro override. */
+/* "tall": enough vertical room for a fits-the-viewport layout. A landscape
+   phone is wider than the md breakpoint but only ~390px tall, so md alone is
+   the wrong test for "pin everything and never scroll". */
+@custom-variant tall (@media (min-height: 40rem));
+
 @theme {
   --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Fira Code', monospace;
