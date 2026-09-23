@@ -180,9 +180,13 @@ export default function ControlRoom() {
           an equal share of the free space, so the playback controls stay
           centred on the page even as the side content changes width (DD/DT
           toggle appearing per device, "(done)" suffix at end of pulse). */}
-      <div className="relative z-50 grid grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-1 sm:gap-2">
+      {/* Below md the bar is two rows: selectors and time/settings on the first,
+          playback centred on its own full-width second row. A single row is
+          wider than a phone and the root clips overflow, so the right-hand
+          controls were cut off and could not be scrolled to. */}
+      <div className="relative z-50 grid grid-cols-[1fr_auto] md:grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-x-1 sm:gap-x-2 gap-y-1">
         {/* Device, Scenario, Fuel selectors */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start col-start-1 row-start-1">
           {/* Device selector */}
           <select
             value={activeDevice}
@@ -235,7 +239,8 @@ export default function ControlRoom() {
 
         {/* Playback controls — fixed widths on the buttons whose label changes
             so the row never reflows as the pulse state changes. */}
-        <div className="flex items-center gap-1 sm:gap-1.5 justify-self-center">
+        <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 justify-self-center
+                        col-span-2 row-start-2 md:col-span-1 md:col-start-2 md:row-start-1">
           {!running ? (
             <button
               onClick={controls.start}
@@ -300,7 +305,7 @@ export default function ControlRoom() {
         </div>
 
         {/* Time readout + Settings */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end col-start-2 row-start-1 md:col-start-3">
           <div className="text-xs text-gray-400 whitespace-nowrap">
             t=<span className="font-mono tabular-nums">{time.toFixed(3)}</span>s
             {' / '}
