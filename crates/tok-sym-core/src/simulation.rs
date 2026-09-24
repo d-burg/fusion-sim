@@ -440,6 +440,7 @@ fn point_in_polygon(r: f64, z: f64, outline: &[(f64, f64)]) -> bool {
 /// Sample LCFS boundary points using Miller parameterization.
 /// Returns Vec<(R, Z, theta)> in physical coordinates.
 /// `z0` is the vertical offset of the plasma center.
+#[cfg(test)] // retained for shape unit tests; the contact check now marches the solved boundary
 fn sample_lcfs(r0: f64, a: f64, kappa: f64, delta: f64, z0: f64, n: usize) -> Vec<(f64, f64, f64)> {
     let mut points = Vec::with_capacity(n);
     for i in 0..n {
@@ -716,14 +717,18 @@ impl Simulation {
         } else {
             0.0
         };
+        // Device-specific correction for the analytic-vs-real boundary shape
+        // mismatch (see Device::equilibrium_a_scale). Applied to every branch
+        // so the rendered plasma and the wall-contact check stay consistent.
+        let base_epsilon = self.device.epsilon() * self.device.equilibrium_a_scale;
         let epsilon = if config == MagneticConfig::Limited {
-            self.device.epsilon() * (0.35 + 0.65 * ip_frac)
+            base_epsilon * (0.35 + 0.65 * ip_frac)
         } else if config == MagneticConfig::DoubleNull {
             // DN plasma is smaller to fit within both upper and lower
             // divertor shelves of the limiter geometry.
-            self.device.epsilon() * 0.88
+            base_epsilon * 0.88
         } else {
-            self.device.epsilon()
+            base_epsilon
         };
 
         // During limited phase (δ < 0.1), the LSN X-point boundary conditions
@@ -737,14 +742,103 @@ impl Simulation {
             prog.delta
         };
 
+        // ── Strike-point sweep ──
+        // Slow oscillation of the boundary triangularity, which moves the
+        // X-points — and with them the separatrix legs, the strike points and
+        // the divertor glow — back and forth across the targets. Everything
+        // downstream (equilibrium panel, contour tracing, portview) follows
+        // from the perturbed equilibrium, so the sweep is self-consistent by
+        // construction. Only active once diverted and near flat-top current.
+        // The sweep excursions to HIGHER δ: δ oscillates in [δ₀, δ₀ + amp].
+        // A higher δ moves the X-points inboard, which walks the outer strike
+        // point INBOARD along the divertor roof diagonal — away from the outer
+        // vertical face, which is baffle rather than target. Containment at
+        // the +amp extreme is verified by the fit harness (21 mm clearance)
+        // and guarded at runtime by the solved-boundary contact check below.
+        // Sweep only during TRUE flat-top current. During the Ip ramps the
+        // plasma shape and β are transient, and the grazing-incidence outer
+        // landing wanders far enough to clip the back-corner baffle no matter
+        // how the sweep is tuned — measured repeatedly at both H-mode entry
+        // and rampdown onset. Real strike sweeps are likewise a flat-top
+        // activity; the ramps hold a static shape.
+        let sweep_active = self.device.strike_sweep_hz > 0.0
+            && config != MagneticConfig::Limited
+            && prog.ip > 0.97 * self.device.ip_max;
+        // Dwell-equalized waveform. A plain sinusoid gave a badly lopsided
+        // dwell (measured with examples/sweep_dwell.rs): the δ→strike-arc
+        // mapping along the roof diagonal is compressive at the +δ (inboard)
+        // end — s(u) ≈ u^0.33 — so the sinusoid's turning-point dwell piled
+        // 30% of the period into one 25 mm band at the inboard end while the
+        // outboard half of the target got a grazing instant. A triangle wave
+        // in normalized arc position v, warped through the inverse mapping
+        // u = v³, makes the strike traverse the target at near-constant speed:
+        // measured dwell is then flat across the sweep range. u = 0 is the
+        // outboard-deep extreme (δ-rest), u = 1 the inboard extreme (δ+amp).
+        let sweep_frac = (self.device.strike_sweep_hz * self.time).fract();
+        let sweep_u = {
+            let v = 1.0 - (2.0 * sweep_frac - 1.0).abs(); // triangle 0→1→0
+            v * v * v
+        };
+        let delta_eff = if sweep_active {
+            delta_eff + self.device.strike_sweep_delta * sweep_u
+        } else {
+            delta_eff
+        };
+        // Vertical rock, IN phase with the δ modulation: the plasma (and both
+        // X-points) rises 0..strike_sweep_z as δ excursions inboard, sliding
+        // the strike points along the angled target faces — the only lever
+        // that actually moves the inner strikes (see Device::strike_sweep_z).
+        //
+        // The phasing is load-bearing: the upward rock deepens the upper
+        // outer landing, and the landing is bistable with the back-corner
+        // baffle — an out-of-phase rock lifts the plasma while the outer
+        // strike is at its deep (δ-rest) end and snaps it onto the corner at
+        // every κ in the usable range. In phase, the deepest outer moment
+        // coincides with z = 0, so the resting depth is controlled purely by
+        // equilibrium_kappa_scale while the rock does its work at the safe,
+        // far-inboard end of the sweep.
+        //
+        // Applied to the equilibrium centre so axis, X-points, legs and the
+        // wall-contact check all follow consistently.
+        // Quadratic easing on the rock: z ∝ ((1+sin)/2)², so the lift only
+        // develops once the δ modulation has already carried the landing well
+        // inboard. With a linear (shared-waveform) rock the mid-sweep
+        // combination of partial lift + partial δ flips the grazing-incidence
+        // landing onto the back-corner branch — measured as transient 0 mm
+        // baffle clearance — even though both endpoints of the sweep are safe.
+        self.equilibrium.z0 = if sweep_active {
+            self.device.z0 + self.device.strike_sweep_z * sweep_u * sweep_u
+        } else {
+            self.device.z0
+        };
+
+        // ── Strike-point position control (β compensation) ──
+        // The divertor-leg landing depth is grazing-incidence-sensitive to the
+        // Shafranov shift: as β falls the landing slides OUTBOARD along the
+        // target, and during rampdown (β: 0.57 → 0.5 at ICRF step-down) it
+        // slid past the target's outermost extent onto the baffle corner —
+        // measured as a burst of 0 mm baffle clearance at t ≈ 15.6 s while
+        // the whole flat-top stayed clean. Real machines hold the strike
+        // point with PF feedback; here the equilibrium elongation absorbs the
+        // drift: below β_N ≈ 0.7 the κ scale rises slightly, retreating the
+        // landing inboard down the diagonal as the pulse terminates.
+        // Smoothed β is used so ELM transients don't jitter the boundary.
+        let kappa_scale_eff = if self.device.strike_sweep_hz > 0.0 {
+            self.device.equilibrium_kappa_scale
+                + 0.006 * (0.70 - self.smoothed_beta_n).max(0.0)
+        } else {
+            self.device.equilibrium_kappa_scale
+        };
+
         let new_shape = ShapeParams {
             epsilon,
-            kappa: prog.kappa,
+            // Equilibrium-only κ correction (see Device::equilibrium_kappa_scale)
+            kappa: prog.kappa * kappa_scale_eff,
             delta: delta_eff,
             a_param,
             config,
             x_point_alpha: Some(delta_eff.asin()),
-            squareness: 0.0,
+            squareness: self.device.equilibrium_squareness,
         };
         self.equilibrium.update(&new_shape);
 
@@ -757,8 +851,28 @@ impl Simulation {
             && prog.ip > 0.3 * self.device.ip_max
             && self.actual_ip > 0.1
         {
-            let a = epsilon * self.device.r0; // physical minor radius
-            let lcfs_points = sample_lcfs(self.device.r0, a, prog.kappa, delta_eff, self.device.z0, 24);
+            // Sample the SOLVED boundary, not the analytic parametrization.
+            // The Cerfon–Freidberg solution deviates from its own boundary
+            // parametrization by a few cm (outboard bulge, squarer corners
+            // when squareness ≠ 0), and the rendered separatrix is the solved
+            // contour — so the analytic proxy both misses real contacts and
+            // reports false ones. Ray-march ψ_N = 1 from the axis instead.
+            let (ax_r, ax_z) = self.equilibrium.axis_physical();
+            let mut lcfs_points: Vec<(f64, f64, f64)> = Vec::with_capacity(24);
+            for k in 0..24 {
+                let theta = 2.0 * std::f64::consts::PI * (k as f64) / 24.0;
+                let (dr, dz) = (theta.cos(), theta.sin());
+                let mut rad = 0.05;
+                while rad < 1.6 {
+                    let r = ax_r + dr * rad;
+                    let z = ax_z + dz * rad;
+                    if self.equilibrium.psi_norm(r, z) >= 1.0 {
+                        lcfs_points.push((r, z, theta));
+                        break;
+                    }
+                    rad += 0.01;
+                }
+            }
 
             // X-point(s) for bulk/leg discrimination
             let (xp_lower, xp_upper) = self.equilibrium.x_points_physical();
@@ -848,7 +962,36 @@ impl Simulation {
         // region even when the equilibrium ε is reduced (e.g. DN uses 0.88×ε).
         let sep_bounds = Some((grid_r_min, grid_r_max, grid_z_min, grid_z_max));
         let mut separatrix = if self.actual_ip > 0.1 {
-            contour::extract_separatrix(&self.equilibrium, self.eq_nr, self.eq_nz, sep_bounds)
+            // The separatrix is extracted at twice the flux-surface grid
+            // resolution: the divertor-leg landing point quantizes on the
+            // marching-squares cells (~45 mm in Z at 48×72 over the
+            // wall-extended bounds), which made the outer strike position
+            // bistable between the roof diagonal and the back corner and
+            // hid most of the inner strike's sweep motion. One extra ψ_N
+            // level at 96×144 costs well under a millisecond.
+            let mut sep = contour::extract_separatrix(
+                &self.equilibrium,
+                self.eq_nr * 2,
+                self.eq_nz * 2,
+                sep_bounds,
+            );
+            // Terminate divertor legs at their first wall impact: a leg that
+            // strikes a baffle must not re-emerge beyond it, and spurious
+            // far-SOL ψ=0 chains outside the vessel are dropped outright.
+            //
+            // Applied in the limited phase too: the tangent LCFS survives the
+            // clip untouched (it lies inside, touching at one point), but the
+            // ψ=0 extraction produces large spurious chains outside the vessel
+            // during ramp-up/ramp-down — measured at up to 386 mm outside the
+            // limiter before this covered the limited phase.
+            //
+            // The 3 mm overshoot keeps the frontend's leg/wall intersection
+            // detection working; the sliver past the wall is masked by the
+            // renderer.
+            if !self.device.wall_outline.is_empty() {
+                contour::clip_separatrix_to_wall(&mut sep, &self.device.wall_outline, 0.003);
+            }
+            sep
         } else {
             Contour {
                 level: 0.0,
@@ -886,7 +1029,8 @@ impl Simulation {
                 .map(|(r, _)| *r)
                 .fold(f64::INFINITY, f64::min);
             // Current inboard edge of the equilibrium
-            let r_inboard = self.device.r0 * (1.0 - self.equilibrium.shape.epsilon);
+            let r_inboard = (self.device.r0 + self.device.equilibrium_r0_shift)
+                * (1.0 - self.equilibrium.shape.epsilon);
             // Shift decreases as Ip ramps toward flat-top
             let shift = (r_inboard - r_limiter).max(0.0) * (1.0 - ip_frac);
 

@@ -284,6 +284,7 @@ export function useSimulation(
         })(),
         elm_suppressed: snap.elm_suppressed,
         elm_active: anyElmActive,
+        in_hmode: snap.in_hmode,
       }
       historyRef.current.push(pt)
       if (historyRef.current.length > MAX_TRACE_HISTORY) {

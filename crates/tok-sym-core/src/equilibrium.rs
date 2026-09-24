@@ -44,8 +44,8 @@ impl ShapeParams {
     pub fn from_device(device: &Device) -> Self {
         let delta = device.delta_lower;
         ShapeParams {
-            epsilon: device.epsilon(),
-            kappa: device.kappa,
+            epsilon: device.epsilon() * device.equilibrium_a_scale,
+            kappa: device.kappa * device.equilibrium_kappa_scale,
             delta,
             a_param: -0.05, // Sensible default
             config: device.config,
@@ -710,9 +710,11 @@ impl CerfonEquilibrium {
     }
 
     /// Solve equilibrium for a given device with default shape.
+    /// The equilibrium centre carries the device's fit shift (see
+    /// Device::equilibrium_r0_shift) — physics quantities do not.
     pub fn from_device(device: &Device) -> Option<Self> {
         let shape = ShapeParams::from_device(device);
-        Self::solve(&shape, device.r0, device.z0)
+        Self::solve(&shape, device.r0 + device.equilibrium_r0_shift, device.z0)
     }
 
     /// Evaluate ψ at normalized coordinates (x, y).
