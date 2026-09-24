@@ -72,8 +72,8 @@ cd web && npx vite preview
 wasm-pack build crates/tok-sym-core \
   --target web \
   --out-dir ../../web/src/wasm \
-  --features wasm \
-  -- --no-default-features
+  --no-default-features \
+  --features wasm
 
 # Start frontend dev server (with hot reload)
 cd web
