@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useSimulation } from '../lib/useSimulation'
 import { getDevices, type PresetId } from '../lib/wasm'
+import type { MagneticConfig, OverrideValue, ProgramHandoff } from '../lib/program'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
 import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
@@ -42,6 +43,11 @@ export default function ControlRoom() {
   const routePreset = (searchParams.get('preset') || 'hmode') as PresetId
   const showTutorial = searchParams.get('tutorial') === 'true'
 
+  // A programme edited on the pulse page arrives as router state.
+  const location = useLocation()
+  const rawHandoff = (location.state ?? null) as ProgramHandoff | null
+  const handoff = typeof rawHandoff?.programJson === 'string' ? rawHandoff : null
+
   // Local state so user can switch without navigating
   const [tutorialActive, setTutorialActive] = useState(showTutorial)
   const [activeDevice, setActiveDevice] = useState(routeDeviceId ?? 'diiid')
@@ -49,12 +55,13 @@ export default function ControlRoom() {
   const [showPlanner, setShowPlanner] = useState(false)
   const [activeSpeed, setActiveSpeed] = useState(1.0)
 
-  // Persistent Pulse Planner state — survives open/close of the drawer
-  const [plannerOverrides, setPlannerOverrides] = useState<Record<string, number | import('../lib/wasm').WaveformPoint[] | null>>({})
-  const [plannerDuration, setPlannerDuration] = useState<number | null>(null)
-  const [plannerPreset, setPlannerPreset] = useState<PresetId>(routePreset)
-  const [hasCustomProgram, setHasCustomProgram] = useState(false)
-  const [configOverride, setConfigOverride] = useState<'LowerSingleNull' | 'DoubleNull' | 'UpperSingleNull' | null>(null)
+  // Persistent Pulse Planner state — survives open/close of the drawer, and
+  // is seeded from the hand-off so the planner opens on the edited programme.
+  const [plannerOverrides, setPlannerOverrides] = useState<Record<string, OverrideValue>>(handoff?.overrides ?? {})
+  const [plannerDuration, setPlannerDuration] = useState<number | null>(handoff?.durationOverride ?? null)
+  const [plannerPreset, setPlannerPreset] = useState<PresetId>(handoff?.presetId ?? routePreset)
+  const [hasCustomProgram, setHasCustomProgram] = useState(!!handoff)
+  const [configOverride, setConfigOverride] = useState<MagneticConfig | null>(handoff?.configOverride ?? null)
   const defaultFuel = (id: string): 'DD' | 'DT' => (id === 'iter' || id === 'jet') ? 'DT' : 'DD'
   const [fuelType, setFuelType] = useState<'DD' | 'DT'>(defaultFuel(activeDevice))
 
@@ -70,6 +77,17 @@ export default function ControlRoom() {
     scrubTime,
     finished,
   } = state
+
+  // Load a programme edited on the pulse page. runProgram builds the sim but
+  // leaves it stopped, so the control room waits on Start as it always does.
+  // Deliberately NOT guarded with a ref: under StrictMode's mount/unmount/
+  // remount, useSimulation recreates the preset sim on the remount, so a
+  // once-only guard would leave the preset loaded. Loading the same JSON
+  // twice is harmless (the previous handle is freed).
+  useEffect(() => {
+    if (!handoff) return
+    controls.runProgram(activeDevice, handoff.programJson)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Set initial fuel type for devices that default to DT
   useEffect(() => {
@@ -162,14 +180,18 @@ export default function ControlRoom() {
           an equal share of the free space, so the playback controls stay
           centred on the page even as the side content changes width (DD/DT
           toggle appearing per device, "(done)" suffix at end of pulse). */}
-      <div className="relative z-50 grid grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-1 sm:gap-2">
+      {/* Below md the bar is two rows: selectors and time/settings on the first,
+          playback centred on its own full-width second row. A single row is
+          wider than a phone and the root clips overflow, so the right-hand
+          controls were cut off and could not be scrolled to. */}
+      <div className="relative z-50 grid grid-cols-[1fr_auto] md:grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-x-1 sm:gap-x-2 gap-y-1">
         {/* Device, Scenario, Fuel selectors */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start col-start-1 row-start-1">
           {/* Device selector */}
           <select
             value={activeDevice}
             onChange={(e) => handleDeviceChange(e.target.value)}
-            className="bg-gray-800 border border-gray-700 text-cyan-400 text-[11px] sm:text-xs font-bold
+            className="bg-gray-800 border border-gray-700 text-sm font-medium
                        rounded px-1 sm:px-1.5 py-1 cursor-pointer hover:border-cyan-600
                        focus:outline-none focus:border-cyan-500 transition-colors"
           >
@@ -184,7 +206,7 @@ export default function ControlRoom() {
           <select
             value={activePreset}
             onChange={(e) => handlePresetChange(e.target.value as PresetId)}
-            className="bg-gray-800 border border-gray-700 text-amber-400 text-[11px] sm:text-xs font-bold
+            className="bg-gray-800 border border-gray-700 text-sm font-medium
                        rounded px-1 sm:px-1.5 py-1 cursor-pointer hover:border-amber-600
                        focus:outline-none focus:border-amber-500 transition-colors"
           >
@@ -202,7 +224,7 @@ export default function ControlRoom() {
                 <button
                   key={f}
                   onClick={() => handleFuelChange(f)}
-                  className={`px-1.5 sm:px-2 py-1 text-[10px] sm:text-[11px] font-semibold transition-colors cursor-pointer
+                  className={`px-1.5 sm:px-2 py-1 text-sm font-medium transition-colors cursor-pointer
                     ${fuelType === f
                       ? 'bg-emerald-600 text-white'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
@@ -217,11 +239,12 @@ export default function ControlRoom() {
 
         {/* Playback controls — fixed widths on the buttons whose label changes
             so the row never reflows as the pulse state changes. */}
-        <div className="flex items-center gap-1 sm:gap-1.5 justify-self-center">
+        <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 justify-self-center
+                        col-span-2 row-start-2 md:col-span-1 md:col-start-2 md:row-start-1">
           {!running ? (
             <button
               onClick={controls.start}
-              className="px-2 sm:px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-[11px] sm:text-xs font-semibold
+              className="px-2 sm:px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-sm
                          transition-colors cursor-pointer flex items-center justify-center gap-1 min-w-[4.5rem] sm:min-w-[5rem]"
             >
               ▶ Start
@@ -229,7 +252,7 @@ export default function ControlRoom() {
           ) : (
             <button
               onClick={controls.pause}
-              className="px-2 sm:px-3 py-1 bg-amber-600 hover:bg-amber-500 rounded text-[11px] sm:text-xs font-semibold
+              className="px-2 sm:px-3 py-1 bg-amber-600 hover:bg-amber-500 rounded text-sm
                          transition-colors cursor-pointer flex items-center justify-center gap-1 min-w-[4.5rem] sm:min-w-[5rem]"
             >
               ⏸ Pause
@@ -240,7 +263,7 @@ export default function ControlRoom() {
           <button
             onClick={controls.reset}
             aria-hidden={running && hasCustomProgram}
-            className={`px-2 sm:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[11px] sm:text-xs font-semibold
+            className={`px-2 sm:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm
                        transition-colors cursor-pointer ${running && hasCustomProgram ? 'invisible' : ''}`}
           >
             ↺ Reset
@@ -252,14 +275,14 @@ export default function ControlRoom() {
               <button
                 key={s}
                 onClick={() => handleSpeedChange(s)}
-                className={`px-1 sm:px-1.5 py-1 text-[10px] sm:text-[11px] font-semibold transition-colors cursor-pointer
+                className={`px-1 sm:px-1.5 py-1 text-sm transition-colors cursor-pointer
                   ${
                     activeSpeed === s
                       ? 'bg-gray-600 text-white'
                       : 'bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
                   }`}
               >
-                {s}x
+                <span className="font-mono tabular-nums">{s}</span>x
               </button>
             ))}
           </div>
@@ -267,7 +290,7 @@ export default function ControlRoom() {
           {/* Edit Program button */}
           <button
             onClick={() => setShowPlanner(!showPlanner)}
-            className="px-1.5 sm:px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] sm:text-[11px] font-semibold
+            className="px-1.5 sm:px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-sm
                        transition-colors cursor-pointer flex items-center justify-center gap-1 sm:min-w-[4.25rem]"
           >
             {showPlanner ? (
@@ -282,11 +305,13 @@ export default function ControlRoom() {
         </div>
 
         {/* Time readout + Settings */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end">
-          <div className="font-mono text-[10px] sm:text-xs text-gray-400 tabular-nums whitespace-nowrap">
-            t={time.toFixed(3)}s / {duration.toFixed(1)}s
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end col-start-2 row-start-1 md:col-start-3">
+          <div className="text-xs text-gray-400 whitespace-nowrap">
+            t=<span className="font-mono tabular-nums">{time.toFixed(3)}</span>s
+            {' / '}
+            <span className="font-mono tabular-nums">{duration.toFixed(1)}</span>s
             {finished && (
-              <span className="ml-1 text-[9px] sm:text-[10px] text-gray-600">
+              <span className="ml-1 text-xs text-gray-600">
                 {scrubTime !== null ? '(scrub)' : '(done)'}
               </span>
             )}
@@ -295,16 +320,30 @@ export default function ControlRoom() {
         </div>
       </div>
 
+      {/* ─── Pulse progress: a hairline under the top bar. It used to be a
+          6px bar below the grid, where the bottom row could overrun it and
+          the last status readouts ended up underneath. ─── */}
+      <div className="h-px bg-gray-900 shrink-0" aria-hidden="true">
+        <div
+          className="h-full bg-cyan-500 transition-[width] duration-100"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
       {/* ─── Main grid ─── */}
-      <div className="flex-1 overflow-x-auto">
-      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[1.1fr_1fr] gap-px min-h-0 bg-[var(--c-line)]">
+      <div className="flex-1 min-h-0 overflow-x-auto">
+      {/* Balanced 2x3: equilibrium top-left, traces across the top right,
+          status spanning the bottom under the equilibrium, port view bottom
+          right. Cells carry no card chrome; the 1px grid gap over the base
+          colour does all the separating. */}
+      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)] gap-px min-h-0 bg-[var(--c-line)]">
         {/* Top-left: Equilibrium cross-section (single cell) */}
-        <div data-tutorial="equilibrium" className="stagger-1 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="equilibrium" className="stagger-1 panel-cell">
           <EquilibriumCanvas snapshot={displaySnapshot} wallJson={wallJson} limiterPoints={limiterPoints} />
         </div>
 
         {/* Top row, cols 2-3: Unified trace panel */}
-        <div data-tutorial="traces" className="stagger-2 col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="traces" className="stagger-2 panel-cell col-span-2">
           <UnifiedTracePanel
             history={history}
             programJson={programJson}
@@ -318,7 +357,7 @@ export default function ControlRoom() {
         </div>
 
         {/* Bottom row, cols 1-2: Status panel (extends under equilibrium) */}
-        <div data-tutorial="status" className="stagger-3 col-span-2 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="status" className="stagger-3 panel-cell col-span-2">
           <StatusPanel
             snapshot={displaySnapshot}
             finished={finished}
@@ -332,7 +371,7 @@ export default function ControlRoom() {
         </div>
 
         {/* Bottom-right: 3D port view */}
-        <div data-tutorial="portview" className="stagger-4 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
+        <div data-tutorial="portview" className="stagger-4 panel-cell">
           <PortView
             snapshot={plasmaSnapshot}
             limiterPoints={limiterPoints}
@@ -343,14 +382,6 @@ export default function ControlRoom() {
           />
         </div>
       </div>
-      </div>
-
-      {/* ─── Progress bar ─── */}
-      <div className="h-1.5 bg-gray-900">
-        <div
-          className="h-full bg-cyan-500 transition-all duration-100"
-          style={{ width: `${progress}%` }}
-        />
       </div>
 
       {/* ─── Pulse Planner drawer ─── */}

@@ -157,7 +157,7 @@ function RefTag({ id }: { id: string }) {
   return (
     <a
       href={`#ref-${id}`}
-      className="text-cyan-400 hover:text-cyan-300 text-[10px] align-super ml-0.5 no-underline"
+      className="text-cyan-400 hover:text-cyan-300 text-xs align-super ml-0.5 no-underline"
     >
       [{REFERENCES.findIndex((r) => r.id === id) + 1}]
     </a>
@@ -196,16 +196,16 @@ function Eq({ children }: { children: React.ReactNode }) {
 
 export default function Bibliography() {
   return (
-    <div className="min-h-screen bg-black text-gray-200">
+    <div className="min-h-screen bg-gray-900 text-gray-200">
       {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-gray-800 px-6 sm:px-10 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-gray-900 border-b border-gray-800 px-6 sm:px-10 py-3 flex items-center justify-between">
         <Link
           to="/"
-          className="font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500 hover:text-cyan-400 transition-colors"
+          className="text-sm text-gray-500 hover:text-cyan-400 transition-colors"
         >
           ← Back to simulator
         </Link>
-        <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+        <span className="font-mono text-xs tracking-[0.16em] text-gray-300">
           fusionsimulator<span className="text-gray-600">.io</span>
         </span>
       </header>
@@ -213,16 +213,15 @@ export default function Bibliography() {
       <main className="max-w-3xl mx-auto px-6 sm:px-10 py-12">
         {/* Page header */}
         <div className="mb-10">
-          <div className="panel-title mb-2">Reference</div>
-          <h1 className="text-3xl font-bold text-white mb-3">Physics Bibliography</h1>
+          <h1 className="text-3xl font-bold text-white mb-3">Physics bibliography</h1>
           <p className="text-gray-400 text-sm leading-relaxed">
             Complete reference of every equation, scaling law, approximation, and formalism
             implemented in the simulator. This page is intended as a companion for students
             and researchers who want to understand the physics behind each panel.
           </p>
-          <div className="mt-5 border-l-2 border-gray-700 pl-4 py-1 text-gray-500 text-xs leading-relaxed max-w-2xl">
-            <span className="font-mono uppercase tracking-wider text-gray-400">Note</span>
-            {' — '}This simulator uses a zero-dimensional (0D) global power-balance transport
+          <div className="mt-5 border-l border-gray-800 pl-4 py-1 text-gray-500 text-xs leading-relaxed max-w-2xl">
+            <span className="font-medium text-gray-300">Note:</span>
+            {' '}This simulator uses a zero-dimensional (0D) global power-balance transport
             model with analytic equilibrium solutions. Results are approximate and intended for
             qualitative educational use. They should not be used for engineering design or
             quantitative predictions.

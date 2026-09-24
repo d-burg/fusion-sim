@@ -207,15 +207,14 @@ export default function WaveformDrawer({
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-[#121620] border-2 border-cyan-800 rounded-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-700">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-            <span className="text-sm font-semibold text-gray-200">{label}</span>
+            <span className="text-sm font-medium text-gray-200">{label}</span>
             <span className="text-xs text-gray-500">({unit})</span>
           </div>
-          <span className="text-[10px] text-gray-500">Draw with mouse</span>
         </div>
 
         {/* Canvas — fixed size, no resize observer needed */}
@@ -233,18 +232,18 @@ export default function WaveformDrawer({
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-700">
           <button onClick={() => setDrawnWaveform(null)}
-            className="px-3 py-1 rounded text-xs font-semibold bg-gray-800 text-gray-400 hover:bg-gray-700 cursor-pointer">
+            className="px-3 py-1 rounded text-sm bg-gray-800 text-gray-400 hover:bg-gray-700 cursor-pointer">
             Reset
           </button>
           <div className="flex gap-2">
             <button onClick={onClose}
-              className="px-3 py-1 rounded text-xs font-semibold bg-gray-800 text-gray-400 hover:bg-gray-700 cursor-pointer">
+              className="px-3 py-1 rounded text-sm bg-gray-800 text-gray-400 hover:bg-gray-700 cursor-pointer">
               Cancel
             </button>
             <button
               onClick={() => { if (drawnWaveform) onSave(drawnWaveform); else onClose() }}
               disabled={!drawnWaveform}
-              className={`px-4 py-1 rounded text-xs font-bold cursor-pointer ${
+              className={`px-4 py-1 rounded text-sm cursor-pointer ${
                 drawnWaveform ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-gray-800 text-gray-600 cursor-not-allowed'
               }`}>
               Apply

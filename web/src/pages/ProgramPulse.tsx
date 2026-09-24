@@ -7,6 +7,16 @@ import {
   type WaveformPoint,
   type PulseProgram,
 } from '../lib/wasm'
+import {
+  buildProgram,
+  DURATION_MAX,
+  SCALAR_PARAMS,
+  type MagneticConfig,
+  type OverrideValue,
+  type ProgramHandoff,
+  type ScalarParam,
+} from '../lib/program'
+import WaveformDrawer from '../components/WaveformDrawer'
 
 // ── Preset metadata ──────────────────────────────────────────────
 const ALL_PRESETS: { id: PresetId; name: string; desc: string; color: string }[] = [
@@ -24,8 +34,8 @@ const ALL_PRESETS: { id: PresetId; name: string; desc: string; color: string }[]
   },
   {
     id: 'density_limit',
-    name: 'Density Limit',
-    desc: 'Over-fuelled plasma — pushes past the Greenwald limit. Will it disrupt?',
+    name: 'Density limit',
+    desc: 'Over-fuelled plasma that pushes past the Greenwald limit. Will it disrupt?',
     color: 'red',
   },
 ]
@@ -35,13 +45,13 @@ const CENTAUR_PRESETS: typeof ALL_PRESETS = [
   {
     id: 'hmode',
     name: 'NT-edge',
-    desc: 'Negative-triangularity edge mode — ELM-free high confinement',
+    desc: 'Negative-triangularity edge mode with ELM-free high confinement',
     color: 'cyan',
   },
   {
     id: 'density_limit',
-    name: 'Density Limit',
-    desc: 'Over-fuelled plasma — pushes past the Greenwald limit. Will it disrupt?',
+    name: 'Density limit',
+    desc: 'Over-fuelled plasma that pushes past the Greenwald limit. Will it disrupt?',
     color: 'red',
   },
 ]
@@ -50,83 +60,315 @@ function getPresets(deviceId: string) {
   return deviceId === 'centaur' ? CENTAUR_PRESETS : ALL_PRESETS
 }
 
-// ── Mini sparkline SVG for a waveform ────────────────────────────
-// Uses a wide viewBox (600px) to minimize aspect ratio distortion
-// when the SVG is scaled to fill its container.
-function Sparkline({
-  points,
-  duration,
-  color = '#22d3ee',
-  height = 32,
-}: {
-  points: WaveformPoint[]
-  duration: number
-  color?: string
-  height?: number
-}) {
-  if (points.length < 2) return null
+// ── Programmed-waveform strip chart ──────────────────────────────
+// A stack of time-aligned strips on one shared time axis, the way a pulse
+// schedule is shown on a plasma-control-system display. Each strip is
+// scaled from zero to its own peak so the shape of the programme is honest;
+// the breakpoints that define the piecewise-linear programme are drawn as
+// markers, because they are the data. The x-scale is shared, so ticks and
+// phase boundaries line up across every strip.
 
-  const vals = points.map((p) => p[1])
-  const vMin = Math.min(...vals, 0)
-  const vMax = Math.max(...vals) * 1.1 || 1
-
-  const w = 600 // wide viewBox to match typical rendered aspect ratio
-  const h = height
-  const pad = 2
-  const toX = (t: number) => pad + (t / duration) * (w - 2 * pad)
-  const toY = (v: number) => pad + (h - 2 * pad) - ((v - vMin) / (vMax - vMin)) * (h - 2 * pad)
-
-  const d = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(1)}`)
-    .join(' ')
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }}>
-      <path
-        className="trace-sweep"
-        pathLength={1}
-        d={d}
-        fill="none"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-// ── Waveform row in the detail panel ─────────────────────────────
-function WaveformRow({
-  label,
-  unit,
-  title,
-  points,
-  duration,
-  color,
-}: {
-  label: string
+type Channel = {
+  key: string
+  symbol: React.ReactNode
   unit: string
   title: string
   points: WaveformPoint[]
+  /** Set when the channel can be redrawn; absent channels are display-only. */
+  param?: ScalarParam
+}
+
+/** Shared column template: symbol, plot, readout. */
+const COLS = 'grid-cols-[2.75rem_1fr_4.5rem] md:grid-cols-[6rem_1fr_11rem]'
+
+/** Tick spacing that gives roughly 5–10 ticks across the pulse. */
+function tickStep(duration: number): number {
+  const candidates = [0.5, 1, 2, 5, 10, 20, 50]
+  return candidates.find((c) => duration / c <= 10) ?? 100
+}
+
+/** Ramp-up end and ramp-down start, taken from the Ip programme. */
+function flatTop(ip: WaveformPoint[]): { start: number; end: number } | null {
+  const max = Math.max(...ip.map((p) => p[1]))
+  if (!(max > 0)) return null
+  const near = ip.filter((p) => p[1] >= 0.98 * max)
+  if (near.length === 0) return null
+  const start = near[0][0]
+  const end = near[near.length - 1][0]
+  return end > start ? { start, end } : null
+}
+
+const VB_W = 1000 // viewBox width; preserveAspectRatio="none" stretches it
+const STRIP_H = 36
+
+function Strip({
+  ch,
+  duration,
+  ticks,
+  phases,
+  edited,
+  onEdit,
+  onReset,
+}: {
+  ch: Channel
   duration: number
-  color: string
+  ticks: number[]
+  phases: { start: number; end: number } | null
+  edited: boolean
+  onEdit?: () => void
+  onReset?: () => void
 }) {
-  const peak = Math.max(...points.map((p) => p[1]))
+  const vals = ch.points.map((p) => p[1])
+  const programmed = vals.some((v) => v !== 0)
+  // Scale from zero to the channel's extremum, keeping the sign so a
+  // negative-triangularity programme reads as a dip below the baseline
+  // rather than being mistaken for an unprogrammed channel.
+  const lo = Math.min(0, ...vals) * 1.08
+  const hi = Math.max(0, ...vals) * 1.08
+  const range = hi - lo || 1
+  const extremum = vals.reduce((a, v) => (Math.abs(v) > Math.abs(a) ? v : a), 0)
+  const padY = 4
+  const toX = (t: number) => (t / duration) * VB_W
+  const toY = (v: number) => padY + (STRIP_H - 2 * padY) * (1 - (v - lo) / range)
+  const d = ch.points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(2)}`)
+    .join(' ')
+
+  const symbol = (
+    <div
+      className={`text-sm text-right ${onEdit ? '' : 'cursor-help'} ${programmed ? 'text-gray-300' : 'text-gray-600'} self-center`}
+      title={onEdit ? undefined : ch.unit ? `${ch.title} (${ch.unit})` : ch.title}
+    >
+      {ch.symbol}
+    </div>
+  )
+
+  const plot = (
+    <svg
+      viewBox={`0 0 ${VB_W} ${STRIP_H}`}
+      preserveAspectRatio="none"
+      className="w-full h-full block"
+      aria-label={`${ch.title} programme`}
+    >
+      {/* Shared time grid */}
+      {ticks.map((t) => (
+        <line
+          key={t}
+          x1={toX(t)} x2={toX(t)} y1={0} y2={STRIP_H}
+          stroke="var(--c-line)" vectorEffect="non-scaling-stroke"
+        />
+      ))}
+      {/* Flat-top boundaries, slightly stronger */}
+      {phases && [phases.start, phases.end].map((t) => (
+        <line
+          key={`ph-${t}`}
+          x1={toX(t)} x2={toX(t)} y1={0} y2={STRIP_H}
+          stroke="var(--c-line-strong)" vectorEffect="non-scaling-stroke"
+        />
+      ))}
+      {/* Zero baseline */}
+      <line
+        x1={0} x2={VB_W} y1={toY(0)} y2={toY(0)}
+        stroke="var(--c-line)" vectorEffect="non-scaling-stroke"
+      />
+      {programmed && (
+        <>
+          <path
+            d={d}
+            fill="none"
+            stroke={edited ? 'var(--c-accent)' : 'var(--c-ink-dim)'}
+            strokeWidth={1.25}
+            strokeLinejoin="miter"
+            vectorEffect="non-scaling-stroke"
+          />
+          {/* Breakpoints: zero-length round-capped dashes stay circular
+              under the non-uniform scaling, unlike <circle>. */}
+          {ch.points.map((p, i) => (
+            <path
+              key={i}
+              d={`M ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(2)} h 0.001`}
+              stroke={edited ? 'var(--c-accent)' : 'var(--c-ink)'}
+              strokeWidth={4}
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </>
+      )}
+    </svg>
+  )
+
   return (
-    <div className="flex items-center gap-3">
-      <div
-        className="w-20 text-right text-xs text-gray-500 shrink-0 cursor-help"
-        title={unit ? `${title} (${unit})` : title}
-      >
-        {label}
-        {unit && <span className="text-gray-600 ml-1">({unit})</span>}
+    <div className={`group grid ${COLS} items-stretch gap-2 md:gap-3 bg-gray-900 py-1 px-2 md:px-3 min-h-0`}>
+      {onEdit ? (
+        <button
+          type="button"
+          onClick={onEdit}
+          title={`Edit ${ch.title}`}
+          aria-label={`Edit ${ch.title}`}
+          className="col-span-2 grid grid-cols-subgrid items-stretch gap-2 md:gap-3 cursor-pointer min-h-0
+                     group-hover:bg-[var(--c-raised)] transition-colors"
+        >
+          {symbol}
+          {plot}
+        </button>
+      ) : (
+        <>
+          {symbol}
+          {plot}
+        </>
+      )}
+
+      <div className="flex items-center justify-end gap-2 md:gap-3 text-xs tabular-nums whitespace-nowrap self-center">
+        {programmed ? (
+          <span>
+            <span className="font-mono text-gray-300">{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}</span>
+            {ch.unit && <span className="hidden md:inline text-gray-500 ml-1">{ch.unit}</span>}
+          </span>
+        ) : (
+          <>
+            <span className="hidden md:inline text-gray-600">not programmed</span>
+            <span className="md:hidden text-gray-600" aria-label="not programmed">–</span>
+          </>
+        )}
+        {/* Editable channels carry a visible Edit control at rest, so the
+            affordance is on the row itself rather than in a sentence
+            elsewhere. Display-only channels (Bt, P_ICH) simply lack it. */}
+        {onEdit && !edited && (
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${ch.title}`}
+            className="flex items-center gap-1 text-gray-500 group-hover:text-cyan-400
+                       hover:text-cyan-400 transition-colors cursor-pointer leading-none"
+          >
+            <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor"
+                 strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+              <path d="M11.5 2.5l2 2L5.5 13H3.5v-2z" />
+            </svg>
+            <span className="hidden md:inline">Edit</span>
+          </button>
+        )}
+        {edited && <span className="text-xs text-amber-400">edited</span>}
+        {edited && onReset && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onReset() }}
+            aria-label={`Reset ${ch.title} to preset`}
+            title={`Reset ${ch.title} to preset`}
+            className="text-gray-500 hover:text-gray-300 transition-colors cursor-pointer leading-none"
+          >
+            ↺
+          </button>
+        )}
       </div>
-      <div className="flex-1 bg-gray-950 rounded px-2 py-1">
-        <Sparkline points={points} duration={duration} color={color} />
+    </div>
+  )
+}
+
+function ProgramChart({
+  program,
+  overrides,
+  onEdit,
+  onReset,
+}: {
+  program: PulseProgram
+  overrides: Record<string, OverrideValue>
+  onEdit: (param: ScalarParam) => void
+  onReset: (key: string) => void
+}) {
+  const duration = program.duration
+  const step = tickStep(duration)
+  const ticks: number[] = []
+  for (let t = 0; t <= duration + 1e-9; t += step) ticks.push(+t.toFixed(3))
+  const phases = flatTop(program.ip)
+  const pct = (t: number) => `${((t / duration) * 100).toFixed(2)}%`
+
+  const param = (key: string) => SCALAR_PARAMS.find((p) => p.key === key)
+
+  const channels: Channel[] = [
+    { key: 'ip', symbol: <><i>I</i><sub>p</sub></>, unit: 'MA', title: 'Plasma current', points: program.ip, param: param('ip') },
+    { key: 'bt', symbol: <><i>B</i><sub>t</sub></>, unit: 'T', title: 'Toroidal magnetic field', points: program.bt },
+    { key: 'ne', symbol: <><i>n̄</i><sub>e</sub></>, unit: '10²⁰ m⁻³', title: 'Line-averaged electron density', points: program.ne_target, param: param('ne') },
+    { key: 'nbi', symbol: <><i>P</i><sub>NBI</sub></>, unit: 'MW', title: 'Neutral beam injection power', points: program.p_nbi, param: param('p_nbi') },
+    { key: 'ech', symbol: <><i>P</i><sub>ECH</sub></>, unit: 'MW', title: 'Electron cyclotron heating power', points: program.p_ech, param: param('p_ech') },
+    { key: 'ich', symbol: <><i>P</i><sub>ICH</sub></>, unit: 'MW', title: 'Ion cyclotron heating power', points: program.p_ich },
+    { key: 'd2_puff', symbol: <><i>Γ</i><sub>D₂</sub></>, unit: '10²⁰/s', title: 'Deuterium gas puff rate', points: program.d2_puff ?? [], param: param('d2_puff') },
+    { key: 'neon_puff', symbol: <><i>Γ</i><sub>Ne</sub></>, unit: '10²⁰/s', title: 'Neon seeding rate', points: program.neon_puff ?? [], param: param('neon_puff') },
+    { key: 'kappa', symbol: <i>κ</i>, unit: '', title: 'Elongation', points: program.kappa, param: param('kappa') },
+    { key: 'delta', symbol: <i>δ</i>, unit: '', title: 'Triangularity', points: program.delta, param: param('delta') },
+  ]
+
+  return (
+    <div className="border-y border-gray-800 flex flex-col h-full min-h-0">
+      {/* Phase header, aligned to the plot column */}
+      {phases && (
+        <div className={`grid ${COLS} gap-2 md:gap-3 px-2 md:px-3 pt-2 pb-1 text-xs text-gray-500`}>
+          <div />
+          {/* One box per phase band. Each box is a size container, and its
+              label only renders when the band is wide enough to hold it, so
+              labels can never overlap or wrap on a narrow plot. */}
+          <div className="relative h-4">
+            {([
+              ['ramp-up', 0, phases.start],
+              ['flat-top', phases.start, phases.end],
+              ['ramp-down', phases.end, duration],
+            ] as [string, number, number][]).map(([label, from, to]) => (
+              <div
+                key={label}
+                className="@container absolute top-0 bottom-0 overflow-hidden"
+                style={{ left: pct(from), width: pct(to - from) }}
+              >
+                <span className={`hidden @[4.25rem]:inline whitespace-nowrap ${from > 0 ? 'pl-1.5' : ''}`}>
+                  {label}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div />
+        </div>
+      )}
+
+      {/* Equal-height rows that fill whatever height the page gives the chart;
+          the SVGs stretch with them (non-uniform scaling, non-scaling strokes).
+          Below 1.75rem per row the chart scrolls rather than crushing. */}
+      <div className="flex-1 min-h-0 grid auto-rows-[minmax(1.75rem,1fr)] gap-px bg-[var(--c-line)] overflow-y-auto">
+        {channels.map((ch) => {
+          const p = ch.param
+          const ov = p ? overrides[p.key] : undefined
+          return (
+            <Strip
+              key={ch.key}
+              ch={ch}
+              duration={duration}
+              ticks={ticks}
+              phases={phases}
+              edited={ov !== undefined && ov !== null}
+              onEdit={p ? () => onEdit(p) : undefined}
+              onReset={p ? () => onReset(p.key) : undefined}
+            />
+          )
+        })}
       </div>
-      <div className="w-14 text-right text-xs text-gray-400 font-mono shrink-0">
-        {peak.toFixed(1)}
+
+      {/* Shared time axis */}
+      <div className={`grid ${COLS} gap-2 md:gap-3 px-2 md:px-3 pt-1.5 pb-2 text-xs text-gray-500`}>
+        <div className="text-right"><i>t</i> (s)</div>
+        <div className="relative h-4 font-mono tabular-nums">
+          {ticks.map((t, i) => (
+            <span
+              key={t}
+              className="absolute"
+              style={{
+                left: pct(t),
+                transform: i === ticks.length - 1 ? 'translateX(-100%)' : i === 0 ? 'none' : 'translateX(-50%)',
+              }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+        <div />
       </div>
     </div>
   )
@@ -140,11 +382,73 @@ export default function ProgramPulse() {
   const device = useMemo(() => (deviceId ? getDevice(deviceId) : null), [deviceId])
   const [selected, setSelected] = useState<PresetId>('hmode')
 
+  // Edits layered over the preset. An override is either a scalar flat-top
+  // value or a redrawn waveform; the programme handed to the simulator is
+  // rebuilt from the preset every render, so nothing is ever edited in place.
+  const [overrides, setOverrides] = useState<Record<string, OverrideValue>>({})
+  const [durationOverride, setDurationOverride] = useState<number | null>(null)
+  const [configOverride, setConfigOverride] = useState<MagneticConfig | null>(null)
+  const [editing, setEditing] = useState<ScalarParam | null>(null)
+
   // Load the selected preset's waveforms
-  const program: PulseProgram | null = useMemo(
+  const base: PulseProgram | null = useMemo(
     () => (deviceId ? getPreset(deviceId, selected) : null),
     [deviceId, selected],
   )
+
+  const program: PulseProgram | null = useMemo(
+    () => (base ? buildProgram(base, overrides, durationOverride, configOverride) : null),
+    [base, overrides, durationOverride, configOverride],
+  )
+
+  const modified =
+    Object.keys(overrides).length > 0 || durationOverride !== null || configOverride !== null
+
+  const durationMax = DURATION_MAX[deviceId ?? ''] ?? 30
+
+  const selectScenario = (id: PresetId) => {
+    setSelected(id)
+    setOverrides({})
+    setDurationOverride(null)
+    setConfigOverride(null)
+    setEditing(null)
+  }
+
+  const resetAll = () => {
+    setOverrides({})
+    setDurationOverride(null)
+    setConfigOverride(null)
+  }
+
+  const resetChannel = (key: string) => {
+    setOverrides((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
+  const setDuration = (raw: string) => {
+    const v = parseFloat(raw)
+    if (!Number.isFinite(v) || !base) return
+    const clamped = Math.min(Math.max(v, 1), durationMax)
+    setDurationOverride(clamped === base.duration ? null : clamped)
+  }
+
+  const handleRun = () => {
+    if (!modified || !program) {
+      navigate(`/run/${deviceId}?preset=${selected}`)
+      return
+    }
+    const handoff: ProgramHandoff = {
+      programJson: JSON.stringify(program),
+      presetId: selected,
+      overrides,
+      durationOverride,
+      configOverride,
+    }
+    navigate(`/run/${deviceId}?preset=${selected}`, { state: handoff })
+  }
 
   if (!device) {
     return (
@@ -154,89 +458,178 @@ export default function ProgramPulse() {
     )
   }
 
-  const accentColor =
-    selected === 'hmode' ? '#e0a23a' : selected === 'lmode' ? '#56B4E9' : '#c8553d'
-
   return (
-    <div className="page-enter min-h-screen flex flex-col">
+    <div className="page-enter min-h-screen md:tall:h-screen flex flex-col md:tall:overflow-hidden pb-20 md:tall:pb-0">
       {/* ── Top nav ── */}
-      <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800">
+      <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 shrink-0">
         <button
           onClick={() => navigate('/')}
-          className="font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500 hover:text-cyan-400 transition-colors cursor-pointer"
+          className="text-sm text-gray-500 hover:text-cyan-400 transition-colors cursor-pointer"
         >
           ← Device selection
         </button>
-        <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+        <span className="font-mono text-xs tracking-[0.16em] text-gray-300">
           fusionsimulator<span className="text-gray-600">.io</span>
         </span>
       </nav>
 
-      <main className="flex-1 w-full max-w-5xl mx-auto px-6 sm:px-10 py-12">
-        {/* Header */}
-        <div className="panel-title mb-2">
-          <span className="panel-num">02 · </span>Program pulse
-        </div>
-        <h1 className="font-mono text-3xl sm:text-4xl font-bold tracking-tight text-white mb-2">
-          {device.name}
-        </h1>
-        <p className="text-gray-500 text-sm font-mono mb-10">
-          Select a scenario, review the waveforms, then run.
-        </p>
+      {/* Two columns from md up. The no-scroll, fills-the-viewport version needs
+          height too (the `tall` variant): a landscape phone is md-wide but only
+          ~390px tall, and there the page scrolls with Run fixed to the foot. */}
+      <main className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[17rem_1fr] gap-px bg-[var(--c-line)]">
+        <aside className="bg-[var(--c-base)] min-h-0 md:tall:overflow-y-auto flex flex-col px-5 pt-5 pb-5">
+          <h1 className="font-mono text-2xl font-bold tracking-tight text-white mb-5">
+            {device.name}
+          </h1>
 
-        {/* Scenario selector — hairline-tiled */}
+        {/* Scenario list — vertical hairline tiles; selection is the left bar */}
         <div className="panel-title pb-2 mb-px">Scenario</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--c-line)] border-y border-gray-800 mb-10">
+        <div className="grid gap-px bg-[var(--c-line)] border-y border-gray-800 mb-5">
           {getPresets(deviceId ?? '').map((p) => {
             const isSelected = p.id === selected
             return (
               <button
                 key={p.id}
-                onClick={() => setSelected(p.id)}
-                className={`relative p-4 text-left transition-colors cursor-pointer
+                onClick={() => selectScenario(p.id)}
+                className={`relative px-3 py-2.5 text-left transition-colors cursor-pointer
                   ${isSelected ? 'bg-[var(--c-raised)]' : 'bg-gray-900 hover:bg-[var(--c-raised)]'}`}
               >
-                {isSelected && <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-500" />}
-                <h3 className={`font-mono text-[11px] uppercase tracking-wider mb-1.5 ${isSelected ? 'text-cyan-400' : 'text-gray-300'}`}>
+                {isSelected && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-cyan-500" />}
+                <h3 className={`text-sm font-medium mb-1 ${isSelected ? 'text-white' : 'text-gray-400'}`}>
                   {p.name}
                 </h3>
-                <p className="text-gray-500 text-xs leading-relaxed">{p.desc}</p>
+                <p className={`text-xs leading-relaxed ${isSelected ? 'text-gray-400' : 'text-gray-500'}`}>{p.desc}</p>
               </button>
             )
           })}
         </div>
 
-        {/* Waveform detail */}
-        {program && (
-          <div className="mb-10">
-            <div className="flex items-baseline justify-between mb-3 border-b border-gray-800 pb-2">
-              <h2 className="panel-title">Programmed waveforms</h2>
-              <span className="text-xs text-gray-500 font-mono tabular-nums">
-                Duration {program.duration.toFixed(1)} s
-              </span>
-            </div>
-
-            <div className="space-y-2" key={selected}>
-              <WaveformRow label="Iₚ" unit="MA" title="Plasma current" points={program.ip} duration={program.duration} color={accentColor} />
-              <WaveformRow label="Bₜ" unit="T" title="Toroidal magnetic field" points={program.bt} duration={program.duration} color={accentColor} />
-              <WaveformRow label="n̄ₑ" unit="10²⁰m⁻³" title="Line-averaged electron density" points={program.ne_target} duration={program.duration} color={accentColor} />
-              <WaveformRow label="P_NBI" unit="MW" title="Neutral beam injection power" points={program.p_nbi} duration={program.duration} color={accentColor} />
-              <WaveformRow label="P_ECH" unit="MW" title="Electron cyclotron heating power" points={program.p_ech} duration={program.duration} color={accentColor} />
-              <WaveformRow label="P_ICH" unit="MW" title="Ion cyclotron heating power" points={program.p_ich} duration={program.duration} color={accentColor} />
-              <WaveformRow label="κ" unit="" title="Elongation" points={program.kappa} duration={program.duration} color={accentColor} />
-              <WaveformRow label="δ" unit="" title="Triangularity" points={program.delta} duration={program.duration} color={accentColor} />
+        {/* Magnetic configuration — DIII-D runs all three divertor shapes */}
+        {deviceId === 'diiid' && (
+          <div className="mb-5">
+            <div className="panel-title pb-2 mb-px">Magnetic configuration</div>
+            <div className="grid gap-px bg-[var(--c-line)] border-y border-gray-800">
+              {([
+                ['LowerSingleNull', 'Lower single null'],
+                ['DoubleNull', 'Double null'],
+                ['UpperSingleNull', 'Upper single null'],
+              ] as [MagneticConfig, string][]).map(([cfg, label]) => {
+                const isSelected = (configOverride ?? 'LowerSingleNull') === cfg
+                return (
+                  <button
+                    key={cfg}
+                    type="button"
+                    onClick={() => setConfigOverride(cfg === 'LowerSingleNull' ? null : cfg)}
+                    className={`relative px-3 py-1.5 text-sm text-left transition-colors cursor-pointer
+                      ${isSelected ? 'bg-[var(--c-raised)] text-white' : 'bg-gray-900 text-gray-400 hover:bg-[var(--c-raised)]'}`}
+                  >
+                    {isSelected && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-cyan-500" />}
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* Run button */}
-        <button
-          onClick={() => navigate(`/run/${deviceId}?preset=${selected}`)}
-          className="bg-cyan-600 px-8 py-3 text-base cursor-pointer"
-        >
-          ▶ Run pulse
-        </button>
+          {/* Duration + reset */}
+          {program && (
+            <div className="mb-5">
+              <div className="panel-title pb-2 mb-px">Duration</div>
+              <div className="flex items-center justify-between gap-3 border-y border-gray-800 bg-gray-900 px-3 py-1.5">
+                <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <input
+                    type="number"
+                    min={1}
+                    max={durationMax}
+                    step={0.5}
+                    value={program.duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    className="font-mono tabular-nums text-sm w-16 bg-gray-900 border border-gray-700 px-1.5 py-0.5
+                               text-gray-300 focus:outline-none focus:border-gray-500"
+                  />
+                  s
+                </label>
+                {/* Kept in the layout while hidden so nothing shifts. */}
+                <button
+                  type="button"
+                  onClick={resetAll}
+                  aria-hidden={!modified}
+                  tabIndex={modified ? 0 : -1}
+                  className={`text-xs text-gray-500 hover:text-gray-300 transition-colors cursor-pointer
+                    ${modified ? '' : 'invisible'}`}
+                >
+                  Reset to preset
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Run — always on screen. When the viewport is both md-wide and tall
+              it is pinned to the foot of this column. Otherwise (phones in either
+              orientation) it sits in an opaque bar fixed to the foot of the
+              viewport: the primary button is an outline with a transparent fill,
+              so floating it bare over the chart let the strips show through. */}
+          <div className="fixed bottom-0 inset-x-0 z-40 p-3 bg-[var(--c-base)] border-t border-gray-800
+                          md:tall:static md:tall:z-auto md:tall:p-0 md:tall:border-0 md:tall:bg-transparent md:tall:mt-auto">
+            <button
+              onClick={handleRun}
+              className="w-full bg-cyan-600 px-4 py-3 text-base cursor-pointer"
+            >
+              ▶ {modified ? 'Run edited pulse' : 'Run pulse'}
+            </button>
+          </div>
+        </aside>
+
+        <section className="bg-[var(--c-base)] min-h-0 flex flex-col px-3 md:px-6 pt-4 pb-4">
+          {program && base && (
+            <>
+              <h2 className="panel-title pb-2 shrink-0">Programmed waveforms</h2>
+              <div className="h-[30rem] md:tall:h-auto md:tall:flex-1 min-h-0">
+                <ProgramChart
+                  key={selected}
+                  program={program}
+                  overrides={overrides}
+                  onEdit={setEditing}
+                  onReset={resetChannel}
+                />
+              </div>
+            </>
+          )}
+        </section>
       </main>
+
+      {/* Channel editor */}
+      {editing && base && program && (() => {
+        const baseWf = base[editing.waveformKey] as WaveformPoint[]
+        if (!baseWf || baseWf.length < 2) return null
+        const wf = program[editing.waveformKey] as WaveformPoint[]
+        // The drawer works on the effective time axis. Overrides are stored on
+        // the preset's axis, because buildProgram rescales every channel when
+        // the duration is overridden — store the drawing pre-scaled so the
+        // round trip returns exactly what was drawn.
+        const timeScale =
+          durationOverride !== null && base.duration > 0 ? durationOverride / base.duration : 1
+        return (
+          <WaveformDrawer
+            waveform={wf}
+            baseWaveform={baseWf}
+            duration={program.duration}
+            label={editing.label}
+            unit={editing.unit}
+            color="#e0a23a"
+            min={editing.min}
+            max={editing.max}
+            onSave={(drawn) => {
+              const stored: WaveformPoint[] =
+                timeScale === 1 ? drawn : drawn.map(([t, v]) => [t / timeScale, v])
+              setOverrides({ ...overrides, [editing.key]: stored })
+              setEditing(null)
+            }}
+            onClose={() => setEditing(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

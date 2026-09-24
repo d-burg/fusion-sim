@@ -569,7 +569,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     <div className="w-full h-full min-h-[200px] relative">
       <div ref={containerRef} className="absolute inset-0" />
       <div className="absolute top-2 left-3 panel-title pointer-events-none z-10">
-        <span className="panel-num">02 · </span>Port view
+        Port view
       </div>
     </div>
   )

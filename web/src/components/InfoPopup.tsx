@@ -104,24 +104,25 @@ export default function InfoPopup({ children, title, position = 'right' }: InfoP
         <div
           ref={popupRef}
           className="fixed w-80 max-h-[70vh] overflow-y-auto
-                     bg-gray-950 border border-gray-700 rounded-lg shadow-2xl
-                     p-3 font-mono text-xs z-[9999]"
+                     bg-gray-900 border border-gray-700 shadow-2xl
+                     p-3 text-sm z-[9999]"
           style={{ top: coords.top, left: coords.left }}
         >
           {/* Header */}
           <div className="flex items-start justify-between mb-2">
             {title && (
-              <h3 className="text-cyan-400 font-bold text-[11px] pr-4">{title}</h3>
+              <h3 className="text-base font-medium text-white pr-4">{title}</h3>
             )}
             <button
               onClick={() => setOpen(false)}
-              className="text-gray-500 hover:text-white text-sm leading-none flex-shrink-0 ml-auto"
+              className="text-gray-500 hover:text-white text-sm leading-none flex-shrink-0 ml-auto cursor-pointer"
+              aria-label="Close"
             >
-              x
+              ×
             </button>
           </div>
           {/* Content */}
-          <div className="info-popup-content text-gray-300 leading-relaxed space-y-2">
+          <div className="text-sm text-gray-400 leading-relaxed space-y-2">
             {children}
           </div>
         </div>,

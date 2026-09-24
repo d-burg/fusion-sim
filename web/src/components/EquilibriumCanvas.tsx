@@ -425,7 +425,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       <canvas ref={canvasRef} className="absolute inset-0" />
       {/* Title overlay */}
       <div className="absolute top-2 left-3 panel-title flex items-center gap-1.5">
-        <span className="pointer-events-none"><span className="panel-num">01 · </span>Equilibrium</span>
+        <span className="pointer-events-none">Equilibrium</span>
         <InfoPopup title="Magnetic Equilibrium" position="right">
           {equilibriumInfo}
         </InfoPopup>
