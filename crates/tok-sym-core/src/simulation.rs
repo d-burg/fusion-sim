@@ -14,6 +14,57 @@ use crate::transport::{ProgramValues, TransportModel};
 /// A point in a programmed waveform: (time_s, value).
 pub type WaveformPoint = (f64, f64);
 
+/// Fraction of flat-top current at which the ramp-up plasma stops being a
+/// wall-limited column and forms its divertor X-point — and, in reverse, at
+/// which the ramp-down plasma goes back onto the limiter.
+///
+/// Tokamak start-ups begin as a small, near-circular plasma limited on the
+/// centre-stack (or start-up limiter), grow in size and elongation with Ip,
+/// and only divert once enough current is available to hold the X-point:
+///   * JET ITER-like ramps put the X-point formation at ≈32% of flat-top Ip
+///     (Hogeweij et al., Nucl. Fusion 55 (2015) 013009);
+///   * ITER 15 MA scenario modelling diverts at 27–30% (Parail et al., Nucl.
+///     Fusion 53 (2013) 113002; Jackson et al., GA-A26858).
+/// The same modelling makes the ramp-down divertor→limiter transition
+/// symmetric with ramp-up, which is automatic here because the transition is
+/// a function of the ramp fraction alone.
+///
+/// The trigger used here is ELONGATION, not current: the limited column stays
+/// a smooth ellipse tangent to the inboard limiter, swelling outward and
+/// elongating with the programmed κ, and diverts once its elongation has
+/// come this fraction of the way from round (κ = 1) to the programme's
+/// flat-top κ. X-point formation is the moment the column leaves the wall:
+/// the ellipse lifts off and is diverted from the first instant, with its
+/// divertor legs already running to the targets, and the diverted plasma
+/// then walks out to the fitted magnetic centre as the remaining elongation
+/// is applied. Ramp-down retraces this: the diverted plasma is carried back
+/// onto the limiter and re-limits on contact.
+///
+/// The fraction itself is per device (`Device::divert_kappa_frac`): 0.6 puts
+/// X-point formation at κ ≈ 1.4–1.6, later in the current ramp (≈60% of
+/// flat-top) than the ≈30% the ramp studies above report — a deliberate
+/// presentation choice so the elongated limited phase is actually visible;
+/// highly elongated limiter plasmas are run on real machines (JET, TCV).
+
+/// Fraction of the post-formation elongation range over which the boundary
+/// triangularity fades from its formation value (`DELTA_XPOINT_MIN`) to the
+/// programmed one.
+const DELTA_FADE_SPAN: f64 = 0.3;
+
+/// Smallest boundary triangularity a diverted solve is given. The X-point
+/// boundary conditions put the X-point at x = 1 − 1.01·δ·ε, so as δ → 0 it
+/// slides under the axis and the system degenerates; a freshly formed
+/// X-point therefore starts at this δ (a modestly D-shaped boundary) rather
+/// than at the limited ellipse's zero. Forming an X-point is a topology
+/// change — this is the jump it makes.
+const DELTA_XPOINT_MIN: f64 = 0.2;
+
+/// Smooth 0→1 ramp (cubic smoothstep) of `x` over [0, 1].
+fn smoothstep01(x: f64) -> f64 {
+    let t = x.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// Pulse program: collection of time-dependent waveforms.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PulseProgram {
@@ -124,7 +175,15 @@ impl PulseProgram {
             _         => (0.05, 0.15, 0.80, 0.90),
         };
         let (f_heat_on, f_heat_full, f_heat_off0, f_heat_off) = match device.id.as_str() {
-            "iter"    => (0.10, 0.12, 0.85, 0.88),
+            // ITER: keep the auxiliary heating on into the early ramp-down and
+            // taper it out over the first 4 s (0.88→0.92). With heating cut to
+            // zero at 0.88 — the same instant Ip starts down, while density
+            // holds to 0.95 — Prad/Pin jumped to ~0.74 and the radiation-
+            // fraction risk sat at 1/s for the 1.4 s before the ramp-down
+            // trigger suppression engages, so ~3/4 of pulses that reached the
+            // ramp-down died there. Real terminations keep heating on to
+            // control the H–L transition (Politzer NF 2010; de Vries NF 2018).
+            "iter"    => (0.10, 0.12, 0.88, 0.92),
             "centaur" => (0.18, 0.22, 0.68, 0.80), // ICRH on during flat-top, off before Ip ramp-down
             _         => (0.20, 0.25, 0.75, 0.80),
         };
@@ -440,6 +499,7 @@ fn point_in_polygon(r: f64, z: f64, outline: &[(f64, f64)]) -> bool {
 /// Sample LCFS boundary points using Miller parameterization.
 /// Returns Vec<(R, Z, theta)> in physical coordinates.
 /// `z0` is the vertical offset of the plasma center.
+#[cfg(test)] // retained for shape unit tests; the contact check now marches the solved boundary
 fn sample_lcfs(r0: f64, a: f64, kappa: f64, delta: f64, z0: f64, n: usize) -> Vec<(f64, f64, f64)> {
     let mut points = Vec::with_capacity(n);
     for i in 0..n {
@@ -515,6 +575,51 @@ impl Simulation {
     }
 
     /// Seed the disruption model RNG.  Call from WASM layer with JS entropy.
+    /// Read-only access to the live equilibrium (diagnostics/examples).
+    pub fn equilibrium(&self) -> &CerfonEquilibrium {
+        &self.equilibrium
+    }
+
+    /// Programmed elongation as a fraction of the way from round (κ = 1) to
+    /// the programme's peak κ — the trigger for X-point formation and the
+    /// progress variable of the lift-off trajectory (see Device::divert_kappa_frac).
+    /// Falls back to the current ramp fraction for a programme that never
+    /// elongates.
+    fn kappa_ramp_fraction(&self, prog_kappa: f64) -> f64 {
+        let kappa_peak = self
+            .program
+            .kappa
+            .iter()
+            .map(|&(_, v)| v)
+            .fold(1.0_f64, f64::max);
+        if kappa_peak <= 1.0 + 1e-9 {
+            return self.ip_ramp_fraction(self.program_ip_now());
+        }
+        ((prog_kappa - 1.0) / (kappa_peak - 1.0)).clamp(0.0, 1.0)
+    }
+
+    /// Programmed current at the current time.
+    fn program_ip_now(&self) -> f64 {
+        PulseProgram::interpolate(&self.program.ip, self.time)
+    }
+
+    /// Programmed current as a fraction of the programme's peak current —
+    /// the ramp variable for plasma size and the limited-phase inboard shift.
+    /// Zero below the 0.1 MA breakdown threshold.
+    fn ip_ramp_fraction(&self, prog_ip: f64) -> f64 {
+        if prog_ip <= 0.1 {
+            return 0.0;
+        }
+        let ip_peak = self
+            .program
+            .ip
+            .iter()
+            .map(|&(_, v)| v)
+            .fold(0.0_f64, f64::max)
+            .max(0.1);
+        (prog_ip / ip_peak).clamp(0.0, 1.0)
+    }
+
     pub fn seed_disruption(&mut self, seed: u64) {
         self.disruption.seed(seed);
     }
@@ -697,7 +802,38 @@ impl Simulation {
         };
         let a_param = -0.05 - 0.1 * beta_p.min(2.0); // A shifts with pressure
 
-        let config = if prog.delta.abs() < 0.1 {
+        // Ramp variable for the plasma size, the limiter→divertor transition
+        // and the centroid trajectory: programmed current relative to the
+        // programme's peak. (This used to be actual_ip / prog.ip, which is
+        // identically 1 because the current tracks its waveform, so the
+        // start-up plasma was full-size from the first frame.)
+        let ip_frac = self.ip_ramp_fraction(prog.ip);
+
+        // Lift-off weight: 0 while the plasma rests on the limiter, 1 once it
+        // sits on its fitted magnetic centre (see self.device.divert_kappa_frac). Any
+        // positive lift means the column has left the wall, and that is
+        // exactly when it is diverted.
+        // Ease-out (fast start, gentle finish): the gap opens visibly the
+        // instant the X-point forms and settles smoothly at full size. Read
+        // in reverse for ramp-down, the plasma approaches the limiter slowly
+        // and closes the last of the gap quickly before re-limiting.
+        // Elongation progress: 0 round, 1 at the programme's flat-top κ.
+        let kappa_frac = self.kappa_ramp_fraction(prog.kappa);
+        // Progress through the diverted part of the elongation ramp.
+        let u_div = ((kappa_frac - self.device.divert_kappa_frac) / (1.0 - self.device.divert_kappa_frac)).clamp(0.0, 1.0);
+        let lift = 1.0 - (1.0 - u_div) * (1.0 - u_div);
+        // Triangularity fade from the X-point formation value to the
+        // programmed one (see DELTA_FADE_SPAN).
+        let delta_fade = smoothstep01(u_div / DELTA_FADE_SPAN);
+
+        // A plasma below self.device.divert_kappa_frac of its elongation ramp is limited on
+        // the wall; past it, it is diverted whatever the δ waveform does — the
+        // X-point forms at DELTA_XPOINT_MIN and the programmed δ takes over
+        // as it fades in. (The old '|δ| < 0.1 ⇒ limited' rule would keep a
+        // device whose δ waveform lags its Ip waveform — CENTAUR — limited
+        // while already lifting off the wall, which is exactly the state we
+        // must never show: a plasma off the limiter has legs.)
+        let config = if kappa_frac < self.device.divert_kappa_frac {
             MagneticConfig::Limited
         } else if let Some(ref cfg_str) = self.program.config_override {
             match cfg_str.as_str() {
@@ -710,55 +846,320 @@ impl Simulation {
             self.device.config
         };
 
-        // During limited phase, reduce epsilon so plasma starts small and grows with Ip
-        let ip_frac = if prog.ip > 0.1 {
-            (self.actual_ip / prog.ip).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        // Device-specific correction for the analytic-vs-real boundary shape
+        // mismatch (see Device::equilibrium_a_scale). Applied to every branch
+        // so the rendered plasma and the wall-contact check stay consistent.
+        let base_epsilon = self.device.epsilon() * self.device.equilibrium_a_scale;
+        // The plasma starts small — a near-circular column limited on the
+        // inboard wall (see the centroid trajectory below) — and grows
+        // with the programmed current, reaching the fitted flat-top size from
+        // 97% of peak. One ramp for all configurations, so nothing jumps when
+        // the programmed δ crosses 0.1 and the plasma diverts.
+        let size = 0.35 + 0.65 * (ip_frac / 0.97).min(1.0);
         let epsilon = if config == MagneticConfig::Limited {
-            self.device.epsilon() * (0.35 + 0.65 * ip_frac)
+            base_epsilon * size
         } else if config == MagneticConfig::DoubleNull {
-            // DN plasma is smaller to fit within both upper and lower
-            // divertor shelves of the limiter geometry.
-            self.device.epsilon() * 0.88
+            // DN plasmas were historically shrunk 12% to clear the old
+            // hand-drawn "divertor shelf" walls. A device whose
+            // equilibrium_a_scale has been fitted against the real limiter
+            // already encodes its wall clearance, so the generic shrink
+            // double-counts: on CENTAUR it left the live plasma 12% smaller
+            // than the fitted shape and drove the outer strike off the notch
+            // floor onto the back wall. Keep the shrink only for future DN
+            // devices that have not been fitted (a_scale still 1.0).
+            if self.device.equilibrium_a_scale != 1.0 {
+                base_epsilon * size
+            } else {
+                base_epsilon * 0.88 * size
+            }
         } else {
-            self.device.epsilon()
+            base_epsilon * size
         };
 
-        // During limited phase (δ < 0.1), the LSN X-point boundary conditions
-        // place the X-point at x ≈ 1.0 (geometric center), producing a degenerate
-        // equilibrium with inverted ψ. Use a minimum effective delta of 0.2 in the
-        // boundary conditions to keep the X-point well-separated from the center.
-        // The visual aspects (X-point suppression, LIMITED label) use prog.delta.
+        // Limited plasmas are solved with the X-point-free Cerfon–Freidberg
+        // system (`assemble_limited_system`), which is well conditioned down
+        // to δ = 0, so the start-up column is the plain ellipse it should be.
+        // (The old δ ≥ 0.2 clamp existed only because the limited phase used
+        // to be solved with the LSN X-point boundary conditions, which go
+        // degenerate as the virtual X-point approaches the geometric centre.)
+        //
+        // Once diverted, the boundary triangularity starts at the X-point
+        // formation value and fades to the programmed one over
+        // the first DELTA_FADE_SPAN of the diverted elongation range. (At
+        // flat-top δ_fade = 1, so δ is the programmed
+        // value unless the device's own flat-top |δ| is below the floor.)
         let delta_eff = if config == MagneticConfig::Limited {
-            prog.delta.max(0.2)
+            0.0
         } else {
-            prog.delta
+            // The X-point's side (positive or negative triangularity) is the
+            // device's, not the instantaneous waveform's, which may still be
+            // ≈0 when the plasma diverts.
+            let sign = if self.device.delta_lower < 0.0 { -1.0 } else { 1.0 };
+            let target = prog.delta.abs().max(DELTA_XPOINT_MIN);
+            sign * (DELTA_XPOINT_MIN + (target - DELTA_XPOINT_MIN) * delta_fade)
         };
+
+        // ── Strike-point sweep ──
+        // Slow oscillation of the boundary triangularity, which moves the
+        // X-points — and with them the separatrix legs, the strike points and
+        // the divertor glow — back and forth across the targets. Everything
+        // downstream (equilibrium panel, contour tracing, portview) follows
+        // from the perturbed equilibrium, so the sweep is self-consistent by
+        // construction. Only active once diverted and near flat-top current.
+        // The sweep excursions to HIGHER δ: δ oscillates in [δ₀, δ₀ + amp].
+        // A higher δ moves the X-points inboard, which walks the outer strike
+        // point INBOARD along the divertor roof diagonal — away from the outer
+        // vertical face, which is baffle rather than target. Containment at
+        // the +amp extreme is verified by the fit harness (21 mm clearance)
+        // and guarded at runtime by the solved-boundary contact check below.
+        // Sweep only during TRUE flat-top current. During the Ip ramps the
+        // plasma shape and β are transient, and the grazing-incidence outer
+        // landing wanders far enough to clip the back-corner baffle no matter
+        // how the sweep is tuned — measured repeatedly at both H-mode entry
+        // and rampdown onset. Real strike sweeps are likewise a flat-top
+        // activity; the ramps hold a static shape.
+        let sweep_active = self.device.strike_sweep_hz > 0.0
+            && config != MagneticConfig::Limited
+            && prog.ip > 0.97 * self.device.ip_max;
+        // Dwell-equalized waveform. A plain sinusoid gave a badly lopsided
+        // dwell (measured with examples/sweep_dwell.rs): the δ→strike-arc
+        // mapping along the roof diagonal is compressive at the +δ (inboard)
+        // end — s(u) ≈ u^0.33 — so the sinusoid's turning-point dwell piled
+        // 30% of the period into one 25 mm band at the inboard end while the
+        // outboard half of the target got a grazing instant. A triangle wave
+        // in normalized arc position v, warped through the inverse mapping
+        // u = v³, makes the strike traverse the target at near-constant speed:
+        // measured dwell is then flat across the sweep range. u = 0 is the
+        // outboard-deep extreme (δ-rest), u = 1 the inboard extreme (δ+amp).
+        let sweep_frac = (self.device.strike_sweep_hz * self.time).fract();
+        let sweep_u = {
+            let v = 1.0 - (2.0 * sweep_frac - 1.0).abs(); // triangle 0→1→0
+            v * v * v
+        };
+        // Symmetric about the rest delta: `strike_sweep_delta` is the FULL
+        // sweep width, so the device's baseline delta is the sweep MIDPOINT
+        // (u = 0.5) rather than the outboard extreme. Changed from one-sided
+        // rest + amp*u when the SPARC baseline was re-anchored to the swept
+        // midpoint (user call, 2026-08-18).
+        let delta_eff = if sweep_active {
+            delta_eff + self.device.strike_sweep_delta * (sweep_u - 0.5)
+        } else {
+            delta_eff
+        };
+        // Vertical rock, IN phase with the δ modulation: the plasma (and both
+        // X-points) rises 0..strike_sweep_z as δ excursions inboard, sliding
+        // the strike points along the angled target faces — the only lever
+        // that actually moves the inner strikes (see Device::strike_sweep_z).
+        //
+        // The phasing is load-bearing: the upward rock deepens the upper
+        // outer landing, and the landing is bistable with the back-corner
+        // baffle — an out-of-phase rock lifts the plasma while the outer
+        // strike is at its deep (δ-rest) end and snaps it onto the corner at
+        // every κ in the usable range. In phase, the deepest outer moment
+        // coincides with z = 0, so the resting depth is controlled purely by
+        // equilibrium_kappa_scale while the rock does its work at the safe,
+        // far-inboard end of the sweep.
+        //
+        // Applied to the equilibrium centre so axis, X-points, legs and the
+        // wall-contact check all follow consistently.
+        // Quadratic easing on the rock: z ∝ ((1+sin)/2)², so the lift only
+        // develops once the δ modulation has already carried the landing well
+        // inboard. With a linear (shared-waveform) rock the mid-sweep
+        // combination of partial lift + partial δ flips the grazing-incidence
+        // landing onto the back-corner branch — measured as transient 0 mm
+        // baffle clearance — even though both endpoints of the sweep are safe.
+        self.equilibrium.z0 = if sweep_active {
+            self.device.z0 + self.device.strike_sweep_z * sweep_u * sweep_u
+        } else {
+            self.device.z0
+        };
+
+        // ── Strike-point position control (β compensation) ──
+        // The divertor-leg landing depth is grazing-incidence-sensitive to the
+        // Shafranov shift: as β falls the landing slides OUTBOARD along the
+        // target, and during rampdown (β: 0.57 → 0.5 at ICRF step-down) it
+        // slid past the target's outermost extent onto the baffle corner —
+        // measured as a burst of 0 mm baffle clearance at t ≈ 15.6 s while
+        // the whole flat-top stayed clean. Real machines hold the strike
+        // point with PF feedback; here the equilibrium elongation absorbs the
+        // drift: below β_N ≈ 0.7 the κ scale rises slightly, retreating the
+        // landing inboard down the diagonal as the pulse terminates.
+        // Smoothed β is used so ELM transients don't jitter the boundary.
+        let kappa_scale_eff = if self.device.strike_sweep_hz > 0.0 {
+            self.device.equilibrium_kappa_scale
+                + 0.006 * (0.70 - self.smoothed_beta_n).max(0.0)
+        } else {
+            self.device.equilibrium_kappa_scale
+        };
+
+        // The equilibrium-only corrections (δ offsets, κ scale, squareness)
+        // are fitted against flat-top reference equilibria. The limited
+        // start-up plasma must stay the plain near-circular shape it had
+        // before those knobs existed, so they are weighted in with the
+        // programmed δ ramp once diverted:
+        // zero in the limited phase (a plain ellipse at δ = 0, the programmed
+        // κ and zero squareness), full strength by the time δ reaches the
+        // device's flat-top value.
+        let shape_w = if config == MagneticConfig::Limited {
+            0.0
+        } else {
+            let d_full = self.device.delta_lower.abs().max(0.2);
+            ((prog.delta.abs() - 0.1) / (d_full - 0.1)).clamp(0.0, 1.0)
+        };
+        let kappa_scale_eff = 1.0 + (kappa_scale_eff - 1.0) * shape_w;
+
+        // Equilibrium-only δ correction, applied as a rigid offset on the
+        // programmed waveform so ramps and the strike sweep carry through
+        // unchanged (see Device::equilibrium_delta_lower). The upper end then
+        // carries the equilibrium's own up-down asymmetry on top.
+        let delta_eq = delta_eff
+            + shape_w * (self.device.equilibrium_delta_lower - self.device.delta_lower);
+        let delta_eq_upper = delta_eq
+            + shape_w
+                * (self.device.equilibrium_delta_upper - self.device.equilibrium_delta_lower);
+        // Equilibrium-only κ correction (see Device::equilibrium_kappa_scale)
+        let kappa_eq = prog.kappa * kappa_scale_eff;
+
+        // ── Centroid trajectory: inboard limiter → fitted magnetic centre ──
+        // While limited, the column rests against the inboard wall: its
+        // magnetic centre sits one minor radius outboard of the limiter; it
+        // diverts the instant it leaves the wall (self.device.divert_kappa_frac of its
+        // elongation ramp) and walks out to the device's fitted centre as a
+        // diverted plasma (weight `lift`, over the rest of the elongation
+        // ramp). Because the transition is a function of the programmed
+        // waveforms alone, ramp-down retraces it in reverse: the diverted
+        // plasma is carried back onto the limiter and re-limits on contact.
+        //
+        // Implemented as a real move of the equilibrium centre, so the axis,
+        // the flux surfaces, the solved separatrix and the wall-contact check
+        // all follow from one consistent equilibrium (this replaces a
+        // cosmetic point-shift that used to be applied in the snapshot only).
+        let r0_nom = self.device.r0 + self.device.equilibrium_r0_shift;
+        // x = R/r0, so moving the centre at fixed ε would also rescale the
+        // plasma. Hold the physical minor radius the size ramp asks for and
+        // recompute ε for the moved centre instead.
+        let a_phys = epsilon * r0_nom;
+        // Designed clearance between the LCFS inboard edge and the limiter
+        // (∞ once the plasma is on its fitted centre); gates the contact check.
+        let mut inboard_gap = f64::INFINITY;
+        let r0_eq = if lift >= 1.0 {
+            r0_nom
+        } else {
+            // Inboard limiter radius over the plasma's own vertical span: the
+            // centre stack is a vertical surface on these machines, so the
+            // minimum wall R beside the column is the surface it touches.
+            // (ITER's real start-up limiter is on the OUTBOARD wall; the
+            // inboard centre stack is used here as the generic rule for every
+            // device, which is what JET, DIII-D and the compact machines do.)
+            let z_half = (kappa_eq * a_phys).max(0.05);
+            let (z_lo, z_hi) = (self.equilibrium.z0 - z_half, self.equilibrium.z0 + z_half);
+            // Minimum R of the wall POLYGON inside the band — clip each edge
+            // to the band and take its end radii. Using vertices alone misses
+            // a centre stack drawn as one long segment (SPARC): a small
+            // plasma's band then holds only outboard vertices and the
+            // 'limiter' lands on the wrong side of the vessel.
+            let wall = &self.device.wall_outline;
+            let mut r_lim = f64::INFINITY;
+            for i in 0..wall.len() {
+                let (r_a, z_a) = wall[i];
+                let (r_b, z_b) = wall[(i + 1) % wall.len()];
+                let (za, zb) = (z_a.min(z_b), z_a.max(z_b));
+                if zb < z_lo || za > z_hi {
+                    continue;
+                }
+                let r_at = |z: f64| {
+                    if (z_b - z_a).abs() < 1e-12 {
+                        r_a.min(r_b)
+                    } else {
+                        r_a + (r_b - r_a) * (z - z_a) / (z_b - z_a)
+                    }
+                };
+                let lo = za.max(z_lo);
+                let hi = zb.min(z_hi);
+                r_lim = r_lim.min(r_at(lo)).min(r_at(hi));
+            }
+            if !r_lim.is_finite() {
+                // No wall point beside the column (degenerate outline): fall
+                // back to the vessel's global inboard extent.
+                r_lim = self
+                    .device
+                    .wall_outline
+                    .iter()
+                    .map(|p| p.0)
+                    .fold(f64::INFINITY, f64::min);
+            }
+            if r_lim.is_finite() {
+                // Flat-top minor radius (the size ramp divided back out) and
+                // the inboard gap the fitted flat-top equilibrium has.
+                let a_full = (epsilon / size) * r0_nom;
+                let gap_nom = (r0_nom - a_full - r_lim).max(0.0);
+                let gap = if config == MagneticConfig::Limited {
+                    0.0
+                } else {
+                    lift * gap_nom
+                };
+                inboard_gap = gap;
+                // Never push the centre outboard of the fitted one.
+                (r_lim + a_phys + gap).min(r0_nom)
+            } else {
+                r0_nom
+            }
+        };
+        // Exact ε at flat-top: `lift == 1` must leave the fitted equilibrium
+        // bit-for-bit unchanged.
+        let epsilon_eq = if lift >= 1.0 { epsilon } else { a_phys / r0_eq };
+        self.equilibrium.r0 = r0_eq;
 
         let new_shape = ShapeParams {
-            epsilon,
-            kappa: prog.kappa,
-            delta: delta_eff,
+            epsilon: epsilon_eq,
+            kappa: kappa_eq,
+            delta: delta_eq,
+            delta_upper: Some(delta_eq_upper),
             a_param,
             config,
-            x_point_alpha: Some(delta_eff.asin()),
-            squareness: 0.0,
+            x_point_alpha: Some(delta_eq.asin()),
+            squareness: self.device.equilibrium_squareness * shape_w,
+            squareness_out: self.device.equilibrium_squareness_out * shape_w,
         };
         self.equilibrium.update(&new_shape);
 
         // ── Limiter contact check (diverted phase only) ──
         // If the bulk LCFS extends beyond the wall, force a disruption.
-        // Only checked in diverted config (limited plasma intentionally touches wall)
-        // and only when Ip is significant (near or at flat-top).
+        // Only checked in diverted config (limited plasma intentionally
+        // touches wall) and only when Ip is significant (near or at
+        // flat-top). It is additionally disarmed while the designed inboard
+        // gap is under 3 cm — just after X-point formation the LCFS is
+        // millimetres from the limiter by construction, and the solved
+        // boundary deviates from its parametrization by about that much.
+        // Once armed the check is exactly as strict as before.
         if config != MagneticConfig::Limited
+            && (lift >= 1.0 || inboard_gap >= 0.03)
             && !self.disruption.disrupted
             && prog.ip > 0.3 * self.device.ip_max
             && self.actual_ip > 0.1
         {
-            let a = epsilon * self.device.r0; // physical minor radius
-            let lcfs_points = sample_lcfs(self.device.r0, a, prog.kappa, delta_eff, self.device.z0, 24);
+            // Sample the SOLVED boundary, not the analytic parametrization.
+            // The Cerfon–Freidberg solution deviates from its own boundary
+            // parametrization by a few cm (outboard bulge, squarer corners
+            // when squareness ≠ 0), and the rendered separatrix is the solved
+            // contour — so the analytic proxy both misses real contacts and
+            // reports false ones. Ray-march ψ_N = 1 from the axis instead.
+            let (ax_r, ax_z) = self.equilibrium.axis_physical();
+            let mut lcfs_points: Vec<(f64, f64, f64)> = Vec::with_capacity(24);
+            for k in 0..24 {
+                let theta = 2.0 * std::f64::consts::PI * (k as f64) / 24.0;
+                let (dr, dz) = (theta.cos(), theta.sin());
+                let mut rad = 0.05;
+                while rad < 1.6 {
+                    let r = ax_r + dr * rad;
+                    let z = ax_z + dz * rad;
+                    if self.equilibrium.psi_norm(r, z) >= 1.0 {
+                        lcfs_points.push((r, z, theta));
+                        break;
+                    }
+                    rad += 0.01;
+                }
+            }
 
             // X-point(s) for bulk/leg discrimination
             let (xp_lower, xp_upper) = self.equilibrium.x_points_physical();
@@ -812,7 +1213,7 @@ impl Simulation {
         }
 
         // Generate flux surfaces using device-level grid bounds
-        let mut flux_surfaces = if self.actual_ip > 0.1 {
+        let flux_surfaces = if self.actual_ip > 0.1 {
             let grid = self.equilibrium.psi_norm_grid(
                 grid_r_min, grid_r_max, grid_z_min, grid_z_max,
                 self.eq_nr, self.eq_nz,
@@ -847,8 +1248,59 @@ impl Simulation {
         // Pass the device-level grid bounds so the extraction covers the full divertor
         // region even when the equilibrium ε is reduced (e.g. DN uses 0.88×ε).
         let sep_bounds = Some((grid_r_min, grid_r_max, grid_z_min, grid_z_max));
-        let mut separatrix = if self.actual_ip > 0.1 {
-            contour::extract_separatrix(&self.equilibrium, self.eq_nr, self.eq_nz, sep_bounds)
+        let separatrix = if self.actual_ip > 0.1 {
+            // The separatrix is extracted at twice the flux-surface grid
+            // resolution: the divertor-leg landing point quantizes on the
+            // marching-squares cells (~45 mm in Z at 48×72 over the
+            // wall-extended bounds), which made the outer strike position
+            // bistable between the roof diagonal and the back corner and
+            // hid most of the inner strike's sweep motion. One extra ψ_N
+            // level at 96×144 costs well under a millisecond.
+            let mut sep = contour::extract_separatrix(
+                &self.equilibrium,
+                self.eq_nr * 2,
+                self.eq_nz * 2,
+                sep_bounds,
+            );
+            // Terminate divertor legs at their first wall impact: a leg that
+            // strikes a baffle must not re-emerge beyond it, and spurious
+            // far-SOL ψ=0 chains outside the vessel are dropped outright.
+            //
+            // Applied in the limited phase too: the tangent LCFS survives the
+            // clip untouched (it lies inside, touching at one point), but the
+            // ψ=0 extraction produces large spurious chains outside the vessel
+            // during ramp-up/ramp-down — measured at up to 386 mm outside the
+            // limiter before this covered the limited phase.
+            //
+            // The 3 mm overshoot keeps the frontend's leg/wall intersection
+            // detection working; the sliver past the wall is masked by the
+            // renderer.
+            if !self.device.wall_outline.is_empty() {
+                contour::clip_separatrix_to_wall(&mut sep, &self.device.wall_outline, 0.003);
+            }
+            // Keep only the chains that belong to the plasma. A diverted
+            // equilibrium is anchored on its X-point(s), within a quarter of
+            // the minor radius but never less than a few marching-squares
+            // cells (which is how far a chain can miss the saddle). The
+            // limited solution has no X-point at all — its LCFS is a closed
+            // curve around the magnetic axis — so it is anchored on the axis
+            // with a tolerance that spans the column itself, which keeps the
+            // body and drops far-SOL chains elsewhere in the vessel.
+            {
+                let (xl, xu) = self.equilibrium.x_points_physical();
+                let mut anchors: Vec<(f64, f64)> = xl.into_iter().chain(xu).collect();
+                let a_now = self.equilibrium.shape.epsilon * self.equilibrium.r0;
+                let cell = ((grid_r_max - grid_r_min) / (self.eq_nr * 2) as f64)
+                    .hypot((grid_z_max - grid_z_min) / (self.eq_nz * 2) as f64);
+                let tol = if anchors.is_empty() {
+                    anchors.push(self.equilibrium.axis_physical());
+                    1.2 * self.equilibrium.shape.kappa.max(1.0) * a_now
+                } else {
+                    0.25 * a_now
+                };
+                contour::keep_chains_near(&mut sep, &anchors, tol.max(3.0 * cell));
+            }
+            sep
         } else {
             Contour {
                 level: 0.0,
@@ -856,7 +1308,7 @@ impl Simulation {
             }
         };
 
-        let (mut axis_r, axis_z) = self.equilibrium.axis_physical();
+        let (axis_r, axis_z) = self.equilibrium.axis_physical();
         let (xpoint_r, xpoint_z) = if is_limited {
             (0.0, 0.0)
         } else {
@@ -873,33 +1325,10 @@ impl Simulation {
 
         let magnetic_config = format!("{:?}", self.equilibrium.shape.config);
 
-        // During limited phase, shift plasma inboard so inboard edge touches limiter
-        if is_limited && self.actual_ip > 0.1 {
-            let ip_frac = if prog.ip > 0.1 {
-                (self.actual_ip / prog.ip).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
-            // Find inboard limiter R (minimum R of wall outline near midplane)
-            let r_limiter = self.device.wall_outline.iter()
-                .filter(|(_, z)| z.abs() < 0.3)
-                .map(|(r, _)| *r)
-                .fold(f64::INFINITY, f64::min);
-            // Current inboard edge of the equilibrium
-            let r_inboard = self.device.r0 * (1.0 - self.equilibrium.shape.epsilon);
-            // Shift decreases as Ip ramps toward flat-top
-            let shift = (r_inboard - r_limiter).max(0.0) * (1.0 - ip_frac);
-
-            axis_r -= shift;
-            for surface in &mut flux_surfaces {
-                for pt in &mut surface.points {
-                    pt.0 -= shift;
-                }
-            }
-            for pt in &mut separatrix.points {
-                pt.0 -= shift;
-            }
-        }
+        // The limited plasma's contact with the inboard limiter is a real move
+        // of the equilibrium centre (see the centroid trajectory in
+        // `update_equilibrium`), so the axis, flux surfaces and separatrix
+        // above already come out in the right place — no snapshot-level shift.
 
         // Generate diagnostic signals with noise
         let mut noise = NoiseGen::new(self.time.to_bits());

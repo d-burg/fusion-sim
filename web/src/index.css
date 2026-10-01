@@ -185,6 +185,7 @@ body {
 button.bg-cyan-600,
 button.bg-amber-600,
 button.bg-gray-700,
+button.bg-purple-600,
 button.bg-purple-700,
 button.bg-emerald-600 {
   font-family: var(--font-sans);
@@ -210,6 +211,7 @@ button.bg-cyan-600:hover {
 /* Pause / Reset / Edit — neutral, warm border on hover */
 button.bg-amber-600,
 button.bg-gray-700,
+button.bg-purple-600,
 button.bg-purple-700 {
   background: var(--c-raised);
   border: 1px solid var(--c-line);
@@ -217,6 +219,7 @@ button.bg-purple-700 {
 }
 button.bg-amber-600:hover,
 button.bg-gray-700:hover,
+button.bg-purple-600:hover,
 button.bg-purple-700:hover { border-color: var(--c-accent); color: var(--c-ink); }
 
 /* Fuel toggle (active state) */
@@ -271,6 +274,12 @@ input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); 
 .flex.rounded.overflow-hidden.border.border-gray-700 {
   border: 1px solid var(--c-line);
   border-radius: 0;
+}
+.flex.rounded.overflow-hidden.border.border-gray-700 button {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
 }
 .flex.rounded.overflow-hidden.border.border-gray-700 button.bg-gray-800 {
   background: var(--c-raised);
@@ -487,6 +496,7 @@ html[data-theme="retro"] {
 }
 [data-theme="retro"] button.bg-gray-700,
 [data-theme="retro"] button.bg-amber-600,
+[data-theme="retro"] button.bg-purple-600,
 [data-theme="retro"] button.bg-purple-700 {
   border-radius: 0;
 }
