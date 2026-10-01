@@ -232,11 +232,18 @@ impl PulseProgram {
                 (duration, 0.0),
             ],
             bt: vec![(0.0, bt), (duration, bt)],
+            // Density and fuelling follow the DEVICE's flat-top times. They
+            // were hardcoded at 1/6/7 s, which is DIII-D's 8 s pulse but left
+            // ITER (50 s) and CENTAUR (16 s) at 5×10¹⁸ m⁻³ for most of their
+            // flat-top — and at absurd temperatures, since T ∝ W/(n V) blows
+            // up as n → 0. The anchors below reproduce the old DIII-D/JET
+            // waveforms exactly (t_ramp_start 0.5, t_ramp_end 1.5, t_flat_end
+            // 6, t_down 7) and scale with the other devices' tuples.
             ne_target: vec![
                 (0.0, 0.05),
-                (1.0, ne_target),
-                (6.0, ne_target),
-                (7.0, 0.05),
+                (2.0 * t_ramp_start, ne_target),
+                (t_flat_end, ne_target),
+                (t_down, 0.05),
                 (duration, 0.05),
             ],
             p_nbi: vec![(0.0, 0.0), (duration, 0.0)],
@@ -256,10 +263,10 @@ impl PulseProgram {
             ],
             d2_puff: vec![
                 (0.0, 0.0),
-                (0.3, 2.0),
-                (1.5, 2.0),
-                (6.0, 2.0),
-                (7.0, 0.0),
+                (0.6 * t_ramp_start, 2.0),
+                (t_ramp_end, 2.0),
+                (t_flat_end, 2.0),
+                (t_down, 0.0),
                 (duration, 0.0),
             ],
             neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
@@ -324,9 +331,13 @@ impl PulseProgram {
                 (0.0, 0.0),
                 (t_ramp_start, 3.0),
                 (t_ramp_end * 1.1, 4.0),  // High gas puff pushing Greenwald limit
-                (5.0, 5.0),
-                (6.0, 3.0),
-                (7.0, 0.0),
+                // Peak, taper and cut-off follow the device's flat-top end and
+                // ramp-down (these were DIII-D's 5/6/7 s for every device, so
+                // ITER's puff was off from 7 s of a 50 s pulse). Unchanged for
+                // DIII-D/JET (t_flat_end 6, t_down 7).
+                (t_flat_end - 1.0, 5.0),
+                (t_flat_end, 3.0),
+                (t_down, 0.0),
                 (duration, 0.0),
             ],
             neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
@@ -985,6 +996,57 @@ impl Simulation {
 mod tests {
     use super::*;
     use crate::devices;
+
+    /// The L-mode and density-limit presets must keep density and fuelling
+    /// up through EACH device's own flat-top. They used to carry DIII-D's
+    /// 1/6/7 s anchors for every device, so ITER's 50 s pulse ran 40 s of
+    /// flat-top at 5e18 m^-3 (and ITER's density-limit puff had its time
+    /// axis running backwards).
+    #[test]
+    fn test_lmode_and_density_limit_presets_follow_device_timing() {
+        for device in devices::all_devices() {
+            let presets = [
+                ("lmode", PulseProgram::lmode(&device)),
+                ("density_limit", PulseProgram::density_limit(&device)),
+            ];
+            for (name, prog) in &presets {
+                for (wf_name, wf) in [
+                    ("ip", &prog.ip),
+                    ("ne_target", &prog.ne_target),
+                    ("d2_puff", &prog.d2_puff),
+                ] {
+                    for w in wf.windows(2) {
+                        assert!(
+                            w[1].0 >= w[0].0,
+                            "{} {} {}: time runs backwards at {:?}",
+                            device.id, name, wf_name, w
+                        );
+                    }
+                }
+                // Middle of the programmed current flat-top.
+                let ip_peak = prog.ip.iter().map(|p| p.1).fold(0.0_f64, f64::max);
+                let flat: Vec<f64> = prog
+                    .ip
+                    .iter()
+                    .filter(|p| p.1 >= 0.999 * ip_peak)
+                    .map(|p| p.0)
+                    .collect();
+                let t_mid = 0.5 * (flat[0] + flat[flat.len() - 1]);
+                let ne_peak = prog.ne_target.iter().map(|p| p.1).fold(0.0_f64, f64::max);
+                let ne_mid = PulseProgram::interpolate(&prog.ne_target, t_mid);
+                assert!(
+                    ne_mid >= 0.9 * ne_peak,
+                    "{} {}: density at mid flat-top (t={t_mid}) is {ne_mid}, peak {ne_peak}",
+                    device.id, name
+                );
+                assert!(
+                    PulseProgram::interpolate(&prog.d2_puff, t_mid) > 0.0,
+                    "{} {}: no fuelling at mid flat-top (t={t_mid})",
+                    device.id, name
+                );
+            }
+        }
+    }
 
     #[test]
     fn test_waveform_interpolation() {
