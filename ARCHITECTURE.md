@@ -73,7 +73,7 @@ fusion-sim/
 ├── build.sh                    # Full build script (WASM + frontend)
 ├── README.md                   # Project README
 ├── ARCHITECTURE.md             # This file
-├── LICENSE                     # MIT license
+├── LICENSE                     # GPL-3.0 license
 ├── PLAN.md                     # Original development plan
 │
 ├── crates/

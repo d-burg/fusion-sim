@@ -171,10 +171,10 @@ divertor heat flux via Bosch-Hale and Eich scaling).
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+GNU General Public License v3.0 (GPL-3.0-only). See [LICENSE](LICENSE) for details.
 
 ## Attribution
 
 Developed by Daniel Burgess and the Columbia Fusion Research Center.
 
-Copyright 2026 Daniel Burgess. All rights reserved.
+Copyright 2026 Daniel Burgess. Released under the GPL-3.0 license.
