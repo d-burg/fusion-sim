@@ -236,8 +236,14 @@ export function computeFusion(snapshot: Snapshot, device: Device): FusionState {
   const p_alpha = snapshot.p_alpha ?? 0
   const p_external = snapshot.p_input - p_alpha
   const p_aux = snapshot.p_input - p_alpha - (snapshot.p_ohmic ?? 0)
-  const ip_frac = device.ip_max > 0 ? snapshot.ip / device.ip_max : 0
-  const prog_ip_frac = device.ip_max > 0 ? (snapshot.prog_ip ?? snapshot.ip) / device.ip_max : 0
+  // Fade against THIS pulse's flat-top current, not the machine's maximum
+  // rating: a JET pulse at 3.5 of 4.8 MA is at flat-top, not 73 % of the
+  // way there, and used to have its Q scaled down by ~0.6 for it.
+  const ip_ref = snapshot.prog_ip_peak && snapshot.prog_ip_peak > 0
+    ? snapshot.prog_ip_peak
+    : device.ip_max
+  const ip_frac = ip_ref > 0 ? snapshot.ip / ip_ref : 0
+  const prog_ip_frac = ip_ref > 0 ? (snapshot.prog_ip ?? snapshot.ip) / ip_ref : 0
   // Fade starts early (98% Ip) and reaches zero at 30%
   const ip_fade = Math.min(Math.max((prog_ip_frac - 0.30) / 0.68, 0), 1.0)
     * Math.min(Math.max((ip_frac - 0.20) / 0.60, 0), 1.0)

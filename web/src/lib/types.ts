@@ -32,6 +32,8 @@ export interface Snapshot {
 
   // Programmed references
   prog_ip: number
+  /** Peak programmed Ip over the pulse (MA); the flat-top value. */
+  prog_ip_peak?: number
   prog_bt: number
   prog_ne: number
   prog_p_nbi: number
@@ -73,8 +75,10 @@ export interface Snapshot {
   ne_profile: number[]
 
   // Disruption
+  /** Hazard rate: probability per second of a disruption starting. */
   disruption_risk: number
   disrupted: boolean
+  disruption_phase?: '' | 'precursor' | 'thermal_quench' | 'current_quench' | 'complete'
 
   // Diagnostics
   diagnostics: DiagnosticSignals
