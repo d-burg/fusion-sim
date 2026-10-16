@@ -185,7 +185,13 @@ impl TransportModel {
 
         let r0 = device.r0;
         let a = device.a;
+        // Programmed (separatrix) elongation — the plasma *shape*.
         let kappa = prog.kappa;
+        // Areal elongation κ_a = S/(πa²), which is what IPB98(y,2), the Uckan
+        // q* formula and the poloidal cross-section area are defined against.
+        // The programmed value ramps 1.0 → κ_sep, so the device ratio is
+        // applied to preserve that ramp (see Device::areal_ratio).
+        let kappa_a = kappa * device.areal_ratio();
         let volume = device.volume;
         let surface = device.surface_area;
 
@@ -219,7 +225,7 @@ impl TransportModel {
         // get unrealistically low q95 values.
         let delta = prog.delta;
         let shape_factor =
-            (1.0 + kappa * kappa * (1.0 + 2.0 * delta * delta - 1.2 * delta.powi(3))) / 2.0;
+            (1.0 + kappa_a * kappa_a * (1.0 + 2.0 * delta * delta - 1.2 * delta.powi(3))) / 2.0;
         self.q95 = 5.0 * a * a * bt * shape_factor / (r0 * ip);
         self.q95 = self.q95.max(1.0);
 
@@ -235,7 +241,9 @@ impl TransportModel {
         let te_avg = (self.te0 * 0.5).max(0.05); // rough volume average
         let eta = 2.8e-8 * z_eff / te_avg.powf(1.5); // Ω·m (approximate)
         let loop_length = 2.0 * std::f64::consts::PI * r0;
-        let cross_section = std::f64::consts::PI * a * a * kappa;
+        // Poloidal cross-section area S = π a² κ_a — this is the *definition*
+        // of the areal elongation, so κ_a is the correct factor here.
+        let cross_section = std::f64::consts::PI * a * a * kappa_a;
         let resistance = eta * loop_length / cross_section; // Ω
         self.p_ohmic = resistance * (ip * 1e6).powi(2) * 1e-6; // MW
         self.p_ohmic = self.p_ohmic.min(5.0); // Cap for numerical stability
@@ -381,7 +389,7 @@ impl TransportModel {
             * p_total_mw.powf(-0.69)
             * r0.powf(1.97)
             * eps.powf(0.58)
-            * kappa.powf(0.78)
+            * kappa_a.powf(0.78) // IPB98(y,2) is defined with the areal elongation
             * mass.powf(0.19);
 
         // Triangularity correction to confinement (not in IPB98).

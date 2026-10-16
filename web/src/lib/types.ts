@@ -120,6 +120,7 @@ export interface TracePoint {
   p_fus: number
   elm_suppressed: boolean
   elm_active?: boolean
+  in_hmode: boolean
 }
 
 /** Raw profile frame captured every 50ms during simulation. */

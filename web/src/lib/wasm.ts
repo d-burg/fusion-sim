@@ -35,7 +35,10 @@ export interface Device {
   a: number
   bt_max: number
   ip_max: number
+  /** Separatrix elongation κ_sep — the plasma shape. */
   kappa: number
+  /** Areal elongation κ_a = S/(πa²) — what IPB98(y,2) and q* are defined with. */
+  kappa_areal: number
   delta_upper: number
   delta_lower: number
   volume: number
