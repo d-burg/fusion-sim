@@ -5,7 +5,7 @@ edition = "2021"
 description = "Real-time tokamak physics engine for the Tok-Sym simulator"
 license = "GPL-3.0-only"
 authors = ["Daniel Burgess"]
-repository = "https://github.com/danielburgess/tok-sym"
+repository = "https://github.com/d-burg/fusion-sim"
 keywords = ["tokamak", "plasma", "fusion", "simulation", "wasm"]
 categories = ["simulation", "science", "wasm"]
 
