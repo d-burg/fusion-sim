@@ -283,8 +283,8 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
   ),
   disruption_risk: (
     <>
-      <b>Disruption risk (D<sub>risk</sub>)</b> &mdash; a model estimate
-      of the probability of an imminent disruption, based on proximity
+      <b>Disruption hazard (D<sub>risk</sub>)</b>: the model's estimate
+      of the probability <em>per second</em> that a disruption begins, based on proximity
       to known operational limits: q<sub>95</sub> &lt; 2 (kink),
       &beta;<sub>N</sub> &gt; 2.8 (Troyon), f<sub>GW</sub> &gt; 1
       (Greenwald). Real-time disruption predictors are an active area

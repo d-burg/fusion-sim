@@ -74,11 +74,18 @@ fn sigmoid(x: f64, center: f64, width: f64) -> f64 {
 
 impl DisruptionModel {
     /// Seed the random number generator.
+    ///
+    /// The seed is passed through a splitmix64 finaliser before it becomes
+    /// the xorshift state. Raw small seeds (1, 7, 1000...) make xorshift64
+    /// emit values of order 1e-10 for its first few draws, which fall
+    /// below the per-step trigger probability and start a disruption in
+    /// the first 0.2 s of every pulse regardless of the hazard.
     pub fn seed(&mut self, seed: u64) {
-        self.rng_state = seed;
-        if self.rng_state == 0 {
-            self.rng_state = 1;
-        }
+        let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        self.rng_state = if z == 0 { 1 } else { z };
     }
 
     /// Generate a random f64 in [0, 1) using xorshift64.
@@ -139,12 +146,23 @@ impl DisruptionModel {
             * (1.0 - self.risk_radiation.powi(3))
             * (1.0 - self.risk_locked_mode);
 
-        // Floor at ~1% during normal operation — real tokamak pulses
-        // always carry a small baseline disruption probability from
-        // unmodeled MHD events, wall interactions, and impurity influx.
-        // Uses the locked mode RNG for mild stochasticity (0.5-1.5%).
-        let floor = 0.005 + self.risk_locked_mode.min(0.01);
-        self.risk = self.risk.max(floor).clamp(0.0, 1.0);
+        // No artificial floor. Every contribution above has a named cause
+        // (density limit, beta limit, kink limit, radiative collapse, locked
+        // mode); the locked-mode term carries the small baseline rate. A
+        // constant 0.5 %/s floor used to be added here, which gave a 100 s
+        // ITER pulse a ~37 % chance of disrupting for no reason.
+        self.risk = self.risk.clamp(0.0, 1.0);
+    }
+
+    /// Short name of the current disruption phase, for snapshots and logs.
+    pub fn phase_name(&self) -> &'static str {
+        match self.phase {
+            None => "",
+            Some(DisruptionPhase::Precursor { .. }) => "precursor",
+            Some(DisruptionPhase::ThermalQuench { .. }) => "thermal_quench",
+            Some(DisruptionPhase::CurrentQuench { .. }) => "current_quench",
+            Some(DisruptionPhase::Complete) => "complete",
+        }
     }
 
     /// Check if a disruption should be triggered this timestep.
@@ -190,7 +208,7 @@ impl DisruptionModel {
                         remaining: 0.001 + 0.001 * self.rand(), // 1-2ms
                     });
                     DisruptionEffects {
-                        ip_multiplier: 1.0,
+                        ip: None,
                         te_multiplier: 0.5, // Start dropping
                         locked_mode_amplitude: amplitude * 10.0,
                         is_thermal_quench: false,
@@ -205,7 +223,7 @@ impl DisruptionModel {
                         amplitude: new_amplitude.min(10.0),
                     });
                     DisruptionEffects {
-                        ip_multiplier: 1.0,
+                        ip: None,
                         te_multiplier: 1.0 - 0.1 * new_amplitude.min(1.0),
                         locked_mode_amplitude: new_amplitude,
                         is_thermal_quench: false,
@@ -224,7 +242,7 @@ impl DisruptionModel {
                         total_duration: cq_duration,
                     });
                     DisruptionEffects {
-                        ip_multiplier: 1.0,
+                        ip: None,
                         te_multiplier: 0.01, // Te collapses to ~10-50 eV
                         locked_mode_amplitude: 5.0,
                         is_thermal_quench: true,
@@ -237,7 +255,7 @@ impl DisruptionModel {
                     // Exponential Te collapse
                     let frac = new_remaining / 0.002;
                     DisruptionEffects {
-                        ip_multiplier: 1.0,
+                        ip: None,
                         te_multiplier: 0.01 + 0.99 * frac,
                         locked_mode_amplitude: 5.0,
                         is_thermal_quench: true,
@@ -254,7 +272,7 @@ impl DisruptionModel {
                 if new_remaining <= 0.0 {
                     self.phase = Some(DisruptionPhase::Complete);
                     DisruptionEffects {
-                        ip_multiplier: 0.0,
+                        ip: Some(0.0),
                         te_multiplier: 0.01,
                         locked_mode_amplitude: 0.0,
                         is_thermal_quench: false,
@@ -271,9 +289,11 @@ impl DisruptionModel {
                     // exponential L/R decay.  In real disruptions the sudden loss
                     // of thermal energy increases plasma resistivity, causing a
                     // brief inductive Ip overshoot before the L/R decay dominates.
+                    // The envelope is evaluated at the elapsed CQ time and applied
+                    // to the Ip at CQ onset, so the decay is exact for any step
+                    // size: it is not sensitive to dt being coarser than the CQ.
                     let spike_dur = 0.002_f64.min(total_duration * 0.3); // 2ms spike
-                    let elapsed = total_duration - remaining;
-                    let new_elapsed = elapsed + dt;
+                    let new_elapsed = total_duration - new_remaining;
 
                     // Envelope: sine-shaped 5% spike then exponential decay
                     let envelope = |t: f64| -> f64 {
@@ -285,12 +305,8 @@ impl DisruptionModel {
                         }
                     };
 
-                    let ip_mult = (envelope(new_elapsed)
-                        / envelope(elapsed).max(1e-10))
-                        .clamp(0.0, 1.5);
-
                     DisruptionEffects {
-                        ip_multiplier: ip_mult,
+                        ip: Some((ip_start * envelope(new_elapsed)).max(0.0)),
                         te_multiplier: 0.01,
                         locked_mode_amplitude: 1.0,
                         is_thermal_quench: false,
@@ -299,7 +315,7 @@ impl DisruptionModel {
                 }
             }
             Some(DisruptionPhase::Complete) | None => DisruptionEffects {
-                ip_multiplier: 0.0,
+                ip: Some(0.0),
                 te_multiplier: 0.01,
                 locked_mode_amplitude: 0.0,
                 is_thermal_quench: false,
@@ -338,8 +354,12 @@ impl DisruptionModel {
 /// Effects of disruption on plasma parameters.
 #[derive(Debug, Clone)]
 pub struct DisruptionEffects {
-    /// Multiply plasma current by this factor
-    pub ip_multiplier: f64,
+    /// Plasma current to impose (MA), if the disruption controls Ip this
+    /// step. `None` during the precursor and thermal quench, when Ip still
+    /// follows the programme. Absolute rather than a per-step multiplier:
+    /// the simulation re-seeds Ip from the programme every step, so a
+    /// multiplier could never accumulate into a decay.
+    pub ip: Option<f64>,
     /// Multiply electron temperature by this factor
     pub te_multiplier: f64,
     /// Locked mode detector amplitude (a.u.)
@@ -353,7 +373,7 @@ pub struct DisruptionEffects {
 impl DisruptionEffects {
     fn none() -> Self {
         DisruptionEffects {
-            ip_multiplier: 1.0,
+            ip: None,
             te_multiplier: 1.0,
             locked_mode_amplitude: 0.0,
             is_thermal_quench: false,
@@ -418,6 +438,59 @@ mod tests {
             }
         }
         assert!(reached_cq, "Should progress through disruption phases");
+    }
+
+    #[test]
+    fn test_no_hazard_floor_at_safe_params() {
+        // Only the named locked-mode baseline (0.05 %/s, amplified near
+        // limits) remains; there is no constant floor.
+        let mut model = DisruptionModel::default();
+        model.update_risk(0.3, 1.0, 4.0, 0.2, 1.0);
+        assert!(model.risk < 0.002, "No floor expected, got {}", model.risk);
+        assert!(model.risk > 0.0, "Locked-mode baseline should remain");
+    }
+
+    #[test]
+    fn test_current_quench_decays_with_coarse_steps() {
+        // A 30 ms current quench stepped at the simulation's 5 ms must show
+        // the 5 % spike and then a decay that accumulates to near zero,
+        // even though dt is coarse relative to the quench.
+        let mut model = DisruptionModel::default();
+        model.disrupted = true;
+        model.phase = Some(DisruptionPhase::CurrentQuench {
+            remaining: 0.030,
+            ip_start: 1.0,
+            total_duration: 0.030,
+        });
+        let mut ips = Vec::new();
+        for _ in 0..6 {
+            let e = model.advance(0.005, 1.0);
+            ips.push(e.ip.expect("CQ must impose Ip"));
+        }
+        // t = 5,10,15,20,25,30 ms. Spike is over by 2 ms, so the first
+        // sample is already decaying; all samples are below the spike peak.
+        assert!(ips.iter().all(|&i| i <= 1.05 && i >= 0.0), "{:?}", ips);
+        for w in ips.windows(2) {
+            assert!(w[1] < w[0], "Ip must decrease monotonically: {:?}", ips);
+        }
+        // tau = 28/3 ms: at 25 ms the envelope is exp(-23/9.33) ~ 0.085.
+        assert!(ips[4] < 0.12, "Decay must accumulate, got {:?}", ips);
+        assert_eq!(ips[5], 0.0, "CQ end must terminate the current");
+        assert!(matches!(model.phase, Some(DisruptionPhase::Complete)));
+    }
+
+    #[test]
+    fn test_small_seeds_do_not_fire_the_trigger() {
+        // With a 0.05 %/s hazard the per-5ms trigger probability is 2.5e-6.
+        // Raw small seeds used to produce first draws below that.
+        for seed in [1u64, 7, 42, 1000, 1001] {
+            let mut model = DisruptionModel::default();
+            model.seed(seed);
+            model.risk = 0.0005;
+            for _ in 0..2000 {
+                assert!(!model.check_trigger(0.005), "seed {seed} fired at a 0.05 %/s hazard");
+            }
+        }
     }
 
     #[test]

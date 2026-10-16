@@ -607,7 +607,7 @@ function DisruptionRisk({ risk }: { risk: number }) {
 
   return (
     <div className="flex items-center gap-1.5 flex-1 min-w-0">
-      <span className="text-xs text-gray-500">Disruption risk</span>
+      <span className="text-xs text-gray-500">Disruption hazard</span>
       <div className="w-24 h-2.5 bg-gray-800 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-300"
@@ -615,10 +615,10 @@ function DisruptionRisk({ risk }: { risk: number }) {
         />
       </div>
       <span
-        className="text-xs font-mono font-medium tabular-nums w-8"
+        className="text-xs font-mono font-medium tabular-nums w-14 whitespace-nowrap"
         style={{ color: inkColor }}
       >
-        {pct.toFixed(0)}%
+        {pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}<span className="text-gray-500">%/s</span>
       </span>
     </div>
   )

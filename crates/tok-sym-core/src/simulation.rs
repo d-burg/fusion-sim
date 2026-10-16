@@ -416,6 +416,10 @@ pub struct SimulationSnapshot {
 
     // Programmed references
     pub prog_ip: f64,
+    /// Peak programmed Ip over the whole pulse (MA): the flat-top value,
+    /// so the frontend can fade Q against this pulse rather than the
+    /// machine's maximum rating.
+    pub prog_ip_peak: f64,
     pub prog_bt: f64,
     pub prog_ne: f64,
     pub prog_p_nbi: f64,
@@ -452,8 +456,11 @@ pub struct SimulationSnapshot {
     pub neon_puff: f64,
 
     // Disruption
+    /// Hazard rate: probability per second of a disruption starting.
     pub disruption_risk: f64,
     pub disrupted: bool,
+    /// "" | "precursor" | "thermal_quench" | "current_quench" | "complete"
+    pub disruption_phase: String,
 
     // Profiles (51-point arrays, ρ = 0.00 to 1.00)
     pub te_profile: Vec<f64>,
@@ -617,18 +624,21 @@ impl Simulation {
     /// Programmed current as a fraction of the programme's peak current —
     /// the ramp variable for plasma size and the limited-phase inboard shift.
     /// Zero below the 0.1 MA breakdown threshold.
-    fn ip_ramp_fraction(&self, prog_ip: f64) -> f64 {
-        if prog_ip <= 0.1 {
-            return 0.0;
-        }
-        let ip_peak = self
-            .program
+    /// Peak programmed Ip over the whole pulse (MA), floored at 0.1.
+    fn program_ip_peak(&self) -> f64 {
+        self.program
             .ip
             .iter()
             .map(|&(_, v)| v)
             .fold(0.0_f64, f64::max)
-            .max(0.1);
-        (prog_ip / ip_peak).clamp(0.0, 1.0)
+            .max(0.1)
+    }
+
+    fn ip_ramp_fraction(&self, prog_ip: f64) -> f64 {
+        if prog_ip <= 0.1 {
+            return 0.0;
+        }
+        (prog_ip / self.program_ip_peak()).clamp(0.0, 1.0)
     }
 
     pub fn seed_disruption(&mut self, seed: u64) {
@@ -734,7 +744,6 @@ impl Simulation {
             if in_rampdown {
                 let ramp_frac = (prog.ip / self.peak_prog_ip).clamp(0.0, 1.0);
                 self.disruption.risk *= ramp_frac;
-                self.disruption.risk = self.disruption.risk.max(0.005);
             } else {
                 self.disruption.check_trigger(dt);
             }
@@ -743,7 +752,9 @@ impl Simulation {
         // ── Apply disruption effects ──
         let disruption_effects = self.disruption.advance(dt, self.actual_ip);
         if self.disruption.disrupted {
-            self.actual_ip *= disruption_effects.ip_multiplier;
+            if let Some(ip) = disruption_effects.ip {
+                self.actual_ip = ip;
+            }
             self.transport.te0 *= disruption_effects.te_multiplier;
             self.transport.w_th *= disruption_effects.te_multiplier; // Energy drops with Te
 
@@ -1369,6 +1380,7 @@ impl Simulation {
             device_id: self.device.id.clone(),
             mass_number: self.device.mass_number,
             prog_ip: prog.ip,
+            prog_ip_peak: self.program_ip_peak(),
             prog_bt: prog.bt,
             prog_ne: prog.ne_target,
             prog_p_nbi: prog.p_nbi,
@@ -1405,6 +1417,7 @@ impl Simulation {
             ne_profile: self.profiles.ne_profile_array(),
             disruption_risk: self.disruption.risk,
             disrupted: self.disruption.disrupted,
+            disruption_phase: self.disruption.phase_name().to_string(),
             diagnostics,
             flux_surfaces,
             separatrix,

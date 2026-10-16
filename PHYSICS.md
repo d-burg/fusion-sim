@@ -139,6 +139,14 @@ power excluding self-heating from alpha particles).
 
 ---
 
+The displayed Q is faded to zero as the programmed current drops below
+30 % of **this pulse's flat-top current** (the peak of the programmed Ip
+waveform), and capped at 15, to suppress the ramp-down artefact where
+external heating is cut before the stored energy has decayed. The
+reference is the pulse's own flat-top, not the machine's maximum rating,
+so a machine run below its rated current is not penalised.
+
+
 ## 3. ELM Model
 
 ### 3.1 ELM Types
@@ -319,8 +327,20 @@ Disruptions are triggered when operational limits are violated:
 - **Locked modes:** Large locked mode amplitude
 
 The disruption probability increases as multiple limits are approached
-simultaneously. A thermal quench (rapid loss of stored energy) is followed
-by a current quench (rapid loss of plasma current).
+simultaneously. The displayed quantity is a **hazard rate**: the
+probability per second that a disruption begins. It is built only from
+named causes (the four limits above plus a small locked-mode baseline of
+0.05 %/s, amplified near the limits); there is no constant floor, so a
+pulse kept well inside its limits almost never disrupts.
+
+Once triggered, the sequence is: precursor (50-100 ms, growing locked-mode
+amplitude), thermal quench (1-2 ms, stored energy and Te collapse), then
+current quench (5-50 ms). During the current quench Ip follows an analytic
+envelope evaluated at the elapsed quench time and applied to the current at
+quench onset: a 5 % inductive spike over the first 2 ms, then an
+exponential L/R decay with time constant one third of the remaining quench
+duration, reaching zero at the end. Because the envelope is absolute rather
+than a per-step multiplier, the decay is exact for any integration step.
 
 ---
 

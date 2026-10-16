@@ -26,7 +26,7 @@ export default function DisruptionGauge({ snapshot }: Props) {
 
   return (
     <div className="flex flex-col items-center gap-3 p-3 h-full">
-      <span className="panel-title">Disruption risk</span>
+      <span className="panel-title">Disruption hazard</span>
 
       {/* Vertical bar gauge */}
       <div className="flex-1 w-10 relative rounded-md overflow-hidden bg-gray-800 border border-gray-700">
@@ -53,7 +53,12 @@ export default function DisruptionGauge({ snapshot }: Props) {
         className="text-2xl font-mono font-semibold tabular-nums"
         style={{ color: inkColor }}
       >
-        {disrupted ? 'DISRUPTED' : `${pct.toFixed(0)}%`}
+        {disrupted ? 'DISRUPTED' : (
+          <>
+            {pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}
+            <span className="text-sm text-gray-500 ml-1">%/s</span>
+          </>
+        )}
       </div>
 
       {/* Risk factor indicators */}
