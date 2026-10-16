@@ -334,13 +334,28 @@ named causes (the four limits above plus a small locked-mode baseline of
 pulse kept well inside its limits almost never disrupts.
 
 Once triggered, the sequence is: precursor (50-100 ms, growing locked-mode
-amplitude), thermal quench (1-2 ms, stored energy and Te collapse), then
-current quench (5-50 ms). During the current quench Ip follows an analytic
-envelope evaluated at the elapsed quench time and applied to the current at
-quench onset: a 5 % inductive spike over the first 2 ms, then an
-exponential L/R decay with time constant one third of the remaining quench
-duration, reaching zero at the end. Because the envelope is absolute rather
-than a per-step multiplier, the decay is exact for any integration step.
+amplitude), thermal quench (1-3 ms), then current quench (5-50 ms).
+
+**Thermal quench and the Ip spike.** The thermal quench flattens the
+current profile. Poloidal flux is conserved on this timescale, so with
+L_p ∝ Λ_ext + l_i/2 (Λ_ext = ln(8R/(a√κ)) − 2) the total current rises by
+
+    ΔIp/Ip = Δ(l_i/2) / (Λ_ext + l_i/2)
+
+The flattening is taken as partial (l_i falls by 30 %, floored at 0.5),
+which gives overshoots of 5-15 % for the devices here (about 12 % on
+DIII-D with l_i = 1.2, about 9 % on ITER with l_i = 0.8). Both l_i and Ip
+follow a quarter-sine over the quench, so the spike peaks at its end; Te
+collapses linearly to ~1 % over the same interval. This is the inductive
+Ip spike seen at every real disruption.
+
+**Current quench.** From the top of the spike, Ip decays exponentially
+with a time constant of one third of the quench duration, reaching zero
+at the end; l_i stays flat. The envelope is evaluated at the elapsed
+quench time and applied to the onset current, so it is exact for any
+integration step. The frontend steps and records the physics at 0.25 ms
+through both quench phases (5 ms elsewhere), so the spike and the decay
+render as curves.
 
 ---
 

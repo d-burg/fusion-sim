@@ -16,17 +16,30 @@ pub enum DisruptionPhase {
         /// Amplitude of locked mode signal (a.u.)
         amplitude: f64,
     },
-    /// Rapid loss of thermal energy
+    /// Rapid loss of thermal energy. The current profile flattens over this
+    /// phase; with poloidal flux conserved on this timescale the total
+    /// current rises, which is the Ip spike seen at every disruption.
     ThermalQuench {
         remaining: f64,
+        /// Total duration of the thermal quench (s)
+        total: f64,
+        /// Ip at thermal-quench onset (MA)
+        ip_start: f64,
+        /// Fractional Ip overshoot at the end of the quench (0.03-0.15)
+        spike_frac: f64,
+        /// Internal inductance before and after profile flattening
+        li_before: f64,
+        li_after: f64,
     },
-    /// Plasma current decay
+    /// Plasma current decay (resistive L/R decay of the cold plasma)
     CurrentQuench {
         remaining: f64,
-        /// Initial Ip at start of CQ (MA)
+        /// Ip at the start of the CQ, i.e. the top of the spike (MA)
         ip_start: f64,
-        /// Total duration of CQ phase (s) — used to compute elapsed time for Ip spike
+        /// Total duration of CQ phase (s)
         total_duration: f64,
+        /// Flattened internal inductance held through the quench
+        li_flat: f64,
     },
     /// Disruption complete, plasma terminated
     Complete,
@@ -190,8 +203,12 @@ impl DisruptionModel {
     }
 
     /// Advance the disruption sequence by one timestep.
-    /// Returns modifications to plasma parameters (Ip multiplier, Te multiplier).
-    pub fn advance(&mut self, dt: f64, ip: f64) -> DisruptionEffects {
+    ///
+    /// `ip` and `li` are the current plasma current (MA) and internal
+    /// inductance; `lambda_ext` = ln(8R/(a sqrt(kappa))) - 2 is the external
+    /// part of the normalised plasma inductance. Returns the Ip, li and Te
+    /// the disruption imposes this step.
+    pub fn advance(&mut self, dt: f64, ip: f64, li: f64, lambda_ext: f64) -> DisruptionEffects {
         if !self.disrupted {
             return DisruptionEffects::none();
         }
@@ -203,12 +220,30 @@ impl DisruptionModel {
             }) => {
                 let new_remaining = remaining - dt;
                 if new_remaining <= 0.0 {
-                    // Transition to thermal quench
+                    // Transition to thermal quench. Size the Ip spike now, from
+                    // flux conservation across the profile flattening:
+                    //   L_p Ip = const,  L_p ∝ lambda_ext + li/2
+                    //   ΔIp/Ip = Δ(li/2) / (lambda_ext + li/2)
+                    // The flattening is partial (li drops ~30 %, floored at
+                    // 0.5), which puts the overshoot in the observed 5-15 %
+                    // band for DIII-D- and ITER-like parameters.
+                    let total = 0.001 + 0.002 * self.rand(); // 1-3 ms
+                    let li_before = li.max(0.3);
+                    let li_after = (0.7 * li_before).max(0.5).min(li_before);
+                    let spike_frac = (0.5 * (li_before - li_after)
+                        / (lambda_ext.max(0.2) + 0.5 * li_before))
+                        .clamp(0.03, 0.15);
                     self.phase = Some(DisruptionPhase::ThermalQuench {
-                        remaining: 0.001 + 0.001 * self.rand(), // 1-2ms
+                        remaining: total,
+                        total,
+                        ip_start: ip,
+                        spike_frac,
+                        li_before,
+                        li_after,
                     });
                     DisruptionEffects {
                         ip: None,
+                        li: None,
                         te_multiplier: 0.5, // Start dropping
                         locked_mode_amplitude: amplitude * 10.0,
                         is_thermal_quench: false,
@@ -224,6 +259,7 @@ impl DisruptionModel {
                     });
                     DisruptionEffects {
                         ip: None,
+                        li: None,
                         te_multiplier: 1.0 - 0.1 * new_amplitude.min(1.0),
                         locked_mode_amplitude: new_amplitude,
                         is_thermal_quench: false,
@@ -231,18 +267,28 @@ impl DisruptionModel {
                     }
                 }
             }
-            Some(DisruptionPhase::ThermalQuench { remaining }) => {
+            Some(DisruptionPhase::ThermalQuench {
+                remaining,
+                total,
+                ip_start,
+                spike_frac,
+                li_before,
+                li_after,
+            }) => {
                 let new_remaining = remaining - dt;
                 if new_remaining <= 0.0 {
-                    // Transition to current quench
+                    // Transition to current quench from the top of the spike.
                     let cq_duration = 0.005 + 0.045 * self.rand(); // 5-50ms
+                    let ip_peak = ip_start * (1.0 + spike_frac);
                     self.phase = Some(DisruptionPhase::CurrentQuench {
                         remaining: cq_duration,
-                        ip_start: ip,
+                        ip_start: ip_peak,
                         total_duration: cq_duration,
+                        li_flat: li_after,
                     });
                     DisruptionEffects {
-                        ip: None,
+                        ip: Some(ip_peak),
+                        li: Some(li_after),
                         te_multiplier: 0.01, // Te collapses to ~10-50 eV
                         locked_mode_amplitude: 5.0,
                         is_thermal_quench: true,
@@ -251,11 +297,20 @@ impl DisruptionModel {
                 } else {
                     self.phase = Some(DisruptionPhase::ThermalQuench {
                         remaining: new_remaining,
+                        total,
+                        ip_start,
+                        spike_frac,
+                        li_before,
+                        li_after,
                     });
-                    // Exponential Te collapse
-                    let frac = new_remaining / 0.002;
+                    // Profile flattening and the inductive Ip rise both follow
+                    // a quarter-sine over the quench; Te collapses linearly.
+                    let progress = (1.0 - new_remaining / total).clamp(0.0, 1.0);
+                    let shape = (std::f64::consts::FRAC_PI_2 * progress).sin();
+                    let frac = new_remaining / total;
                     DisruptionEffects {
-                        ip: None,
+                        ip: Some(ip_start * (1.0 + spike_frac * shape)),
+                        li: Some(li_before + (li_after - li_before) * shape),
                         te_multiplier: 0.01 + 0.99 * frac,
                         locked_mode_amplitude: 5.0,
                         is_thermal_quench: true,
@@ -267,12 +322,14 @@ impl DisruptionModel {
                 remaining,
                 ip_start,
                 total_duration,
+                li_flat,
             }) => {
                 let new_remaining = remaining - dt;
                 if new_remaining <= 0.0 {
                     self.phase = Some(DisruptionPhase::Complete);
                     DisruptionEffects {
                         ip: Some(0.0),
+                        li: Some(li_flat),
                         te_multiplier: 0.01,
                         locked_mode_amplitude: 0.0,
                         is_thermal_quench: false,
@@ -283,30 +340,17 @@ impl DisruptionModel {
                         remaining: new_remaining,
                         ip_start,
                         total_duration,
+                        li_flat,
                     });
-
-                    // Transient Ip spike (current quench overshoot) followed by
-                    // exponential L/R decay.  In real disruptions the sudden loss
-                    // of thermal energy increases plasma resistivity, causing a
-                    // brief inductive Ip overshoot before the L/R decay dominates.
-                    // The envelope is evaluated at the elapsed CQ time and applied
-                    // to the Ip at CQ onset, so the decay is exact for any step
-                    // size: it is not sensitive to dt being coarser than the CQ.
-                    let spike_dur = 0.002_f64.min(total_duration * 0.3); // 2ms spike
-                    let new_elapsed = total_duration - new_remaining;
-
-                    // Envelope: sine-shaped 5% spike then exponential decay
-                    let envelope = |t: f64| -> f64 {
-                        if t < spike_dur {
-                            1.0 + 0.05 * (std::f64::consts::PI * t / spike_dur).sin()
-                        } else {
-                            let tau = (total_duration - spike_dur).max(1e-6) / 3.0;
-                            (-(t - spike_dur) / tau).exp()
-                        }
-                    };
-
+                    // Exponential L/R decay of the cold, resistive plasma from
+                    // the top of the spike, time constant one third of the
+                    // quench duration. Evaluated at the elapsed quench time and
+                    // applied to the onset current, so it is exact for any dt.
+                    let tau = (total_duration / 3.0).max(1e-6);
+                    let elapsed = total_duration - new_remaining;
                     DisruptionEffects {
-                        ip: Some((ip_start * envelope(new_elapsed)).max(0.0)),
+                        ip: Some((ip_start * (-elapsed / tau).exp()).max(0.0)),
+                        li: Some(li_flat),
                         te_multiplier: 0.01,
                         locked_mode_amplitude: 1.0,
                         is_thermal_quench: false,
@@ -316,6 +360,7 @@ impl DisruptionModel {
             }
             Some(DisruptionPhase::Complete) | None => DisruptionEffects {
                 ip: Some(0.0),
+                li: None,
                 te_multiplier: 0.01,
                 locked_mode_amplitude: 0.0,
                 is_thermal_quench: false,
@@ -360,6 +405,9 @@ pub struct DisruptionEffects {
     /// the simulation re-seeds Ip from the programme every step, so a
     /// multiplier could never accumulate into a decay.
     pub ip: Option<f64>,
+    /// Internal inductance to impose, if the quench controls the current
+    /// profile this step (flattening through the thermal quench).
+    pub li: Option<f64>,
     /// Multiply electron temperature by this factor
     pub te_multiplier: f64,
     /// Locked mode detector amplitude (a.u.)
@@ -374,6 +422,7 @@ impl DisruptionEffects {
     fn none() -> Self {
         DisruptionEffects {
             ip: None,
+            li: None,
             te_multiplier: 1.0,
             locked_mode_amplitude: 0.0,
             is_thermal_quench: false,
@@ -411,7 +460,7 @@ mod tests {
         });
 
         // Advance through precursor
-        let effects = model.advance(0.002, 1.0);
+        let effects = model.advance(0.002, 1.0, 1.0, 0.9);
         assert!(effects.te_multiplier < 1.0);
 
         // Should now be in thermal quench
@@ -422,14 +471,14 @@ mod tests {
 
         // Advance through thermal quench
         for _ in 0..10 {
-            let effects = model.advance(0.001, 1.0);
+            let effects = model.advance(0.001, 1.0, 1.0, 0.9);
             assert!(effects.te_multiplier < 0.5);
         }
 
         // Should eventually reach current quench or complete
         let mut reached_cq = false;
         for _ in 0..100 {
-            model.advance(0.001, 1.0);
+            model.advance(0.001, 1.0, 1.0, 0.9);
             if matches!(model.phase, Some(DisruptionPhase::CurrentQuench { .. }))
                 || matches!(model.phase, Some(DisruptionPhase::Complete))
             {
@@ -461,22 +510,62 @@ mod tests {
             remaining: 0.030,
             ip_start: 1.0,
             total_duration: 0.030,
+            li_flat: 0.6,
         });
         let mut ips = Vec::new();
         for _ in 0..6 {
-            let e = model.advance(0.005, 1.0);
+            let e = model.advance(0.005, 1.0, 1.0, 0.9);
             ips.push(e.ip.expect("CQ must impose Ip"));
         }
-        // t = 5,10,15,20,25,30 ms. Spike is over by 2 ms, so the first
-        // sample is already decaying; all samples are below the spike peak.
-        assert!(ips.iter().all(|&i| i <= 1.05 && i >= 0.0), "{:?}", ips);
+        // t = 5,10,15,20,25,30 ms; tau = 10 ms, so exp(-0.5) ... exp(-2.5).
+        assert!(ips.iter().all(|&i| i <= 1.0 && i >= 0.0), "{:?}", ips);
         for w in ips.windows(2) {
             assert!(w[1] < w[0], "Ip must decrease monotonically: {:?}", ips);
         }
-        // tau = 28/3 ms: at 25 ms the envelope is exp(-23/9.33) ~ 0.085.
+        assert!((ips[0] - (-0.5f64).exp()).abs() < 1e-9, "exact decay expected, got {:?}", ips);
         assert!(ips[4] < 0.12, "Decay must accumulate, got {:?}", ips);
         assert_eq!(ips[5], 0.0, "CQ end must terminate the current");
         assert!(matches!(model.phase, Some(DisruptionPhase::Complete)));
+    }
+
+    #[test]
+    fn test_thermal_quench_ip_spike_from_flux_conservation() {
+        // DIII-D-like: li 1.2, lambda_ext = ln(8*1.67/(0.56*sqrt(1.7))) - 2 ~ 0.9.
+        // Partial flattening 1.2 -> 0.84 gives dIp/Ip = 0.18/1.5 = 0.12.
+        let mut model = DisruptionModel::default();
+        model.seed(12345);
+        model.disrupted = true;
+        model.phase = Some(DisruptionPhase::Precursor { remaining: 0.0005, amplitude: 1.0 });
+        let _ = model.advance(0.001, 1.0, 1.2, 0.9);
+        let (spike, li_after) = match model.phase {
+            Some(DisruptionPhase::ThermalQuench { spike_frac, li_after, .. }) => (spike_frac, li_after),
+            other => panic!("expected thermal quench, got {other:?}"),
+        };
+        assert!((spike - 0.12).abs() < 0.01, "spike fraction {spike}");
+        assert!((li_after - 0.84).abs() < 1e-9, "li_after {li_after}");
+
+        // Fine steps through the quench: Ip rises monotonically to the peak,
+        // li falls to li_after, then the CQ decays monotonically to zero.
+        let mut ip_max: f64 = 0.0;
+        let mut last_ip = 1.0;
+        let mut in_cq = false;
+        let mut last_li = 1.2;
+        for _ in 0..2000 {
+            let e = model.advance(0.00025, 1.0, 1.2, 0.9);
+            let ip = e.ip.expect("quench imposes Ip");
+            if let Some(li) = e.li { assert!(li <= last_li + 1e-12); last_li = li; }
+            // The step that moves TQ -> CQ returns the top of the spike, so the
+            // monotone-decay check starts from the step after it.
+            if in_cq { assert!(ip <= last_ip + 1e-12, "CQ must not rise"); }
+            else { assert!(ip >= last_ip - 1e-12, "TQ must not fall"); }
+            if matches!(model.phase, Some(DisruptionPhase::CurrentQuench { .. })) { in_cq = true; }
+            ip_max = ip_max.max(ip);
+            last_ip = ip;
+            if matches!(model.phase, Some(DisruptionPhase::Complete)) { break; }
+        }
+        assert!((ip_max - 1.12).abs() < 0.01, "peak Ip {ip_max}");
+        assert_eq!(last_ip, 0.0);
+        assert!((last_li - 0.84).abs() < 1e-9);
     }
 
     #[test]
