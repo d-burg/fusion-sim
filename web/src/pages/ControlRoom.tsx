@@ -345,8 +345,11 @@ export default function ControlRoom() {
           6px bar below the grid, where the bottom row could overrun it and
           the last status readouts ended up underneath. ─── */}
       <div className="h-px bg-gray-900 shrink-0" aria-hidden="true">
+        {/* No CSS transition: the width is retargeted every animation frame,
+            and an eased transition restarted that often holds the bar back
+            and then lets it catch up in a jump whenever a frame is late. */}
         <div
-          className="h-full bg-cyan-500 transition-[width] duration-100"
+          className="h-full bg-cyan-500"
           style={{ width: `${progress}%` }}
         />
       </div>
