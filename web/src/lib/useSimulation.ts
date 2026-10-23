@@ -5,6 +5,12 @@ import { processProfileFrames } from './profileUtils'
 import { computeFusion } from './fusionPhysics'
 
 const DT = 0.005 // 5 ms physics timestep
+// Through the thermal and current quench the physics is stepped and recorded
+// at this resolution instead, so the Ip spike (1-3 ms) and the L/R decay
+// (5-50 ms) render as curves rather than one or two points.
+const DT_QUENCH = 0.00025
+const inQuench = (s: Snapshot | null | undefined) =>
+  !!s && s.disrupted && (s.disruption_phase === 'thermal_quench' || s.disruption_phase === 'current_quench')
 // Trace history (lightweight: ~200 bytes/entry) — large buffer for full-pulse coverage.
 // 30,000 entries ≈ 500s at 60fps (enough for ITER 400s pulses at 1x speed). ~6 MB.
 const MAX_TRACE_HISTORY = 30000
@@ -208,6 +214,45 @@ export function useSimulation(
 
     // Number of tick batches this frame: 1 at ≤1x, proportional at >1x
     const tickBatches = speed >= 1.0 ? Math.round(speed) : 1
+
+    // Build a trace point from a snapshot. `dAlpha`/`elmActive` may be latched
+    // over several sub-steps; `dtRecorded` is the simulated time this point
+    // represents, used to smooth P_fus with tau_E.
+    const makeTracePoint = (s: Snapshot, dAlpha: number, elmActive: boolean, dtRecorded: number): TracePoint => {
+      const raw = currentDeviceObjRef.current ? computeFusion(s, currentDeviceObjRef.current).p_fus : 0
+      // Fusion reactions are concentrated in the hot core, which acts as a
+      // thermal low-pass filter; edge ELM crashes don't affect the core
+      // fusion rate on ELM timescales.
+      const tau = Math.max(s.tau_e ?? 0.1, 0.05)
+      const alpha = Math.min(dtRecorded / tau, 1.0)
+      pFusSmoothedRef.current += (raw - pFusSmoothedRef.current) * alpha
+      return {
+        t: s.time,
+        ip: s.ip,
+        te0: s.te0,
+        ne_bar: s.ne_bar,
+        w_th: s.w_th,
+        p_input: s.p_input,
+        p_rad: s.p_rad,
+        p_loss: s.p_loss,
+        d_alpha: dAlpha,
+        beta_n: s.beta_n,
+        disruption_risk: s.disruption_risk,
+        li: s.li,
+        q95: s.q95,
+        v_loop: s.diagnostics.v_loop,
+        h_factor: s.h_factor,
+        f_greenwald: s.f_greenwald,
+        ne_ped: s.ne_ped,
+        te_ped: s.te_ped,
+        ne_line: s.ne_line,
+        impurity_fraction: s.impurity_fraction,
+        p_fus: pFusSmoothedRef.current,
+        elm_suppressed: s.elm_suppressed,
+        elm_active: elmActive,
+        in_hmode: s.in_hmode,
+      }
+    }
     let snap: Snapshot | null = null
     // Track peak Dα and any ELM across all sub-steps so that ELMs
     // are reliably captured even when many physics steps are skipped.
@@ -221,15 +266,30 @@ export function useSimulation(
     let elmType = 0
 
     const totalSteps = tickBatches * STEPS_PER_TICK
-    for (let i = 0; i < totalSteps; i++) {
-      const json = sim.step(DT)
+    // Fixed budget of simulated time per tick. Outside a quench that is
+    // totalSteps coarse steps; inside one it is many fine steps, each of
+    // which is recorded as its own trace point.
+    const budget = totalSteps * DT
+    let advanced = 0
+    let lastWasFine = false
+    let prev: Snapshot | null = snapshotHistoryRef.current[snapshotHistoryRef.current.length - 1] ?? null
+    while (advanced < budget - 1e-9) {
+      const fine = inQuench(prev)
+      const dt = fine ? DT_QUENCH : DT
+      const json = sim.step(dt)
       snap = JSON.parse(json)
+      advanced += dt
+      lastWasFine = fine
       if (snap) {
+        prev = snap
         if (snap.diagnostics.d_alpha > maxDAlpha) maxDAlpha = snap.diagnostics.d_alpha
         if (snap.elm_active) {
           anyElmActive = true
           elmType = snap.elm_type ?? elmType
           elmEnergyLoss = Math.max(snap.elm_energy_loss ?? 0, elmEnergyLoss)
+        }
+        if (fine) {
+          historyRef.current.push(makeTracePoint(snap, snap.diagnostics.d_alpha, snap.elm_active, dt))
         }
       }
       if (snap && (snap.status === 'Complete' || snap.status === 'Disrupted')) {
@@ -246,47 +306,11 @@ export function useSimulation(
     }
 
     if (snap) {
-      // Append to trace history ring buffer (lightweight — large limit)
-      // Use peak d_alpha and any-ELM flag from all sub-steps for reliable display
-      const pt: TracePoint = {
-        t: snap.time,
-        ip: snap.ip,
-        te0: snap.te0,
-        ne_bar: snap.ne_bar,
-        w_th: snap.w_th,
-        p_input: snap.p_input,
-        p_rad: snap.p_rad,
-        p_loss: snap.p_loss,
-        d_alpha: maxDAlpha,
-        beta_n: snap.beta_n,
-        disruption_risk: snap.disruption_risk,
-        li: snap.li,
-        q95: snap.q95,
-        v_loop: snap.diagnostics.v_loop,
-        h_factor: snap.h_factor,
-        f_greenwald: snap.f_greenwald,
-        ne_ped: snap.ne_ped,
-        te_ped: snap.te_ped,
-        ne_line: snap.ne_line,
-        impurity_fraction: snap.impurity_fraction,
-        p_fus: (() => {
-          const raw = currentDeviceObjRef.current
-            ? computeFusion(snap!, currentDeviceObjRef.current).p_fus : 0
-          // Smooth P_fus with tau_E to filter ELM-scale fluctuations.
-          // Fusion reactions are concentrated in the hot core, which acts
-          // as a thermal low-pass filter — edge ELM crashes don't affect
-          // core fusion rate on ELM timescales.
-          const tau = Math.max(snap!.tau_e ?? 0.1, 0.05)
-          const dt = totalSteps * DT
-          const alpha = Math.min(dt / tau, 1.0)
-          pFusSmoothedRef.current += (raw - pFusSmoothedRef.current) * alpha
-          return pFusSmoothedRef.current
-        })(),
-        elm_suppressed: snap.elm_suppressed,
-        elm_active: anyElmActive,
-        in_hmode: snap.in_hmode,
+      // Append the tick-level trace point, unless the quench loop above has
+      // already recorded this snapshot at fine resolution.
+      if (!lastWasFine) {
+        historyRef.current.push(makeTracePoint(snap, maxDAlpha, anyElmActive, totalSteps * DT))
       }
-      historyRef.current.push(pt)
       if (historyRef.current.length > MAX_TRACE_HISTORY) {
         historyRef.current = historyRef.current.slice(-MAX_TRACE_HISTORY)
       }

@@ -750,7 +750,10 @@ impl Simulation {
         }
 
         // ── Apply disruption effects ──
-        let disruption_effects = self.disruption.advance(dt, self.actual_ip);
+        // External normalised inductance for the thermal-quench Ip spike.
+        let lambda_ext = (8.0 * self.device.r0 / (self.device.a * self.device.kappa.sqrt())).ln() - 2.0;
+        let disruption_effects =
+            self.disruption.advance(dt, self.actual_ip, self.transport.li, lambda_ext);
         if self.disruption.disrupted {
             if let Some(ip) = disruption_effects.ip {
                 self.actual_ip = ip;
@@ -802,6 +805,13 @@ impl Simulation {
             // During early ramp-up / late ramp-down: default peaked-ohmic value
             self.transport.li = 1.2;
             self.smoothed_li = 1.2;
+        }
+        // Through a disruption the quench owns the current profile: the
+        // thermal quench flattens it (li drops) and it stays flat while the
+        // current decays.
+        if let Some(li) = disruption_effects.li {
+            self.transport.li = li;
+            self.smoothed_li = li;
         }
 
         // ── Update equilibrium shape ──
@@ -1754,6 +1764,46 @@ mod tests {
                 li_early
             );
         }
+    }
+
+    #[test]
+    fn test_disruption_shows_ip_spike_then_decays() {
+        // Over-fuelled DIII-D pulse with a fixed seed: coarse steps until the
+        // trigger fires, then fine steps through the quench, as the frontend
+        // does. Ip must rise by at least 3 % above its pre-quench value and
+        // then fall monotonically to zero.
+        let device = devices::diiid();
+        let program = PulseProgram::density_limit(&device);
+        let mut sim = Simulation::new(device, program);
+        sim.seed_disruption(7);
+        sim.start();
+        let mut snap = sim.step(0.005);
+        while !snap.disrupted && snap.status == SimulationStatus::Running {
+            snap = sim.step(0.005);
+        }
+        assert!(snap.disrupted, "seed 7 density-limit pulse should disrupt");
+        let ip_pre = snap.ip;
+        let mut ip_max: f64 = 0.0;
+        let mut ips = Vec::new();
+        let mut last_ip = ip_pre;
+        for _ in 0..200_000 {
+            let s = sim.step(0.00025);
+            if s.disruption_phase != "precursor" && s.disruption_phase != "" {
+                ip_max = ip_max.max(s.ip);
+                ips.push((s.disruption_phase.clone(), s.ip));
+            }
+            last_ip = s.ip;
+            if s.status == SimulationStatus::Disrupted { break; }
+        }
+        assert!(ip_max > 1.03 * ip_pre, "spike expected: pre {ip_pre}, max {ip_max}");
+        assert!(ip_max < 1.16 * ip_pre, "spike too large: pre {ip_pre}, max {ip_max}");
+        let cq: Vec<f64> = ips.iter().filter(|(p, _)| p == "current_quench").map(|(_, i)| *i).collect();
+        assert!(cq.len() >= 20, "CQ should be resolved by many fine steps, got {}", cq.len());
+        for w in cq.windows(2) { assert!(w[1] <= w[0] + 1e-12, "CQ must decay monotonically"); }
+        // Three e-folds over the quench: the last CQ sample sits near exp(-3)
+        // of the peak, and the completing step takes Ip to exactly zero.
+        assert!(*cq.last().unwrap() < 0.06 * ip_max, "CQ end {} vs peak {}", cq.last().unwrap(), ip_max);
+        assert_eq!(last_ip, 0.0, "the quench must terminate the current");
     }
 
     #[test]
