@@ -285,7 +285,11 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
   // ── End of pulse ──
   if (prev && next.status !== prev.status) {
     if (next.status === 'Complete') push('ok', `Pulse complete at ${next.time.toFixed(2)} s`)
-    else if (next.status === 'Disrupted') push('major', `Pulse ended by disruption at ${next.time.toFixed(2)} s`)
+    else if (next.status === 'Disrupted') {
+      // The collapsed strip shows only this last line, so it carries the cause.
+      const why = explainDisruption(next.disruption_cause ?? '', next)
+      push('major', `Pulse ended by disruption at ${next.time.toFixed(2)} s: ${why.label}`, why.action || undefined)
+    }
   }
 }
 
