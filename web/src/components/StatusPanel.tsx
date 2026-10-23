@@ -529,6 +529,7 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
         <span className="text-xs text-gray-600 ml-auto">
           f<sub>det</sub>=<span className="font-mono tabular-nums">{fDet.toFixed(2)}</span>
         </span>
+        <DetachmentTag fDet={fDet} />
       </div>
 
       {/* Heat flux bar */}
@@ -591,6 +592,34 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
         </div>
       )}
     </div>
+  )
+}
+
+/** Divertor regime from the detachment fraction. Thresholds match the point
+ *  where the port view's radiation front has visibly lifted off the target. */
+type DivertorRegime = 'attached' | 'partial' | 'detached'
+function divertorRegime(fDet: number): DivertorRegime {
+  return fDet >= 0.6 ? 'detached' : fDet >= 0.3 ? 'partial' : 'attached'
+}
+
+/**
+ * Static state tag for the divertor regime (ATTACHED / PARTIAL / DETACHED),
+ * the same pattern as the neutron detector's Active/Idle tag. A regime
+ * change is marked once, with a single highlight that fades over a second,
+ * rather than a blinking element: the control room keeps nothing blinking
+ * that is not an unacknowledged alarm.
+ */
+function DetachmentTag({ fDet }: { fDet: number }) {
+  const regime = divertorRegime(fDet)
+  // Re-mounting the tag on each regime change restarts its one-shot highlight.
+  const label = regime === 'detached' ? 'Detached' : regime === 'partial' ? 'Partial' : 'Attached'
+  const color = regime === 'detached' ? 'var(--c-accent)' : regime === 'partial' ? 'var(--c-ink-dim)' : 'var(--c-ink-faint)'
+  const dot = regime === 'detached' ? 'var(--c-accent)' : regime === 'partial' ? 'var(--c-ink-dim)' : 'var(--c-line-strong)'
+  return (
+    <span key={regime} className="ml-2 flex items-center gap-1 shrink-0 state-change" title="Divertor regime from the detachment fraction">
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dot }} />
+      <span className="text-[10px] uppercase tracking-wider" style={{ color }}>{label}</span>
+    </span>
   )
 }
 

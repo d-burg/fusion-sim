@@ -429,6 +429,14 @@ a:focus-visible {
 .page-enter { animation: pageFadeIn 0.25s ease-out both; }
 
 @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+/* One-shot highlight when a state tag changes value: lifts to the accent
+   and settles over ~1.2 s. Not a blink; it runs once per change. */
+@keyframes stateChange {
+  0%   { filter: brightness(2.2); text-shadow: 0 0 6px var(--c-accent-hi); }
+  100% { filter: brightness(1);   text-shadow: none; }
+}
+.state-change { animation: stateChange 1.2s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .state-change { animation: none; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .tutorial-card { animation: slideUp 0.4s ease-out; }
 
