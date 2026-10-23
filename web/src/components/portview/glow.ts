@@ -4,23 +4,33 @@ import { toroidal } from './types'
 import { STRIKE_FADE_RATE, DEFAULT_GLOW_TUNING } from './config'
 import type { GlowTuning } from './config'
 
-const GLOW_SLICES = 600
-const POINTS_PER_STRIKE = GLOW_SLICES
-
-// Base glow intensity multiplier
-const GLOW_INTENSITY = 2.0
-
-// Max strike points we'll ever render (generous upper bound)
+// ═══ STRIKE BAND GEOMETRY ═══
+// The strike glow is a ribbon lying on the target surface: it follows the
+// wall polygon poloidally through the strike point and sweeps the visible
+// toroidal sector. Earlier versions drew it as a ring of billboard sprites
+// offset a few centimetres in front of the wall; the wall's depth test
+// clipped the half of every sprite that sat inside the target, which gave
+// the band a hard lower edge whenever it was too dim for bloom to hide it,
+// and the offset read as a hoop floating in front of the tiles.
+const BAND_SLICES = 96          // toroidal resolution of each ribbon
+const BAND_POL = 21             // poloidal samples across each ribbon
 const MAX_STRIKE_POINTS = 8
-const MAX_GLOW_POINTS = MAX_STRIKE_POINTS * POINTS_PER_STRIKE
+const MAX_BAND_VERTS = MAX_STRIKE_POINTS * BAND_SLICES * BAND_POL
+const MAX_BAND_INDICES = MAX_STRIKE_POINTS * (BAND_SLICES - 1) * (BAND_POL - 1) * 6
+// Lift off the tile surface along the inward normal so the ribbon is not
+// swallowed by the wall's depth test; a polygon offset does the rest.
+const BAND_LIFT = 0.004
+// Width of the ribbon in Gaussian sigmas, and the faint recycling skirt
+// drawn around the bright core so the band has no hard edge at any brightness.
+const BAND_HALF_SIGMAS = 3.2
+const SKIRT_SIGMA_RATIO = 2.4
+const SKIRT_WEIGHT = 0.22
+// Base brightness multiplier (a single ribbon layer replaces ~600 stacked sprites)
+const BAND_GAIN = 2.4
 
-// ═══ STOCHASTIC JITTER PARAMETERS ═══
-// Subtle R/Z position jitter amplitude (meters) — keeps the band alive
-const JITTER_RATE = 18.0          // fast jitter time rate
-// Brightness flicker time rate — how fast brightness changes (Hz-like seed rate)
-const FLICKER_RATE = 25.0
-// Slow brightness modulation rate — broad undulations along the ring
-const MODULATION_RATE = 3.0
+// ═══ STOCHASTIC SHIMMER PARAMETERS ═══
+const FLICKER_RATE = 25.0       // brightness flicker time rate
+const MODULATION_RATE = 3.0     // slow undulation along the ring
 
 /** Deterministic pseudo-random in [0,1) for cacheable jitter. */
 function pseudoRandom(seed: number): number {
@@ -49,14 +59,17 @@ export interface GlowUpdateParams {
   bandWidth?: number
   /** Glow tint override — recycling light blended toward blackbody incandescence */
   color?: { r: number; g: number; b: number }
+  /** The wall polygon the band lies on (R, Z); required when strikePoints is non-empty */
+  wallPts?: [number, number][]
   axisR: number
+  /** Z of the magnetic axis, used to orient the wall normal toward the plasma */
+  axisZ?: number
   time: number
 }
 
 /**
  * Create a canvas-based Gaussian glow texture for point sprites.
- * Radial falloff matches the original shader: exp(-r * 3.0)
- * Shared by the strike glow and the ELM filament system.
+ * Radial falloff: exp(-r * 3.0). Used by the ELM filament system.
  */
 export function createGlowTexture(size = 64): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
@@ -71,16 +84,12 @@ export function createGlowTexture(size = 64): THREE.CanvasTexture {
       const dx = (x - center) / center  // -1 to 1
       const dy = (y - center) / center
       const r = Math.sqrt(dx * dx + dy * dy)
-
-      // Gaussian falloff matching original shader: exp(-r * 3.0)
-      // r is 0 at center, 1 at edge
       const falloff = r <= 1.0 ? Math.exp(-r * 3.0) : 0
-
       const idx = (y * size + x) * 4
-      imageData.data[idx] = 255      // R — actual color comes from vertex colors
-      imageData.data[idx + 1] = 255  // G
-      imageData.data[idx + 2] = 255  // B
-      imageData.data[idx + 3] = Math.round(falloff * 255) // A — radial falloff
+      imageData.data[idx] = 255
+      imageData.data[idx + 1] = 255
+      imageData.data[idx + 2] = 255
+      imageData.data[idx + 3] = Math.round(falloff * 255)
     }
   }
 
@@ -90,169 +99,226 @@ export function createGlowTexture(size = 64): THREE.CanvasTexture {
   return texture
 }
 
+/** A sample along the wall polyline: position, inward normal, signed arclength from the strike. */
+interface WallSample {
+  r: number
+  z: number
+  nr: number
+  nz: number
+  s: number
+}
+
 /**
- * Create the glow rendering group for strike point sprites.
- * Uses PointsMaterial with canvas texture and vertex colors.
- *
- * Renders the SOL (scrape-off layer) as a uniform continuous glowing band:
- * - 600 overlapping point sprites per strike → seamless band, not discrete orbs
- * - Fast stochastic brightness jitter → simulates turbulent opacity/width variation
- * - Subtle R/Z position jitter → heat-shimmer alive-ness
- * - Positions rebuild only when strike points change; colors + jitter update every frame
- *
- * Performance: pre-allocates a single Points object and buffers (4800 points max).
- * Position jitter + color update every frame (~0.1ms CPU cost).
+ * Walk the wall polygon through the strike point and return samples at
+ * equal arclength steps from -halfLen to +halfLen, each with the unit
+ * normal pointing into the vessel (toward the axis).
+ */
+function sampleWallThroughStrike(
+  wall: [number, number][],
+  sp: StrikePoint,
+  halfLen: number,
+  nSamples: number,
+  axisR: number,
+  axisZ: number,
+): WallSample[] | null {
+  const n = wall.length
+  if (n < 3) return null
+
+  // Closest segment and the projection parameter on it
+  let bestD = Infinity, bestJ = 0, bestT = 0
+  for (let j = 0; j < n; j++) {
+    const [ax, az] = wall[j]
+    const [bx, bz] = wall[(j + 1) % n]
+    const dx = bx - ax, dz = bz - az
+    const L2 = dx * dx + dz * dz
+    let t = L2 > 0 ? ((sp.r - ax) * dx + (sp.z - az) * dz) / L2 : 0
+    t = Math.max(0, Math.min(1, t))
+    const px = ax + t * dx, pz = az + t * dz
+    const d = (sp.r - px) ** 2 + (sp.z - pz) ** 2
+    if (d < bestD) { bestD = d; bestJ = j; bestT = t }
+  }
+
+  const segLen = (j: number) => {
+    const [ax, az] = wall[((j % n) + n) % n]
+    const [bx, bz] = wall[(((j + 1) % n) + n) % n]
+    return Math.hypot(bx - ax, bz - az)
+  }
+  // Point at signed arclength `s` from the foot of the strike along the polyline.
+  const pointAt = (s: number): { r: number; z: number; j: number } => {
+    let j = bestJ
+    let along = bestT * segLen(bestJ) + s   // arclength from the start of segment j
+    // Walk forward or backward across segment boundaries
+    let guard = 0
+    while (along > segLen(j) && guard++ < n) { along -= segLen(j); j = (j + 1) % n }
+    while (along < 0 && guard++ < 2 * n) { j = (j - 1 + n) % n; along += segLen(j) }
+    const [ax, az] = wall[j]
+    const [bx, bz] = wall[(j + 1) % n]
+    const L = segLen(j) || 1
+    const t = Math.max(0, Math.min(1, along / L))
+    return { r: ax + t * (bx - ax), z: az + t * (bz - az), j }
+  }
+
+  const out: WallSample[] = []
+  for (let i = 0; i < nSamples; i++) {
+    const s = -halfLen + (2 * halfLen * i) / (nSamples - 1)
+    const p = pointAt(s)
+    const [ax, az] = wall[p.j]
+    const [bx, bz] = wall[(p.j + 1) % n]
+    const dx = bx - ax, dz = bz - az
+    const L = Math.hypot(dx, dz) || 1
+    // Normal to the segment; pick the sign that points toward the axis
+    let nr = -dz / L, nz = dx / L
+    if ((axisR - p.r) * nr + (axisZ - p.z) * nz < 0) { nr = -nr; nz = -nz }
+    out.push({ r: p.r, z: p.z, nr, nz, s })
+  }
+  return out
+}
+
+/**
+ * Create the strike-band renderer: one additive ribbon per strike point,
+ * lying on the wall and shimmering at display rate.
  */
 export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup {
   const t = tuning ?? DEFAULT_GLOW_TUNING
   const group = new THREE.Group()
   group.renderOrder = 3
 
-  const glowTexture = createGlowTexture(64)
-
-  // PointsMaterial with vertex colors for per-point brightness
-  const material = new THREE.PointsMaterial({
-    map: glowTexture,
+  const material = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
     depthWrite: false,
     depthTest: true,
     blending: THREE.AdditiveBlending,
-    sizeAttenuation: true,
-    size: t.pointSize,
+    side: THREE.DoubleSide,
+    // Pull the ribbon a hair toward the camera in depth so it wins against
+    // the tiles it lies on without having to float in front of them.
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2,
   })
 
   let storedPixelRatio = 1
 
-  // ═══ PRE-ALLOCATED BUFFERS ═══
-  const posBuffer = new Float32Array(MAX_GLOW_POINTS * 3)
-  const colBuffer = new Float32Array(MAX_GLOW_POINTS * 3)
+  const posBuffer = new Float32Array(MAX_BAND_VERTS * 3)
+  const colBuffer = new Float32Array(MAX_BAND_VERTS * 3)
+  const idxBuffer = new Uint32Array(MAX_BAND_INDICES)
+  // Per-vertex cached factors: poloidal profile × toroidal fade, and phi
+  const cachedProfile = new Float32Array(MAX_BAND_VERTS)
+  const cachedPhi = new Float32Array(MAX_BAND_VERTS)
 
-  // Base positions (without jitter) — rebuilt only when strike points change
-  const basePosR = new Float32Array(MAX_GLOW_POINTS)
-  const basePosZ = new Float32Array(MAX_GLOW_POINTS)
-  const basePhi = new Float32Array(MAX_GLOW_POINTS)
-  // Cached phi fade factor — only changes when strike points change
-  const cachedFade = new Float32Array(MAX_GLOW_POINTS)
-
-  // Single persistent geometry + Points (never disposed/recreated)
   const geometry = new THREE.BufferGeometry()
   const posAttr = new THREE.BufferAttribute(posBuffer, 3)
   posAttr.setUsage(THREE.DynamicDrawUsage)
   const colAttr = new THREE.BufferAttribute(colBuffer, 3)
   colAttr.setUsage(THREE.DynamicDrawUsage)
+  const idxAttr = new THREE.BufferAttribute(idxBuffer, 1)
+  idxAttr.setUsage(THREE.DynamicDrawUsage)
   geometry.setAttribute('position', posAttr)
   geometry.setAttribute('color', colAttr)
+  geometry.setIndex(idxAttr)
 
-  const points = new THREE.Points(geometry, material)
-  points.renderOrder = 3
-  points.frustumCulled = false
-  points.visible = false
-  group.add(points)
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.renderOrder = 3
+  mesh.frustumCulled = false
+  mesh.visible = false
+  group.add(mesh)
 
-  let activeCount = 0
-  let lastStrikeFP = ''
+  let activeVerts = 0
+  let activeIndices = 0
+  let lastFP = ''
   let lastParams: GlowUpdateParams | null = null
 
-  // Phi range constants
   const phiSpan = cfg.phiMax - cfg.phiMin
 
-  const update = (params: GlowUpdateParams) => {
-    lastParams = params
-    if (params.strikePoints.length === 0 || params.intensity <= 0) {
-      points.visible = false
-      activeCount = 0
-      lastStrikeFP = ''
-      return
-    }
-
-    const time = params.time
-    const intensityBase = params.intensity * GLOW_INTENSITY
-
-    // Strike point fingerprint — detect when strikes appear/disappear
-    const fp = params.strikePoints
-      .map(sp => `${sp.r.toFixed(4)},${sp.z.toFixed(4)}`)
-      .join(':')
-
-    if (fp !== lastStrikeFP) {
-      // ═══ BASE POSITION REBUILD (strike points changed) ═══
-      let vi = 0
-      for (const sp of params.strikePoints) {
-        for (let si = 0; si < POINTS_PER_STRIKE && vi < MAX_GLOW_POINTS; si++) {
-          const phi = cfg.phiMin + (si / (POINTS_PER_STRIKE - 1)) * phiSpan
-          basePosR[vi] = sp.r
-          basePosZ[vi] = sp.z
-          basePhi[vi] = phi
-          cachedFade[vi] = Math.exp(-Math.abs(phi) * STRIKE_FADE_RATE)
+  const rebuild = (params: GlowUpdateParams, sigma: number) => {
+    const wall = params.wallPts!
+    const axisZ = params.axisZ ?? 0
+    const halfLen = BAND_HALF_SIGMAS * sigma * SKIRT_SIGMA_RATIO
+    let vi = 0
+    let ii = 0
+    for (const sp of params.strikePoints) {
+      if (vi + BAND_SLICES * BAND_POL > MAX_BAND_VERTS) break
+      const samples = sampleWallThroughStrike(wall, sp, halfLen, BAND_POL, params.axisR, axisZ)
+      if (!samples) continue
+      const base = vi
+      for (let si = 0; si < BAND_SLICES; si++) {
+        const phi = cfg.phiMin + (si / (BAND_SLICES - 1)) * phiSpan
+        const fade = Math.exp(-Math.abs(phi) * STRIKE_FADE_RATE)
+        for (let pi = 0; pi < BAND_POL; pi++) {
+          const w = samples[pi]
+          const v = toroidal(w.r + w.nr * BAND_LIFT, w.z + w.nz * BAND_LIFT, phi)
+          posBuffer[vi * 3] = v.x
+          posBuffer[vi * 3 + 1] = v.y
+          posBuffer[vi * 3 + 2] = v.z
+          // Bright core plus a faint wide skirt: no edge at any brightness
+          const u = w.s / sigma
+          const core = Math.exp(-0.5 * u * u)
+          const us = w.s / (sigma * SKIRT_SIGMA_RATIO)
+          const skirt = Math.exp(-0.5 * us * us) * SKIRT_WEIGHT
+          cachedProfile[vi] = (core + skirt) * fade
+          cachedPhi[vi] = phi
           vi++
         }
       }
-      activeCount = vi
-      lastStrikeFP = fp
+      for (let si = 0; si < BAND_SLICES - 1; si++) {
+        for (let pi = 0; pi < BAND_POL - 1; pi++) {
+          if (ii + 6 > MAX_BAND_INDICES) break
+          const a = base + si * BAND_POL + pi
+          const b = base + (si + 1) * BAND_POL + pi
+          const c = base + (si + 1) * BAND_POL + pi + 1
+          const d = base + si * BAND_POL + pi + 1
+          idxBuffer[ii++] = a; idxBuffer[ii++] = b; idxBuffer[ii++] = c
+          idxBuffer[ii++] = a; idxBuffer[ii++] = c; idxBuffer[ii++] = d
+        }
+      }
     }
-
-    // ═══ PER-FRAME UPDATE: position jitter + stochastic brightness ═══
-    const jitAmp = t.jitterAmplitude
-    const col = params.color ?? t.color
-    const glowR = col.r, glowG = col.g, glowB = col.b
-
-    // Express the SOL band width (λ_q × flux expansion) through the sprite
-    // SIZE rather than scattering positions — keeps the 600 sprites on a
-    // continuous overlapping ring (a solid glowing band) instead of breaking
-    // them into discrete orbs. Nominal band ≈ 3 cm → device point size.
-    const bandW = params.bandWidth ?? 0
-    material.size = t.pointSize * Math.min(Math.max(bandW / 0.03, 0.7), 1.9)
-    // Offset strike point sprites inward from the wall surface so they're
-    // visible through the open toroidal sector.  Without this, sprites sit
-    // exactly on the wall mesh and are occluded by z-fighting / depth test.
-    // The offset must exceed the wall mesh thickness at the divertor (~5cm
-    // from triangulation) plus the point sprite half-size.
-    const axisR = params.axisR
-    const INWARD_OFFSET = 0.03  // metres toward plasma center (just enough to clear z-fighting)
-
-    for (let vi = 0; vi < activeCount; vi++) {
-      // Subtle R/Z position jitter — fast-evolving for heat-shimmer effect
-      const jitR = jitAmp * (pseudoRandom(vi * 127.1 + time * JITTER_RATE) - 0.5)
-      const jitZ = jitAmp * (pseudoRandom(vi * 269.5 + time * JITTER_RATE) - 0.5)
-
-      // Push R toward axis and Z toward midplane so sprites clear wall depth
-      const baseR = basePosR[vi]
-      const baseZ = basePosZ[vi]
-      const rSign = baseR > axisR ? -1 : 1
-      const zSign = baseZ > 0 ? -1 : 1
-      const rOff = rSign * INWARD_OFFSET
-      const zOff = zSign * INWARD_OFFSET * 0.7
-
-      const v = toroidal(
-        baseR + jitR + rOff,
-        baseZ + jitZ + zOff,
-        basePhi[vi],
-      )
-      posBuffer[vi * 3] = v.x
-      posBuffer[vi * 3 + 1] = v.y
-      posBuffer[vi * 3 + 2] = v.z
-
-      // Stochastic brightness — fast random flicker simulates turbulent opacity/width
-      // Multiple overlapping noise frequencies for natural turbulent appearance
-      const fastNoise = pseudoRandom(vi * 43.7 + Math.floor(time * FLICKER_RATE))
-      const slowWave = 0.5 + 0.5 * Math.sin(basePhi[vi] * 3.0 + time * MODULATION_RATE)
-      const flicker = 1.0 - t.flickerDepth * fastNoise * (0.6 + 0.4 * slowWave)
-
-      const brightness = intensityBase * cachedFade[vi] * flicker
-
-      colBuffer[vi * 3] = glowR * brightness
-      colBuffer[vi * 3 + 1] = glowG * brightness
-      colBuffer[vi * 3 + 2] = glowB * brightness
-    }
-
+    activeVerts = vi
+    activeIndices = ii
     posAttr.needsUpdate = true
+    idxAttr.needsUpdate = true
+  }
+
+  const update = (params: GlowUpdateParams) => {
+    lastParams = params
+    if (params.strikePoints.length === 0 || params.intensity <= 0 || !params.wallPts || params.wallPts.length < 3) {
+      mesh.visible = false
+      activeVerts = 0
+      lastFP = ''
+      return
+    }
+
+    // Visual band sigma: the physics half-width (λ_q × flux expansion) or
+    // the device's tuned minimum, whichever is wider.
+    const sigma = Math.max(params.bandWidth ?? 0.03, t.pointSize * 0.3, 0.012)
+
+    const fp = params.strikePoints
+      .map(sp => `${sp.r.toFixed(4)},${sp.z.toFixed(4)}`)
+      .join(':') + `|${sigma.toFixed(3)}|${params.wallPts.length}`
+    if (fp !== lastFP) {
+      rebuild(params, sigma)
+      lastFP = fp
+    }
+
+    // ═══ PER-FRAME COLOUR: shimmer and slow undulation ═══
+    const time = params.time
+    const intensityBase = params.intensity * BAND_GAIN
+    const col = params.color ?? t.color
+    for (let vi = 0; vi < activeVerts; vi++) {
+      const fastNoise = pseudoRandom(vi * 43.7 + Math.floor(time * FLICKER_RATE))
+      const slowWave = 0.5 + 0.5 * Math.sin(cachedPhi[vi] * 3.0 + time * MODULATION_RATE)
+      const flicker = 1.0 - t.flickerDepth * fastNoise * (0.6 + 0.4 * slowWave)
+      const b = intensityBase * cachedProfile[vi] * flicker
+      colBuffer[vi * 3] = col.r * b
+      colBuffer[vi * 3 + 1] = col.g * b
+      colBuffer[vi * 3 + 2] = col.b * b
+    }
     colAttr.needsUpdate = true
-    geometry.setDrawRange(0, activeCount)
-    points.visible = true
+    geometry.setDrawRange(0, activeIndices)
+    mesh.visible = true
   }
 
   const tick = (time: number) => {
-    if (!lastParams || activeCount === 0) return
+    if (!lastParams || activeVerts === 0) return
     update({ ...lastParams, time })
   }
 
@@ -265,15 +331,6 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
   }
 }
 
-/**
- * Extract strike points from separatrix + wall intersection.
- * Finds where divertor legs actually intersect the wall using proper
- * line-segment intersection (matching buildDivertorLegLines' truncateAtWall).
- *
- * Previous approach of "closest wall point to leg tip" gave incorrect positions
- * because the tip isn't necessarily where the leg crosses the wall, and the
- * closest wall vertex can be far from the true intersection.
- */
 /**
  * Walk a divertor leg path and find the first intersection with the wall.
  */
@@ -316,6 +373,10 @@ function findLegWallIntersection(
   return null
 }
 
+/**
+ * Extract strike points from separatrix + wall intersection: where the
+ * divertor legs cross the wall polygon, by proper segment intersection.
+ */
 export function findStrikePoints(
   sepPts: [number, number][],
   limiterPts: [number, number][],
