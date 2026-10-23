@@ -6,6 +6,7 @@ import InfoPopup from './InfoPopup'
 import { plasmaParamsInfo, stabilityInfo, powerBalanceInfo, divertorInfo, neutronDiagnosticInfo } from './infoContent'
 import { getDevice } from '../lib/wasm'
 import { computeFusion, computeDivertorHeatFlux, DivertorThermalModel, formatNeutronRate, formatQ, neutronSignalLevel, type FusionState, type DivertorState } from '../lib/fusionPhysics'
+import { reconstructionValid } from '../lib/pulseLog'
 
 interface Props {
   snapshot: Snapshot | null
@@ -130,6 +131,10 @@ export default function StatusPanel({
   }
 
   const s = snapshot
+  // Reconstructed quantities (profile shape, normalised pressure, confinement
+  // factor) have no meaning without a plasma: below 0.1 MA and after the
+  // current quench they are shown as INVALID rather than as a number.
+  const invalid = !reconstructionValid(s)
 
   return (
     <div className="px-3 py-1 text-xs h-full overflow-y-auto flex flex-col">
@@ -225,18 +230,18 @@ export default function StatusPanel({
         <div className="grid grid-cols-3 gap-x-3 gap-y-0.5">
           <Param label={<>I<sub>p</sub></>} value={s.ip} unit="MA" />
           <Param label={<>T<sub>e0</sub></>} value={s.te0} unit="keV" />
-          <Param label={<>q<sub>95</sub></>} value={s.q95} unit="" warn={s.q95 < 2.5} danger={s.q95 < 2.0} />
+          <Param label={<>q<sub>95</sub></>} value={s.q95} unit="" warn={s.q95 < 2.5} danger={s.q95 < 2.0} invalid={invalid} />
 
           <Param label={<>B<sub>t</sub></>} value={s.bt} unit="T" />
           <Param label={<><span style={{ textDecoration: 'overline' }}>n</span><sub>e</sub></>} value={s.ne_bar} unit="10²⁰" />
-          <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} />
+          <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} invalid={invalid} />
 
           <Param label={<>W<sub>th</sub></>} value={s.w_th} unit="MJ" />
-          <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" />
-          <Param label={<>f<sub>GW</sub></>} value={s.f_greenwald} unit="" warn={s.f_greenwald > 0.8} danger={s.f_greenwald > 0.9} />
+          <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" invalid={invalid} />
+          <Param label={<>f<sub>GW</sub></>} value={s.f_greenwald} unit="" warn={s.f_greenwald > 0.8} danger={s.f_greenwald > 0.9} invalid={invalid} />
 
-          <Param label={<>H<sub>98</sub></>} value={s.h_factor} unit="" />
-          <Param label={<>l<sub>i</sub></>} value={s.li} unit="" />
+          <Param label={<>H<sub>98</sub></>} value={s.h_factor} unit="" invalid={invalid} />
+          <Param label={<>l<sub>i</sub></>} value={s.li} unit="" invalid={invalid} />
           <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" />
         </div>
       </div>
@@ -255,7 +260,7 @@ export default function StatusPanel({
       </div>
 
       {/* Divertor thermal loading */}
-      <DivertorLoading divertor={divertor} />
+      <DivertorLoading divertor={divertor} invalid={invalid} />
 
       {/* Neutron diagnostic + Q display side by side */}
       <div className="flex gap-2 border-t border-gray-800 pt-1.5">
@@ -488,10 +493,13 @@ const W_RECRYST_TEMP = 1300
 /** Tungsten recrystallization heat flux threshold (MW/m²) — approximate steady-state limit. */
 const W_RECRYST_QFLUX = 10
 
-function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
+function DivertorLoading({ divertor, invalid = false }: { divertor: DivertorState | null; invalid?: boolean }) {
   const q = divertor?.q_peak ?? 0
   const lambda = divertor?.lambda_q ?? 0
   const fDet = divertor?.f_detach ?? 0
+  // λq and f_det are derived from the plasma; without one they are noise.
+  const invalidStyle = invalid ? { color: 'var(--c-invalid)' } : undefined
+  const invalidTitle = invalid ? 'No plasma: scrape-off layer quantities invalid' : undefined
   const tSurface = divertor?.t_surface ?? 0
   const wallMat = divertor?.wall_material ?? 'W'
   const isW = wallMat === 'W'
@@ -523,11 +531,11 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
           Divertor
           <InfoPopup title="Divertor Thermal Loading" position="right">{divertorInfo}</InfoPopup>
         </span>
-        <span className="text-xs text-gray-600">
-          λ<sub>q</sub>=<span className="font-mono tabular-nums">{lambda.toFixed(1)}</span> mm
+        <span className="text-xs text-gray-600" style={invalidStyle} title={invalidTitle}>
+          λ<sub>q</sub>=<span className="font-mono tabular-nums">{invalid ? '—' : lambda.toFixed(1)}</span> mm
         </span>
-        <span className="text-xs text-gray-600 ml-auto">
-          f<sub>det</sub>=<span className="font-mono tabular-nums">{fDet.toFixed(2)}</span>
+        <span className="text-xs text-gray-600 ml-auto" style={invalidStyle} title={invalidTitle}>
+          f<sub>det</sub>=<span className="font-mono tabular-nums">{invalid ? '—' : fDet.toFixed(2)}</span>
         </span>
       </div>
 
@@ -631,6 +639,7 @@ function Param({
   precision = 2,
   warn = false,
   danger = false,
+  invalid = false,
 }: {
   label: React.ReactNode
   value: number
@@ -638,13 +647,19 @@ function Param({
   precision?: number
   warn?: boolean
   danger?: boolean
+  /** No physical meaning right now (no plasma): shown as a magenta dash. */
+  invalid?: boolean
 }) {
-  const color = danger ? 'text-red-400' : warn ? 'text-yellow-400' : 'text-gray-200'
-  const formatted = value.toFixed(precision)
+  const color = invalid ? '' : danger ? 'text-red-400' : warn ? 'text-yellow-400' : 'text-gray-200'
+  const formatted = invalid ? '—' : value.toFixed(precision)
   return (
     <div className="flex justify-between items-baseline leading-none py-px">
       <span className="text-gray-500">{label}</span>
-      <span className={color}>
+      <span
+        className={color}
+        style={invalid ? { color: 'var(--c-invalid)' } : undefined}
+        title={invalid ? 'No plasma: equilibrium reconstruction invalid' : undefined}
+      >
         <span className="font-mono tabular-nums inline-block min-w-[3.5em] text-right">{formatted}</span>
         <span className="text-gray-600 ml-0.5 text-xs inline-block min-w-[2.5em] unit-label">{unit}</span>
       </span>

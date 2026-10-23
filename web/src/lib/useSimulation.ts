@@ -3,6 +3,7 @@ import { SimHandle, type PresetId, getPreset, getDevice } from './wasm'
 import type { Snapshot, TracePoint, ProfileFrame, ProcessedProfile } from './types'
 import { processProfileFrames } from './profileUtils'
 import { computeFusion } from './fusionPhysics'
+import { deriveEvents, newLogContext, nextPulseNumber, type LogContext, type LogEvent } from './pulseLog'
 
 const DT = 0.005 // 5 ms physics timestep
 // Through the thermal and current quench the physics is stepped and recorded
@@ -19,6 +20,13 @@ const MAX_TRACE_HISTORY = 30000
 // Post-pulse scrubbing uses time-based lookup. ~400 MB max.
 const MAX_SNAPSHOT_HISTORY = 8000
 
+/** The previous pulse on this device, kept as a reference trace. */
+export interface PreviousPulse {
+  number: number | null
+  deviceId: string
+  history: TracePoint[]
+}
+
 export interface SimState {
   snapshot: Snapshot | null            // live (latest) snapshot
   displaySnapshot: Snapshot | null     // scrubbed or live — for rendering components
@@ -33,6 +41,11 @@ export interface SimState {
   profileTeMax: number
   profileNeMax: number
   profilePMax: number
+  events: LogEvent[]                   // append-only control-room log for this pulse
+  pulseNumber: number | null           // issued on Start, persistent across visits
+  previousPulse: PreviousPulse | null  // last pulse's traces, for the reference overlay
+  elmCount: number
+  disruptionTime: number | null
 }
 
 export interface SimControls {
@@ -66,6 +79,25 @@ export function useSimulation(
   const pFusSmoothedRef = useRef(0.0) // smoothed P_fus for ELM resilience
   const profileFramesRef = useRef<ProfileFrame[]>([])
   const lastProfileTimeRef = useRef<number>(-Infinity)
+  const eventsRef = useRef<LogEvent[]>([])
+  const logCtxRef = useRef<LogContext | null>(null)
+  const pulseNumberRef = useRef<number | null>(null)
+  const previousPulseRef = useRef<PreviousPulse | null>(null)
+
+  // Keep the pulse that is about to be discarded as the reference trace,
+  // provided it ran long enough to be worth comparing against.
+  const archivePulse = () => {
+    if (historyRef.current.length > 20) {
+      previousPulseRef.current = {
+        number: pulseNumberRef.current,
+        deviceId: currentDeviceRef.current,
+        history: historyRef.current,
+      }
+    }
+    pulseNumberRef.current = null
+    eventsRef.current = []
+    logCtxRef.current = null
+  }
 
   const [state, setState] = useState<SimState>({
     snapshot: null,
@@ -81,10 +113,16 @@ export function useSimulation(
     profileTeMax: 0,
     profileNeMax: 0,
     profilePMax: 0,
+    events: [],
+    pulseNumber: null,
+    previousPulse: null,
+    elmCount: 0,
+    disruptionTime: null,
   })
 
   // Create a new sim handle from a preset
   const createSim = useCallback((deviceId: string, preset: PresetId) => {
+    archivePulse()
     currentDeviceRef.current = deviceId
     const dev = getDevice(deviceId)
     if (dev && massOverrideRef.current !== null) {
@@ -129,11 +167,17 @@ export function useSimulation(
       profileTeMax: 0,
       profileNeMax: 0,
       profilePMax: 0,
+      events: [],
+      pulseNumber: null,
+      previousPulse: previousPulseRef.current,
+      elmCount: 0,
+      disruptionTime: null,
     })
   }, [])
 
   // Create a new sim handle from custom program JSON
   const createSimFromProgram = useCallback((deviceId: string, programJson: string) => {
+    archivePulse()
     currentDeviceRef.current = deviceId
     currentDeviceObjRef.current = getDevice(deviceId)
     // Clean up old handle
@@ -168,6 +212,11 @@ export function useSimulation(
       profileTeMax: 0,
       profileNeMax: 0,
       profilePMax: 0,
+      events: [],
+      pulseNumber: null,
+      previousPulse: previousPulseRef.current,
+      elmCount: 0,
+      disruptionTime: null,
     })
   }, [])
 
@@ -281,6 +330,7 @@ export function useSimulation(
       advanced += dt
       lastWasFine = fine
       if (snap) {
+        if (logCtxRef.current) deriveEvents(prev, snap, logCtxRef.current, eventsRef.current)
         prev = snap
         if (snap.diagnostics.d_alpha > maxDAlpha) maxDAlpha = snap.diagnostics.d_alpha
         if (snap.elm_active) {
@@ -362,6 +412,11 @@ export function useSimulation(
           profileTeMax,
           profileNeMax,
           profilePMax,
+          events: eventsRef.current,
+          pulseNumber: pulseNumberRef.current,
+          previousPulse: previousPulseRef.current,
+          elmCount: logCtxRef.current?.elmCount ?? 0,
+          disruptionTime: logCtxRef.current?.disruptionTime ?? null,
         }
       })
     }
@@ -373,8 +428,21 @@ export function useSimulation(
 
   const start = useCallback(() => {
     if (!simRef.current) return
+    // A fresh pulse (nothing recorded yet) gets the next pulse number and a
+    // new log; resuming from Pause keeps both.
+    if (historyRef.current.length === 0 || pulseNumberRef.current === null) {
+      pulseNumberRef.current = nextPulseNumber()
+      eventsRef.current = []
+      let program = null
+      try { program = JSON.parse(programJsonRef.current) } catch { /* no programme */ }
+      logCtxRef.current = newLogContext(
+        pulseNumberRef.current,
+        currentDeviceObjRef.current?.name ?? currentDeviceRef.current,
+        program,
+      )
+    }
     runningRef.current = true
-    setState((s) => ({ ...s, running: true }))
+    setState((s) => ({ ...s, running: true, pulseNumber: pulseNumberRef.current, events: eventsRef.current }))
     rafRef.current = requestAnimationFrame(tick)
   }, [tick])
 
@@ -390,6 +458,7 @@ export function useSimulation(
     if (simRef.current) {
       simRef.current.reset()
     }
+    archivePulse()
     historyRef.current = []
     pFusSmoothedRef.current = 0
     snapshotHistoryRef.current = []
@@ -408,6 +477,11 @@ export function useSimulation(
       profileTeMax: 0,
       profileNeMax: 0,
       profilePMax: 0,
+      events: [],
+      pulseNumber: null,
+      previousPulse: previousPulseRef.current,
+      elmCount: 0,
+      disruptionTime: null,
     }))
   }, [])
 

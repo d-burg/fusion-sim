@@ -672,3 +672,40 @@ export const powerBalanceInfo = (
     </Ref>
   </>
 )
+
+export const eventLogInfo = (
+  <>
+    <p>
+      An append-only record of the pulse in simulation time, in the style of
+      a control-room sequence log. Every line is an edge: a programmed step
+      (heating on, flat-top, ramp-down), a regime change (L-H transition,
+      first ELM), a limit crossing, or a stage of a disruption.
+    </p>
+    <Heading>Severities</Heading>
+    <p>
+      Nominal sequence events are uncoloured. A green dot marks a favourable
+      transition. <b>MINOR</b> (amber) means a limit is being approached
+      (f<sub>GW</sub> &gt; 0.8, β<sub>N</sub> &gt; 2.5, q<sub>95</sub> &lt; 2.5,
+      hazard &gt; 30 %/s); <b>MAJOR</b> (red) means it has been reached.
+      <b>INVALID</b> (magenta) marks readouts that no longer mean anything,
+      as when the plasma is gone. Alarms use hysteresis, so a noisy signal
+      does not chatter.
+    </p>
+    <Heading>Why did it disrupt</Heading>
+    <p>
+      When a disruption starts, the engine records which hazard term was
+      dominant at the trigger: density limit, β limit, kink limit, radiative
+      collapse, locked mode, or wall contact. The log names it, gives one
+      sentence of physics, and the change an operator would make next pulse.
+    </p>
+    <Heading>Pulse number and report</Heading>
+    <p>
+      Each Start issues the next pulse number, kept in this browser. When the
+      pulse ends, the Report view shows achieved against programmed: pulse
+      length, I<sub>p</sub> flat-top, peak W<sub>th</sub> and β<sub>N</sub>,
+      max f<sub>GW</sub>, min q<sub>95</sub>, H<sub>98</sub>, time in H-mode,
+      ELM count, peak fusion power and Q, and whether it disrupted. The
+      previous pulse's traces stay on the trace panel as a grey reference.
+    </p>
+  </>
+)

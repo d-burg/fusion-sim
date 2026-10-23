@@ -10,6 +10,8 @@ import PulsePlanner from '../components/PulsePlanner'
 import PortView from '../components/portview'
 import SettingsDropdown from '../components/SettingsDropdown'
 import TutorialOverlay from '../components/TutorialOverlay'
+import EventLog from '../components/EventLog'
+import { buildReport } from '../lib/pulseLog'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
@@ -76,7 +78,23 @@ export default function ControlRoom() {
     programJson,
     scrubTime,
     finished,
+    events,
+    pulseNumber,
+    previousPulse,
   } = state
+
+  // Achieved-versus-programmed report, built once the pulse has ended.
+  const report = useMemo(() => {
+    if (!finished || history.length === 0) return null
+    return buildReport({
+      history,
+      programJson,
+      disrupted: !!state.snapshot?.disrupted,
+      cause: state.snapshot?.disruption_cause,
+      disruptionTime: state.disruptionTime,
+      elmCount: state.elmCount,
+    })
+  }, [finished, history, programJson, state.snapshot, state.disruptionTime, state.elmCount])
 
   // Load a programme edited on the pulse page. runProgram builds the sim but
   // leaves it stopped, so the control room waits on Start as it always does.
@@ -307,6 +325,9 @@ export default function ControlRoom() {
         {/* Time readout + Settings */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end col-start-2 row-start-1 md:col-start-3">
           <div className="text-xs text-gray-400 whitespace-nowrap">
+            <span className="text-gray-500">Pulse </span>
+            <span className="font-mono tabular-nums">{pulseNumber ?? '—'}</span>
+            <span className="text-gray-600 mx-1.5">·</span>
             t=<span className="font-mono tabular-nums">{time.toFixed(3)}</span>s
             {' / '}
             <span className="font-mono tabular-nums">{duration.toFixed(1)}</span>s
@@ -353,6 +374,7 @@ export default function ControlRoom() {
             scrubTime={scrubTime}
             onScrub={controls.setScrubTime}
             elmActive={displaySnapshot?.elm_active ?? false}
+            reference={previousPulse}
           />
         </div>
 
@@ -383,6 +405,15 @@ export default function ControlRoom() {
         </div>
       </div>
       </div>
+
+      {/* ─── Event log strip: sequence record and end-of-pulse report ─── */}
+      <EventLog
+        key={pulseNumber ?? 'idle'}
+        events={events}
+        pulseNumber={pulseNumber}
+        running={running}
+        report={report}
+      />
 
       {/* ─── Pulse Planner drawer ─── */}
       {showPlanner && (

@@ -461,6 +461,18 @@ pub struct SimulationSnapshot {
     pub disrupted: bool,
     /// "" | "precursor" | "thermal_quench" | "current_quench" | "complete"
     pub disruption_phase: String,
+    /// "" until a disruption starts, then the dominant hazard term at the
+    /// trigger: density_limit | beta_limit | kink_limit | radiative_collapse
+    /// | locked_mode | wall_contact.
+    pub disruption_cause: String,
+    /// The individual hazard terms (each 0-1) behind `disruption_risk`.
+    pub risk_greenwald: f64,
+    pub risk_beta: f64,
+    pub risk_q95: f64,
+    pub risk_radiation: f64,
+    pub risk_locked_mode: f64,
+    /// L-H power threshold (MW) the transition logic compares net heating to.
+    pub p_lh: f64,
 
     // Profiles (51-point arrays, ρ = 0.00 to 1.00)
     pub te_profile: Vec<f64>,
@@ -1428,6 +1440,13 @@ impl Simulation {
             disruption_risk: self.disruption.risk,
             disrupted: self.disruption.disrupted,
             disruption_phase: self.disruption.phase_name().to_string(),
+            disruption_cause: self.disruption.cause.name().to_string(),
+            risk_greenwald: self.disruption.risk_greenwald,
+            risk_beta: self.disruption.risk_beta,
+            risk_q95: self.disruption.risk_q95,
+            risk_radiation: self.disruption.risk_radiation,
+            risk_locked_mode: self.disruption.risk_locked_mode,
+            p_lh: self.transport.p_lh_threshold,
             diagnostics,
             flux_surfaces,
             separatrix,
