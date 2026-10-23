@@ -66,6 +66,14 @@ const REFERENCES: Ref[] = [
     doi: '10.1088/0029-5515/53/9/093031',
   },
   {
+    id: 'goldston2017',
+    authors: 'R. J. Goldston, M. L. Reinke, and J. A. Schwartz',
+    title: 'A new scaling for divertor detachment',
+    journal: 'Plasma Phys. Control. Fusion 59, 055015',
+    year: 2017,
+    doi: '10.1088/1361-6587/aa5e6e',
+  },
+  {
     id: 'martin2008',
     authors: 'Y. R. Martin, T. Takizuka, and the ITPA CDBM H-mode Threshold Database Working Group',
     title: 'Power requirement for accessing the H-mode in ITER',
@@ -526,16 +534,26 @@ export default function Bibliography() {
         {/* ─── 13. Detachment ─── */}
         <Section number={13} title="Divertor Detachment Model">
           <p>
-            The divertor detachment fraction is modeled as a sigmoid function of the
-            Greenwald fraction:
+            Detachment is a regime where the divertor plasma cools and recombines before reaching
+            the target plates, dramatically reducing the heat flux. It needs the divertor to radiate
+            away most of the power crossing the separatrix, which the fuel and intrinsic impurities
+            supply at high Greenwald fraction and a seeded impurity (neon here) supplies at any
+            density. The seeded fraction needed to detach follows the Goldston&ndash;Reinke&ndash;Schwartz
+            scaling,<RefTag id="goldston2017" /> c<sub>z,det</sub> &prop; B<sub>T</sub><sup>0.88</sup>
+            q<sub>cyl</sub><sup>1.1</sup> / f<sub>GW</sub><sup>2</sup>, so the two drivers combine into
+            one detachment qualifier:
           </p>
           <Eq>
-            {'f_detach = min(1 − 1/(1 + (f_GW / 0.7)⁶), 0.97)'}
+            {'D = (f_GW / 0.7)² · (1 + c_z / c₀),   c₀ = 0.01 · (B_T / 2 T)^0.88 · (q₉₅ / 3.5)^1.1'}<br />
+            {'f_detach = min(1 − 1/(1 + D³), 0.97)'}
           </Eq>
           <p>
-            Detachment is a regime where the divertor plasma cools and recombines before reaching
-            the target plates, dramatically reducing the heat flux. It typically occurs at high
-            Greenwald fraction due to increased edge radiation and volumetric power dissipation.
+            With no seeding this reduces to the density-only sigmoid 1 − 1/(1 + (f<sub>GW</sub>/0.7)⁶):
+            an unseeded divertor is half detached at f<sub>GW</sub> = 0.7. With 1% neon a DIII-D-size
+            divertor is half detached at f<sub>GW</sub> &asymp; 0.5; ITER&rsquo;s higher field and safety
+            factor roughly double the fraction required. The seeded fraction c<sub>z</sub> accumulates
+            from the neon puff in the transport model and decays with a 0.5 s confinement time; above
+            the device&rsquo;s impurity collapse threshold the core radiation runs away.
           </p>
         </Section>
 

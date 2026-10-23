@@ -207,12 +207,40 @@ is broadened by a factor of 1.0-2.0 depending on the triangularity magnitude.
 
 ### 4.2 Detachment Model
 
-A simplified sigmoid model for divertor detachment:
+Detachment needs the divertor to radiate away most of the power crossing
+the separatrix. Two things supply that radiation: the fuel and intrinsic
+impurities, whose cooling grows steeply with density, and any seeded
+impurity (neon in this model). Goldston, Reinke and Schwartz found that the
+seeded fraction needed to detach scales as
 
-    f_detach = min(1 - 1/(1 + (f_GW/0.7)^6), 0.97)
+    c_z,det ∝ B_T^0.88 q_cyl^1.1 / f_GW^2
 
-Higher Greenwald fraction drives stronger divertor radiation and detachment,
-reducing the target heat flux. Maximum detachment reduces heat flux by 97%.
+nearly independent of machine size and power, so the two drivers combine
+into a single detachment qualifier
+
+    D = (f_GW / 0.7)^2 × (1 + c_z / c_0)
+    c_0 = 0.01 × (B_T / 2 T)^0.88 × (q95 / 3.5)^1.1
+    f_detach = min(1 − 1 / (1 + D^3), 0.97)
+
+where c_z is the seeded-impurity fraction from the transport model (it
+accumulates from the neon puff and decays with a 0.5 s confinement time).
+With no seeding this is exactly the earlier density-only sigmoid
+1 − 1/(1 + (f_GW/0.7)^6): an unseeded divertor is half detached at
+f_GW = 0.7. With 1 % neon a DIII-D-like divertor (2 T, q95 = 3.5) is half
+detached at f_GW ≈ 0.5 and fully at ≈ 0.7; ITER's higher field and safety
+factor raise c_0 to about 2 %, so it needs roughly twice the fraction, as
+on the real machine. Over-seeding is not free: above the device's impurity
+collapse threshold (1.5–2.5 %) the core radiation runs away and the pulse
+heads for a radiative collapse.
+
+Maximum detachment reduces the target heat flux by 97 %. The port view
+draws the radiation front moving up the divertor leg with f_detach, and the
+status panel's Divertor row reports Attached / Partial / Detached at
+f_detach = 0.3 and 0.6.
+
+**References:**
+- Goldston, Reinke and Schwartz, Plasma Phys. Control. Fusion 59 (2017) 055015
+- Reinke, Nucl. Fusion 57 (2017) 034004
 
 ---
 

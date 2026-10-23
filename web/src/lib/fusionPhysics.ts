@@ -416,6 +416,51 @@ export class DivertorThermalModel {
   }
 }
 
+// ── Detachment ─────────────────────────────────────────────────────
+// Greenwald fraction at which an unseeded divertor is half detached.
+const DETACH_F_GW_REF = 0.7
+// Seeded-impurity fraction with the same detaching power as the intrinsic
+// (deuterium + wall-impurity) radiation at the reference density, for a
+// DIII-D-like B_T = 2 T, q95 = 3.5. About 1 % neon is what takes DIII-D and
+// AUG from attached to detached at moderate density.
+const DETACH_C_Z_REF = 0.01
+const DETACH_BT_REF = 2.0
+const DETACH_Q95_REF = 3.5
+
+/**
+ * Divertor detachment fraction, 0 (attached) to 0.97 (fully detached).
+ *
+ * Detachment needs the divertor to radiate away most of the power that
+ * crosses the separatrix. Two things supply that radiation: the fuel and
+ * intrinsic impurities, whose cooling grows steeply with density, and any
+ * seeded impurity (neon here). Goldston, Reinke and Schwartz (PPCF 59, 2017,
+ * 055015) found that the seeded fraction needed to detach scales as
+ *
+ *     c_z,det ∝ B_T^0.88 q_cyl^1.1 / f_GW^2
+ *
+ * nearly independent of machine size and power, so the two drivers combine
+ * into one detachment qualifier
+ *
+ *     D = (f_GW / 0.7)^2 × (1 + c_z / c_0),   c_0 = 0.01 (B_T/2 T)^0.88 (q95/3.5)^1.1
+ *     f_detach = 1 − 1 / (1 + D^3)
+ *
+ * With no seeding this is the earlier density-only sigmoid
+ * 1 − 1/(1 + (f_GW/0.7)^6) exactly; with 1 % neon a DIII-D-like divertor is
+ * half detached at f_GW ≈ 0.5 instead of 0.7, and ITER's higher field and
+ * safety factor demand about twice the fraction, as on the real machine.
+ */
+export function detachmentFraction(snapshot: Snapshot, device: Device): number {
+  const f_GW = Math.max(snapshot.f_greenwald, 0)
+  const c_z = Math.max(snapshot.impurity_fraction ?? 0, 0)
+  const bt = Math.max(snapshot.bt > 0 ? snapshot.bt : device.bt_max, 0.5)
+  // Early in the ramp q95 is enormous; clamp so seeding is simply weak there
+  // rather than switched off.
+  const q95 = Math.min(Math.max(snapshot.q95, 2.0), 8.0)
+  const c_0 = DETACH_C_Z_REF * Math.pow(bt / DETACH_BT_REF, 0.88) * Math.pow(q95 / DETACH_Q95_REF, 1.1)
+  const qualifier = Math.pow(f_GW / DETACH_F_GW_REF, 2) * (1 + c_z / c_0)
+  return Math.min(1 - 1 / (1 + Math.pow(qualifier, 3)), 0.97)
+}
+
 /**
  * Estimate divertor peak heat flux using Eich scaling for the SOL
  * power width and a simple detachment model based on Greenwald fraction.
@@ -483,9 +528,8 @@ export function computeDivertorHeatFlux(snapshot: Snapshot, device: Device): Div
   // Inter-ELM attached heat flux (2/3 inner/outer sharing)
   const q_attached = A_wet > 0 ? 0.67 * p_sol_per_div_W / A_wet : 0  // W/m²
 
-  // Detachment correction
-  const f_GW = snapshot.f_greenwald
-  const f_detach = Math.min(1 - 1 / (1 + Math.pow(f_GW / 0.7, 6)), 0.97)
+  // Detachment correction (density and seeded impurities, see detachmentFraction)
+  const f_detach = detachmentFraction(snapshot, device)
 
   // Inter-ELM baseline heat flux
   const q_interELM = q_attached * (1 - f_detach) / 1e6  // MW/m²

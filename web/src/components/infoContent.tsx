@@ -471,12 +471,24 @@ export const divertorInfo = (
 
     <Heading>Detachment</Heading>
     <p>
-      At high density (high f<sub>GW</sub>), the divertor plasma radiates
-      most of the incoming power before it reaches the target plates. This
-      is called <b>detachment</b> and is essential for ITER and reactor
-      operation. The detachment fraction f<sub>det</sub> indicates how
-      much power is radiated away before reaching the plates. Impurity
-      seeding (N<sub>2</sub>, Ne, Ar) is used to promote detachment.
+      When the divertor plasma radiates most of the incoming power before it
+      reaches the target plates, the plasma <b>detaches</b>: the target
+      cools, the heat flux collapses, and the radiating zone lifts off the
+      plate and moves up the divertor leg toward the X-point. This is
+      essential for ITER and reactor operation. Two things supply the
+      radiation: the fuel and intrinsic impurities, whose cooling grows
+      steeply with density (high f<sub>GW</sub>), and seeded impurities
+      (N<sub>2</sub>, Ne, Ar). The model combines them into one detachment
+      qualifier following the{' '}
+      <Cite doi="10.1088/1361-6587/aa5e6e">Goldston&ndash;Reinke&ndash;Schwartz scaling</Cite>,
+      in which the seeded fraction needed to detach goes as
+      B<sub>T</sub><sup>0.88</sup> q<sup>1.1</sup> / f<sub>GW</sub><sup>2</sup>.
+      Unseeded, the divertor is half detached at f<sub>GW</sub> = 0.7; with
+      1% neon a DIII-D-size divertor is half detached at f<sub>GW</sub> &asymp; 0.5,
+      while ITER&rsquo;s higher field needs about twice the fraction. Over-seed
+      and the core radiation runs away into a radiative collapse. The
+      divertor row reports Attached / Partial / Detached at
+      f<sub>det</sub> = 0.3 and 0.6.
     </p>
 
     <Heading>Surface Temperature</Heading>
@@ -505,6 +517,10 @@ export const divertorInfo = (
     <Ref>
       <Cite doi="10.1016/j.nme.2014.12.007">R. A. Pitts et al., Nucl. Mater. Energy (2015)</Cite>{' '}
       &mdash; ITER divertor design and power handling.
+    </Ref>
+    <Ref>
+      <Cite doi="10.1088/1361-6587/aa5e6e">R. J. Goldston, M. L. Reinke and J. A. Schwartz, Plasma Phys. Control. Fusion 59, 055015 (2017)</Cite>{' '}
+      &mdash; scaling of the impurity fraction needed for divertor detachment.
     </Ref>
     <Ref>
       Wesson, <i>Tokamaks</i>, 4th ed., Oxford Univ. Press (2011) &mdash; Ch. 9 (Scrape-off layer and divertor).
