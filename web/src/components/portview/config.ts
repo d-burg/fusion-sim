@@ -320,7 +320,6 @@ export const DEFAULT_POWER_SCALE = 0.5
 // ═══ Per-device glow tuning ═══
 export interface GlowTuning {
   color: { r: number; g: number; b: number }
-  jitterAmplitude: number   // R/Z position jitter (metres)
   flickerDepth: number      // 0 = uniform, 1 = full range
   pointSize: number         // sprite size in world units
 }
@@ -329,35 +328,30 @@ export const DEVICE_GLOW_TUNING: Record<string, GlowTuning> = {
   // DIII-D: barely perceptible — faintest hint of warm glow
   diiid: {
     color: { r: 1.0, g: 0.45, b: 0.15 },      // warm orange
-    jitterAmplitude: 0.001,
     flickerDepth: 0.05,
     pointSize: 0.08,
   },
   // CENTAUR: dazzling — 30 MW ICRH into compact NT plasma, intense divertor load
   centaur: {
     color: { r: 1.0, g: 0.25, b: 0.06 },       // deep reddish orange (D-T)
-    jitterAmplitude: 0.008,
     flickerDepth: 0.40,
     pointSize: 0.40,
   },
   // ITER: most dazzling — 500 MW fusion power, extreme divertor heat flux
   iter: {
     color: { r: 1.0, g: 0.18, b: 0.05 },       // deep red
-    jitterAmplitude: 0.022,
     flickerDepth: 0.55,
     pointSize: 0.75,
   },
   // SPARC: moderate
   sparc: {
     color: { r: 1.0, g: 0.35, b: 0.10 },       // reddish orange
-    jitterAmplitude: 0.006,
     flickerDepth: 0.30,
     pointSize: 0.28,
   },
   // JET: moderate — visible but less intense than ITER/CENTAUR
   jet: {
     color: { r: 1.0, g: 0.22, b: 0.06 },       // deep red
-    jitterAmplitude: 0.007,
     flickerDepth: 0.25,
     pointSize: 0.35,
   },
@@ -365,7 +359,6 @@ export const DEVICE_GLOW_TUNING: Record<string, GlowTuning> = {
 
 export const DEFAULT_GLOW_TUNING: GlowTuning = {
   color: { r: 1.0, g: 0.45, b: 0.15 },
-  jitterAmplitude: 0.006,
   flickerDepth: 0.35,
   pointSize: 0.30,
 }
