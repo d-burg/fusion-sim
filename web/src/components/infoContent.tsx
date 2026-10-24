@@ -475,20 +475,19 @@ export const divertorInfo = (
       reaches the target plates, the plasma <b>detaches</b>: the target
       cools, the heat flux collapses, and the radiating zone lifts off the
       plate and moves up the divertor leg toward the X-point. This is
-      essential for ITER and reactor operation. Two things supply the
-      radiation: the fuel and intrinsic impurities, whose cooling grows
-      steeply with density (high f<sub>GW</sub>), and seeded impurities
-      (N<sub>2</sub>, Ne, Ar). The model combines them into one detachment
-      qualifier following the{' '}
-      <Cite doi="10.1088/1361-6587/aa5e6e">Goldston&ndash;Reinke&ndash;Schwartz scaling</Cite>,
-      in which the seeded fraction needed to detach goes as
-      B<sub>T</sub><sup>0.88</sup> q<sup>1.1</sup> / f<sub>GW</sub><sup>2</sup>.
-      Unseeded, the divertor is half detached at f<sub>GW</sub> = 0.7; with
-      1% neon a DIII-D-size divertor is half detached at f<sub>GW</sub> &asymp; 0.5,
-      while ITER&rsquo;s higher field needs about twice the fraction. Over-seed
-      and the core radiation runs away into a radiative collapse. The
-      divertor row reports Attached / Partial / Detached at
-      f<sub>det</sub> = 0.3 and 0.6.
+      essential for ITER and reactor operation.{' '}
+      <Cite doi="10.1088/1361-6587/aa5e6e">Goldston, Reinke and Schwartz</Cite>{' '}
+      find that the impurity fraction needed to detach scales as
+      P<sub>sep</sub> / [B<sub>p</sub>(1+&kappa;&sup2;)<sup>3/2</sup>(n<sub>sep</sub>/n<sub>GW</sub>)&sup2;],
+      with no size dependence: harder with power, easier with plasma current,
+      shaping and density. The model uses that form, calibrated on their
+      ASDEX Upgrade case, with the fuel and wall impurities counted as an
+      equivalent 0.3% core neon and the seeded neon added to it. Unseeded,
+      a DIII-D-size divertor is half detached at f<sub>GW</sub> = 0.7; an
+      unseeded ITER flat-top is attached and needs of order 1% core neon,
+      close to its impurity collapse threshold. Over-seed and the core
+      radiation fraction climbs toward collapse. The divertor row reports
+      Attached / Partial / Detached at f<sub>det</sub> = 0.3 and 0.6.
     </p>
 
     <Heading>Surface Temperature</Heading>
@@ -520,7 +519,7 @@ export const divertorInfo = (
     </Ref>
     <Ref>
       <Cite doi="10.1088/1361-6587/aa5e6e">R. J. Goldston, M. L. Reinke and J. A. Schwartz, Plasma Phys. Control. Fusion 59, 055015 (2017)</Cite>{' '}
-      &mdash; scaling of the impurity fraction needed for divertor detachment.
+      &mdash; scaling of the impurity fraction needed for divertor detachment (eq. 9; ASDEX Upgrade calibration in Table 2).
     </Ref>
     <Ref>
       Wesson, <i>Tokamaks</i>, 4th ed., Oxford Univ. Press (2011) &mdash; Ch. 9 (Scrape-off layer and divertor).

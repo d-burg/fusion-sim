@@ -11,6 +11,23 @@ export interface ScalarParam {
   max: number
   step: number
   precision: number
+  /** Particle sources: the range scales with plasma volume so the same
+   *  fraction is reachable on every machine (base ranges are DIII-D's). */
+  scalesWithVolume?: boolean
+}
+
+/** DIII-D plasma volume (m³), the reference for volume-scaled ranges. */
+export const REFERENCE_VOLUME = 19.4
+
+/** The channel's slider range for a given device. */
+export function paramRange(param: ScalarParam, deviceVolume: number | undefined): { min: number; max: number; step: number } {
+  if (!param.scalesWithVolume || !deviceVolume || deviceVolume <= 0) {
+    return { min: param.min, max: param.max, step: param.step }
+  }
+  const k = deviceVolume / REFERENCE_VOLUME
+  // Keep the step a round multiple of the base step
+  const step = param.step * Math.max(1, Math.round(k))
+  return { min: param.min * k, max: param.max * k, step }
 }
 
 export type MagneticConfig = 'LowerSingleNull' | 'DoubleNull' | 'UpperSingleNull'
@@ -33,8 +50,8 @@ export const SCALAR_PARAMS: ScalarParam[] = [
   { key: 'p_nbi', label: 'NBI power', unit: 'MW', waveformKey: 'p_nbi', min: 0, max: 40, step: 0.5, precision: 1 },
   { key: 'p_ech', label: 'ECH power', unit: 'MW', waveformKey: 'p_ech', min: 0, max: 20, step: 0.5, precision: 1 },
   { key: 'ne', label: 'Density target', unit: '10²⁰m⁻³', waveformKey: 'ne_target', min: 0.1, max: 3.0, step: 0.05, precision: 2 },
-  { key: 'd2_puff', label: 'D₂ gas puff', unit: '10²⁰/s', waveformKey: 'd2_puff', min: 0, max: 10, step: 0.5, precision: 1 },
-  { key: 'neon_puff', label: 'Neon seeding', unit: '10²⁰/s', waveformKey: 'neon_puff', min: 0, max: 2.0, step: 0.05, precision: 2 },
+  { key: 'd2_puff', label: 'D₂ gas puff', unit: '10²⁰/s', waveformKey: 'd2_puff', min: 0, max: 10, step: 0.5, precision: 1, scalesWithVolume: true },
+  { key: 'neon_puff', label: 'Neon seeding', unit: '10²⁰/s', waveformKey: 'neon_puff', min: 0, max: 2.0, step: 0.05, precision: 2, scalesWithVolume: true },
   { key: 'kappa', label: 'Elongation κ', unit: '', waveformKey: 'kappa', min: 1.0, max: 2.2, step: 0.05, precision: 2 },
   { key: 'delta', label: 'Triangularity δ', unit: '', waveformKey: 'delta', min: -0.6, max: 0.8, step: 0.05, precision: 2 },
 ]

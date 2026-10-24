@@ -15,6 +15,7 @@ import {
   type OverrideValue,
   type ProgramHandoff,
   type ScalarParam,
+  paramRange,
 } from '../lib/program'
 import WaveformDrawer from '../components/WaveformDrawer'
 
@@ -618,8 +619,8 @@ export default function ProgramPulse() {
             label={editing.label}
             unit={editing.unit}
             color="#e0a23a"
-            min={editing.min}
-            max={editing.max}
+            min={paramRange(editing, device?.volume).min}
+            max={paramRange(editing, device?.volume).max}
             onSave={(drawn) => {
               const stored: WaveformPoint[] =
                 timeScale === 1 ? drawn : drawn.map(([t, v]) => [t / timeScale, v])

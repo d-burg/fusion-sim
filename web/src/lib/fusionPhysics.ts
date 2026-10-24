@@ -417,48 +417,92 @@ export class DivertorThermalModel {
 }
 
 // ── Detachment ─────────────────────────────────────────────────────
-// Greenwald fraction at which an unseeded divertor is half detached.
-const DETACH_F_GW_REF = 0.7
-// Seeded-impurity fraction with the same detaching power as the intrinsic
-// (deuterium + wall-impurity) radiation at the reference density, for a
-// DIII-D-like B_T = 2 T, q95 = 3.5. About 1 % neon is what takes DIII-D and
-// AUG from attached to detached at moderate density.
-const DETACH_C_Z_REF = 0.01
-const DETACH_BT_REF = 2.0
-const DETACH_Q95_REF = 3.5
+// Goldston, Reinke and Schwartz (PPCF 59, 2017, 055015) argue that the
+// impurity cooling that detaches a divertor is set by the upstream density,
+// which is itself tied to the Greenwald limit, and find that the impurity
+// fraction required for detachment scales as
+//
+//     c_z,det ∝ P_sep / [ ⟨B_p⟩ (1 + κ²)^{3/2} (n_sep / n_GW)² ],
+//     ⟨B_p⟩ = μ0 I_p / [ 2π a √((1 + κ²)/2) ]
+//
+// with no explicit dependence on machine size (their eq. 9 and §4). The
+// constant is fixed by their ASDEX Upgrade comparison case (Kallenbach's
+// SOLPS-calibrated discharge): P_sep = 10.7 MW, ⟨B_p⟩ = 0.34 T, κ = 1.63,
+// n_sep/n_GW = 7e19/1.44e20 = 0.486, detached with c_N = 4 % in the
+// divertor (their Table 2).
+const GRS_AUG_P_SEP = 10.7       // MW
+const GRS_AUG_BP = 0.34          // T
+const GRS_AUG_KAPPA = 1.63
+const GRS_AUG_F_SEP = 7e19 / 1.44e20
+const GRS_AUG_C_N_DIV = 0.04
+/** c_N,det,div = K_GRS × P_sep / [⟨B_p⟩ (1+κ²)^1.5 f_sep²]  (P in MW, B in T) */
+const K_GRS = GRS_AUG_C_N_DIV
+  / (GRS_AUG_P_SEP / (GRS_AUG_BP * Math.pow(1 + GRS_AUG_KAPPA ** 2, 1.5) * GRS_AUG_F_SEP ** 2))
+// The transport model carries the line-averaged Greenwald fraction; the
+// separatrix density is lower. Taken as n_sep = 0.6 n̄ (AUG and JET H-mode
+// pedestals put n_sep at 0.4–0.7 n̄; GRS note good H-mode needs n_sep < n̄/2).
+const N_SEP_OVER_NBAR = 0.6
+// The calibration is divertor nitrogen; the model's seeded impurity is the
+// core neon fraction. Two conversions, both stated as assumptions:
+//  - neon dissipates a given parallel heat flux at about half the fraction
+//    nitrogen needs over 100–300 eV (GRS fig. 1: q_det ∝ √F_z and the Ne
+//    curve sits ~1.4× above N), and
+//  - the divertor is enriched in neon relative to the core by a factor of
+//    about 3, the order found in ITER divertor modelling.
+const NEON_VS_NITROGEN = 2.0
+const DIVERTOR_ENRICHMENT = 3.0
+// Intrinsic radiators (fuel Balmer/Lyman light, wall impurities) expressed
+// as an equivalent core neon fraction. 0.3 % puts an unseeded DIII-D-like
+// H-mode (P_sep 4.4 MW, 1.5 MA) half detached at f_GW = 0.7, which is where
+// the earlier density-only sigmoid put it.
+const INTRINSIC_C_Z_EQUIV = 0.003
+const DETACH_CAP = 0.97
+
+/**
+ * Core neon fraction at which the divertor detaches, from the
+ * Goldston–Reinke–Schwartz scaling calibrated as above. Returns Infinity
+ * when there is no current (nothing to detach).
+ */
+export function detachmentThreshold(snapshot: Snapshot, device: Device): number {
+  const MU0 = 4 * Math.PI * 1e-7
+  const ip_A = Math.max(snapshot.ip, 0) * 1e6
+  if (ip_A <= 0) return Infinity
+  const kappa = device.kappa
+  const bp = MU0 * ip_A / (2 * Math.PI * device.a * Math.sqrt((1 + kappa * kappa) / 2))
+  // Power crossing the separatrix: transport losses less core radiation,
+  // floored at the Martin L-H threshold power at the present density. The
+  // scaling was built on H-mode SOL widths and heat fluxes; below that power
+  // the threshold fraction collapses as P_sep → 0 and would call a cold
+  // ohmic ramp-up fully detached. Pinning P_sep to P_LH is also how Reinke
+  // (Nucl. Fusion 57, 2017, 034004) applies the same scaling to reactors.
+  //   P_LH = 0.0488 n̄_e20^0.717 B_T^0.803 S^0.941   (Martin 2008, MW)
+  const bt = snapshot.bt > 0 ? snapshot.bt : device.bt_max
+  const p_lh = 0.0488 * Math.pow(Math.max(snapshot.ne_bar, 0.01), 0.717) * Math.pow(bt, 0.803) * Math.pow(device.surface_area, 0.941)
+  const p_sep = Math.max(snapshot.p_loss - snapshot.p_rad, p_lh, 0.05)
+  const f_sep = Math.max(snapshot.f_greenwald, 0) * N_SEP_OVER_NBAR
+  if (f_sep <= 0) return Infinity
+  const c_n_div = K_GRS * p_sep / (bp * Math.pow(1 + kappa * kappa, 1.5) * f_sep * f_sep)
+  return c_n_div / (NEON_VS_NITROGEN * DIVERTOR_ENRICHMENT)
+}
 
 /**
  * Divertor detachment fraction, 0 (attached) to 0.97 (fully detached).
  *
- * Detachment needs the divertor to radiate away most of the power that
- * crosses the separatrix. Two things supply that radiation: the fuel and
- * intrinsic impurities, whose cooling grows steeply with density, and any
- * seeded impurity (neon here). Goldston, Reinke and Schwartz (PPCF 59, 2017,
- * 055015) found that the seeded fraction needed to detach scales as
- *
- *     c_z,det ∝ B_T^0.88 q_cyl^1.1 / f_GW^2
- *
- * nearly independent of machine size and power, so the two drivers combine
- * into one detachment qualifier
- *
- *     D = (f_GW / 0.7)^2 × (1 + c_z / c_0),   c_0 = 0.01 (B_T/2 T)^0.88 (q95/3.5)^1.1
- *     f_detach = 1 − 1 / (1 + D^3)
- *
- * With no seeding this is the earlier density-only sigmoid
- * 1 − 1/(1 + (f_GW/0.7)^6) exactly; with 1 % neon a DIII-D-like divertor is
- * half detached at f_GW ≈ 0.5 instead of 0.7, and ITER's higher field and
- * safety factor demand about twice the fraction, as on the real machine.
+ * The intrinsic radiators plus the seeded neon fraction are compared with
+ * the fraction the GRS scaling says is needed, D = (c_int + c_z) / c_det,
+ * and mapped through a sigmoid, f_detach = 1 − 1/(1 + D³). Because c_det
+ * falls as f_GW², the density dependence is the same (f_GW/f_0)^6 shape as
+ * the earlier density-only model; what is new is that detachment now also
+ * gets harder with separatrix power and easier with poloidal field and
+ * shaping, as the scaling says, and that seeding can bring it on at any
+ * density.
  */
 export function detachmentFraction(snapshot: Snapshot, device: Device): number {
-  const f_GW = Math.max(snapshot.f_greenwald, 0)
+  const c_det = detachmentThreshold(snapshot, device)
+  if (!Number.isFinite(c_det)) return 0
   const c_z = Math.max(snapshot.impurity_fraction ?? 0, 0)
-  const bt = Math.max(snapshot.bt > 0 ? snapshot.bt : device.bt_max, 0.5)
-  // Early in the ramp q95 is enormous; clamp so seeding is simply weak there
-  // rather than switched off.
-  const q95 = Math.min(Math.max(snapshot.q95, 2.0), 8.0)
-  const c_0 = DETACH_C_Z_REF * Math.pow(bt / DETACH_BT_REF, 0.88) * Math.pow(q95 / DETACH_Q95_REF, 1.1)
-  const qualifier = Math.pow(f_GW / DETACH_F_GW_REF, 2) * (1 + c_z / c_0)
-  return Math.min(1 - 1 / (1 + Math.pow(qualifier, 3)), 0.97)
+  const qualifier = (INTRINSIC_C_Z_EQUIV + c_z) / c_det
+  return Math.min(1 - 1 / (1 + Math.pow(qualifier, 3)), DETACH_CAP)
 }
 
 /**
