@@ -700,7 +700,8 @@ export const eventLogInfo = (
     </p>
     <Heading>Pulse number and report</Heading>
     <p>
-      Each Start issues the next pulse number, kept in this browser. When the
+      Starting a new pulse issues the next pulse number, kept in this
+      browser (resuming from Pause keeps the number). When the
       pulse ends, the Report view shows achieved against programmed: pulse
       length, I<sub>p</sub> flat-top, peak W<sub>th</sub> and β<sub>N</sub>,
       max f<sub>GW</sub>, min q<sub>95</sub>, H<sub>98</sub>, time in H-mode,

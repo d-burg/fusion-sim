@@ -37,8 +37,14 @@ export interface LogContext {
   elmCount: number
   /** Sim time the disruption sequence started, once it has. */
   disruptionTime: number | null
+  /** The cause label fixed at the trigger, from the pre-quench plasma. */
+  disruptionLabel: string | null
+  /** Whether the INVALID "plasma terminated" line has been written. */
+  terminatedLogged: boolean
   /** Alarm keys currently raised (hysteresis). */
   alarms: Set<string>
+  /** Sim time each alarm condition first became true, for the debounce. */
+  alarmSince: Map<string, number>
   /** L-H dithering detection: time of the last regime change, how many
    *  came in quick succession, and whether a dithering line is open. */
   lastRegimeChange: number
@@ -58,7 +64,10 @@ export function newLogContext(pulseNumber: number | null, deviceName: string, pr
     rampDown: false,
     elmCount: 0,
     disruptionTime: null,
+    disruptionLabel: null,
+    terminatedLogged: false,
     alarms: new Set(),
+    alarmSince: new Map(),
     lastRegimeChange: -Infinity,
     quickRegimeChanges: 0,
     dithering: false,
@@ -86,7 +95,9 @@ const pradFrac = (s: Snapshot) => (s.p_input > 1 ? s.p_rad / s.p_input : 0)
 const pct = (x: number) => (x * 100).toFixed(0)
 
 /** Threshold alarms with hysteresis so a noisy signal cannot chatter. The
- *  numbers match the colour thresholds already used on the status panel. */
+ *  "on" numbers match the colour thresholds used on the status panel; the
+ *  βN band is wide enough that a Type I ELM crash (5–13 % of W) does not
+ *  toggle it. */
 const ALARMS: AlarmDef[] = [
   {
     key: 'fgw_minor', severity: 'minor',
@@ -96,19 +107,19 @@ const ALARMS: AlarmDef[] = [
   },
   {
     key: 'fgw_major', severity: 'major',
-    on: (s) => s.f_greenwald > 0.95, off: (s) => s.f_greenwald < 0.9,
+    on: (s) => s.f_greenwald > 0.9, off: (s) => s.f_greenwald < 0.85,
     raise: (s) => `fGW ${s.f_greenwald.toFixed(2)}, at the Greenwald limit`,
-    clear: 'fGW back below 0.95',
+    clear: 'fGW back below 0.9',
   },
   {
     key: 'betan_minor', severity: 'minor',
-    on: (s) => s.beta_n > 2.5, off: (s) => s.beta_n < 2.4,
+    on: (s) => s.beta_n > 2.5, off: (s) => s.beta_n < 2.2,
     raise: (s) => `βN ${s.beta_n.toFixed(2)}, approaching the no-wall β limit (2.8)`,
     clear: 'βN back below 2.5',
   },
   {
     key: 'betan_major', severity: 'major',
-    on: (s) => s.beta_n > 2.8, off: (s) => s.beta_n < 2.7,
+    on: (s) => s.beta_n > 2.8, off: (s) => s.beta_n < 2.5,
     raise: (s) => `βN ${s.beta_n.toFixed(2)}, above the no-wall β limit`,
     clear: 'βN back below 2.8',
   },
@@ -164,6 +175,11 @@ function rampTarget(waveform: WaveformPoint[] | undefined, t: number, current: n
 
 /** Time a regime must persist before dithering is considered over (s). */
 const DITHER_WINDOW = 1.0
+/** An alarm condition must hold this long before it is raised (s). The
+ *  engine smooths its own hazard inputs over 100 ms for the same reason:
+ *  a 30 ms radiation-fraction blip when the beams switch off is not an
+ *  alarm, and neither is a single ELM crash. */
+const ALARM_DEBOUNCE = 0.1
 
 /**
  * Append the events implied by the step `prev` → `next` to `out`.
@@ -190,10 +206,11 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
     ctx.flatTop = true
     push('info', `Ip flat-top, ${ipPeak.toFixed(2)} MA programmed`)
   }
-  if (ctx.flatTop && !ctx.rampDown && ipPeak > 0 && next.prog_ip < 0.95 * ipPeak && !next.disrupted) {
-    ctx.rampDown = true
-    push('info', 'Ip ramp-down')
-  }
+  // Ramp-down as the engine defines it (prog_ip under 90 % of the peak once
+  // the peak is above 0.5 MA), re-evaluated every step; logged once.
+  const inRampDown = ipPeak > 0.5 && next.prog_ip < 0.9 * ipPeak
+  if (inRampDown && !ctx.rampDown && !next.disrupted) push('info', 'Ip ramp-down')
+  ctx.rampDown = inRampDown
 
   // ── Heating systems ──
   for (const h of HEATING) {
@@ -204,8 +221,9 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
       const ramping = target > next[h.key] * 1.2
       push('info', `${h.name} on${ramping ? `, ramping to ${target.toFixed(1)} MW` : `, ${next[h.key].toFixed(1)} MW`}`)
     }
-    else if (was && now && prev && Math.abs(next[h.key] - prev[h.key]) > 0.5 * Math.max(prev[h.key], 0.1)) {
-      // A programmed step in power (ramps are small per step and skipped).
+    else if (was && now && prev && Math.abs(next[h.key] - prev[h.key]) > Math.max(1.0, 0.2 * prev[h.key])) {
+      // A programmed step in power: more than a megawatt and a fifth of the
+      // level in one step. Ramps move far less than that per step.
       push('info', `${h.name} ${next[h.key] > prev[h.key] ? 'up' : 'down'} to ${next[h.key].toFixed(1)} MW`)
     }
     else if (was && !now && !next.disrupted) push('info', `${h.name} off`)
@@ -248,17 +266,30 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
     else if (!next.elm_suppressed && prev.elm_suppressed && next.in_hmode) push('info', 'ELMs return')
   }
 
-  // ── Threshold alarms (only while there is a plasma and no disruption) ──
-  if (next.ip >= 0.1 && !next.disrupted) {
+  // ── Threshold alarms ──
+  // Armed like the engine's hazard: Ip above 5 % of the programmed peak (and
+  // 0.1 MA), so ITER's first 50 ms of breakdown, where fGW reads 1.5 at
+  // 70 kA, raise nothing. Nothing is raised during the programmed ramp-down
+  // either: fGW and P_rad/P_in climb there as Ip and heating fall, which the
+  // engine treats as normal termination and disarms its trigger for.
+  const armed = next.ip >= Math.max(0.1, 0.05 * ipPeak) && !next.disrupted && !ctx.rampDown
+  if (armed || ctx.alarms.size > 0) {
     for (const a of ALARMS) {
       const raised = ctx.alarms.has(a.key)
-      // The engine disarms the stochastic trigger once the programmed
-      // ramp-down has begun, so a hazard figure there is not an alarm.
-      if (a.key.startsWith('hazard') && ctx.rampDown && !raised) continue
-      if (!raised && a.on(next)) {
-        ctx.alarms.add(a.key)
-        push(a.severity, a.raise(next))
-      } else if (raised && a.off(next)) {
+      if (!raised && !armed) { ctx.alarmSince.delete(a.key); continue }
+      if (!raised) {
+        if (a.on(next)) {
+          const since = ctx.alarmSince.get(a.key) ?? next.time
+          ctx.alarmSince.set(a.key, since)
+          if (next.time - since >= ALARM_DEBOUNCE) {
+            ctx.alarms.add(a.key)
+            ctx.alarmSince.delete(a.key)
+            push(a.severity, a.raise(next))
+          }
+        } else {
+          ctx.alarmSince.delete(a.key)
+        }
+      } else if (a.off(next)) {
         ctx.alarms.delete(a.key)
         push('info', a.clear)
       }
@@ -271,13 +302,24 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
   if (phase !== phasePrev) {
     if (phase === 'precursor') {
       ctx.disruptionTime = next.time
-      const why = explainDisruption(next.disruption_cause ?? '', prev ?? next)
-      push('major', `DISRUPTION: ${why.label}`, `${why.detail} ${why.action}`)
+      // Numbers from the plasma that tripped, not from the quench.
+      const at = prev ?? next
+      const why = explainDisruption(next.disruption_cause ?? '', at)
+      ctx.disruptionLabel = why.label
+      // A low hazard means the stochastic trigger fired while this term
+      // merely led the others; say so rather than claim a limit was hit.
+      const hazard = at.disruption_risk
+      const lowHazard = hazard < 0.1 && next.disruption_cause !== 'wall_contact'
+      const detail = lowHazard
+        ? `The hazard was only ${(hazard * 100).toFixed(1)} %/s; the trigger is stochastic and this term led the others. ${why.action}`
+        : `${why.detail} ${why.action}`
+      push('major', `DISRUPTION: ${why.label}${lowHazard ? ' (low hazard)' : ''}`, detail)
     } else if (phase === 'thermal_quench') {
       push('major', `Thermal quench, Te0 ${(prev ?? next).te0.toFixed(1)} keV collapsing`)
     } else if (phase === 'current_quench') {
       push('major', `Current quench from ${next.ip.toFixed(2)} MA`)
-    } else if (phase === 'complete') {
+    } else if (phase === 'complete' && !ctx.terminatedLogged) {
+      ctx.terminatedLogged = true
       push('invalid', 'Plasma terminated; equilibrium readouts invalid')
     }
   }
@@ -286,9 +328,17 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
   if (prev && next.status !== prev.status) {
     if (next.status === 'Complete') push('ok', `Pulse complete at ${next.time.toFixed(2)} s`)
     else if (next.status === 'Disrupted') {
-      // The collapsed strip shows only this last line, so it carries the cause.
+      // Small-current disruptions decay below the engine's 10 kA floor before
+      // the quench timer runs out, so the terminal line may not have fired.
+      if (!ctx.terminatedLogged) {
+        ctx.terminatedLogged = true
+        push('invalid', 'Plasma terminated; equilibrium readouts invalid')
+      }
+      // The collapsed strip shows only this last line, so it carries the
+      // cause, with the numbers fixed at the trigger.
       const why = explainDisruption(next.disruption_cause ?? '', next)
-      push('major', `Pulse ended by disruption at ${next.time.toFixed(2)} s: ${why.label}`, why.action || undefined)
+      const label = ctx.disruptionLabel ?? why.label
+      push('major', `Pulse ended by disruption at ${next.time.toFixed(2)} s: ${label}`, why.action || undefined)
     }
   }
 }
@@ -441,7 +491,6 @@ export function buildReport(input: ReportInput): ReportRow[] {
   // Time-weighted statistics over the recorded trace.
   const dtOf = (i: number) => (i > 0 ? history[i].t - history[i - 1].t : 0)
   let flatIpSum = 0, flatT = 0
-  let hSum = 0, hT = 0
   let tH = 0
   let wMax = 0, betaMax = 0, fgwMax = 0, q95Min = Infinity, pFusMax = 0, qMax = 0
   for (let i = 0; i < history.length; i++) {
@@ -451,11 +500,7 @@ export function buildReport(input: ReportInput): ReportRow[] {
       flatIpSum += p.ip * dt
       flatT += dt
     }
-    if (p.in_hmode) {
-      tH += dt
-      hSum += p.h_factor * dt
-      hT += dt
-    }
+    if (p.in_hmode) tH += dt
     wMax = Math.max(wMax, p.w_th)
     pFusMax = Math.max(pFusMax, p.p_fus)
     if (p.p_input > 0.5) qMax = Math.max(qMax, p.p_fus / p.p_input)
@@ -467,18 +512,10 @@ export function buildReport(input: ReportInput): ReportRow[] {
       q95Min = Math.min(q95Min, p.q95)
     }
   }
-  if (hT === 0) {
-    // No H-mode: report the mean confinement factor over the flat-top instead.
-    for (let i = 0; i < history.length; i++) {
-      const p = history[i]
-      const dt = dtOf(i)
-      if (ipPeakProg > 0 && interp(ipProg, p.t) >= 0.98 * ipPeakProg) {
-        hSum += p.h_factor * dt
-        hT += dt
-      }
-    }
-  }
-  const ipFlat = flatT > 0 ? flatIpSum / flatT : history.reduce((m, p) => Math.max(m, p.ip), 0)
+  // Without a flat-top, report the highest current the plasma held before any
+  // disruption (the thermal-quench spike is not a held current).
+  const heldBefore = disruptionTime !== null ? history.filter((p) => p.t < disruptionTime) : history
+  const ipFlat = flatT > 0 ? flatIpSum / flatT : heldBefore.reduce((m, p) => Math.max(m, p.ip), 0)
 
   const rows: ReportRow[] = []
   rows.push({
@@ -510,16 +547,12 @@ export function buildReport(input: ReportInput): ReportRow[] {
     status: q95Min < 2.0 ? 'major' : q95Min < 2.5 ? 'minor' : 'ok',
   })
   rows.push({
-    label: tH > 0 ? 'Mean H98 in H-mode' : 'Mean H98 at flat-top',
-    achieved: hT > 0 ? (hSum / hT).toFixed(2) : '—',
-  })
-  rows.push({
     label: 'Time in H-mode',
     achieved: tH > 0 ? `${tH.toFixed(2)} s (${pct(tH / Math.max(tEnd, 1e-9))} %)` : 'none',
   })
   rows.push({
     label: 'ELMs',
-    achieved: elmCount > 0 ? `${elmCount}${tH > 0 ? `, ${(elmCount / tH).toFixed(0)} Hz` : ''}` : 'none',
+    achieved: elmCount > 0 ? `${elmCount}${tH > 0 ? `, ${(elmCount / tH).toFixed(elmCount / tH < 10 ? 1 : 0)} Hz` : ''}` : 'none',
   })
   rows.push({
     label: 'Peak P_fus',

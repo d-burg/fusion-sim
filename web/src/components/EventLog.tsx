@@ -50,11 +50,18 @@ export default function EventLog({ events, pulseNumber, running, report }: Props
   const listRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true) // follow the newest event unless the user scrolled up
 
-  useEffect(() => {
-    try { localStorage.setItem(OPEN_KEY, open ? '1' : '0') } catch { /* ignore */ }
-  }, [open])
+  // Persist only an explicit choice; the height-based default is re-evaluated
+  // on each visit so a laptop does not inherit a tall monitor's setting.
+  const toggleOpen = () => {
+    setOpen((v) => {
+      try { localStorage.setItem(OPEN_KEY, v ? '0' : '1') } catch { /* ignore */ }
+      return !v
+    })
+  }
 
-  // Follow the tail while running.
+  // Follow the tail while running. A freshly mounted list (after collapse /
+  // expand or Report → Log) starts at the tail again.
+  useEffect(() => { stickRef.current = true }, [open, view])
   useEffect(() => {
     const el = listRef.current
     if (!el || !stickRef.current) return
@@ -119,7 +126,7 @@ export default function EventLog({ events, pulseNumber, running, report }: Props
         )}
 
         <button
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggleOpen}
           aria-expanded={open}
           aria-label={open ? 'Collapse event log' : 'Expand event log'}
           className="shrink-0 w-6 h-5 flex items-center justify-center rounded

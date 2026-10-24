@@ -447,6 +447,8 @@ pub struct SimulationSnapshot {
     pub in_hmode: bool,
     pub elm_active: bool,
     pub elm_type: u8,
+    /// Energy lost by the most recent ELM crash (MJ)
+    pub elm_energy_loss: f64,
     pub elm_suppressed: bool,
     pub ne_ped: f64,
     pub te_ped: f64,
@@ -1428,6 +1430,7 @@ impl Simulation {
             in_hmode: self.transport.in_hmode,
             elm_active: self.transport.elm_active,
             elm_type: self.transport.elm_type,
+            elm_energy_loss: self.transport.elm_energy_loss,
             elm_suppressed: self.transport.elm_suppressed,
             ne_ped: self.profiles.ne_ped,
             te_ped: self.profiles.te_ped,

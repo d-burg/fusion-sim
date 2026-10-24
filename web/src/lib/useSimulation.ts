@@ -80,6 +80,10 @@ export function useSimulation(
   const profileFramesRef = useRef<ProfileFrame[]>([])
   const lastProfileTimeRef = useRef<number>(-Infinity)
   const eventsRef = useRef<LogEvent[]>([])
+  // The last snapshot as the engine produced it. The copy kept in
+  // snapshotHistory has elm_active latched true for the whole tick, which
+  // would hide the rising edge of an ELM on the next tick's first step.
+  const lastRawSnapshotRef = useRef<Snapshot | null>(null)
   const logCtxRef = useRef<LogContext | null>(null)
   const pulseNumberRef = useRef<number | null>(null)
   const previousPulseRef = useRef<PreviousPulse | null>(null)
@@ -97,6 +101,7 @@ export function useSimulation(
     pulseNumberRef.current = null
     eventsRef.current = []
     logCtxRef.current = null
+    lastRawSnapshotRef.current = null
   }
 
   const [state, setState] = useState<SimState>({
@@ -321,7 +326,7 @@ export function useSimulation(
     const budget = totalSteps * DT
     let advanced = 0
     let lastWasFine = false
-    let prev: Snapshot | null = snapshotHistoryRef.current[snapshotHistoryRef.current.length - 1] ?? null
+    let prev: Snapshot | null = lastRawSnapshotRef.current ?? snapshotHistoryRef.current[snapshotHistoryRef.current.length - 1] ?? null
     while (advanced < budget - 1e-9) {
       const fine = inQuench(prev)
       const dt = fine ? DT_QUENCH : DT
@@ -347,6 +352,8 @@ export function useSimulation(
         break
       }
     }
+
+    if (snap) lastRawSnapshotRef.current = { ...snap }
 
     // Patch the final snapshot with latched ELM state from any sub-step
     if (snap && anyElmActive) {
@@ -430,7 +437,7 @@ export function useSimulation(
     if (!simRef.current) return
     // A fresh pulse (nothing recorded yet) gets the next pulse number and a
     // new log; resuming from Pause keeps both.
-    if (historyRef.current.length === 0 || pulseNumberRef.current === null) {
+    if (pulseNumberRef.current === null) {
       pulseNumberRef.current = nextPulseNumber()
       eventsRef.current = []
       let program = null
