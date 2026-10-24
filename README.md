@@ -22,6 +22,10 @@ for exploring tokamak plasma behavior.
   flux with surface temperature modeling
 - **Post-pulse analysis:** Time scrubbing, radial profile viewer with
   synthetic Thomson scattering
+- **Pulse record:** Persistent pulse numbers, an append-only event log with
+  alarm severities, a named cause and operator action for every disruption,
+  an achieved-versus-programmed report, and the previous pulse as a reference
+  trace
 
 ## Physics Models
 

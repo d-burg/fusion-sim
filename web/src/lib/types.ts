@@ -24,6 +24,15 @@ export interface DiagnosticSignals {
 
 export type SimStatus = 'Ready' | 'Running' | 'Paused' | 'Disrupted' | 'Complete'
 
+export type DisruptionCause =
+  | ''
+  | 'density_limit'
+  | 'beta_limit'
+  | 'kink_limit'
+  | 'radiative_collapse'
+  | 'locked_mode'
+  | 'wall_contact'
+
 export interface Snapshot {
   time: number
   duration: number
@@ -79,6 +88,16 @@ export interface Snapshot {
   disruption_risk: number
   disrupted: boolean
   disruption_phase?: '' | 'precursor' | 'thermal_quench' | 'current_quench' | 'complete'
+  /** Dominant hazard term at the trigger; '' until a disruption starts. */
+  disruption_cause?: DisruptionCause
+  /** Individual hazard terms (0-1) behind disruption_risk. */
+  risk_greenwald?: number
+  risk_beta?: number
+  risk_q95?: number
+  risk_radiation?: number
+  risk_locked_mode?: number
+  /** L-H power threshold (MW). */
+  p_lh?: number
 
   // Diagnostics
   diagnostics: DiagnosticSignals

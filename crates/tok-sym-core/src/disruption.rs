@@ -45,6 +45,34 @@ pub enum DisruptionPhase {
     Complete,
 }
 
+/// What started the disruption: the hazard term that dominated at the
+/// trigger, or wall contact. Named so the control room can say why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DisruptionCause {
+    None,
+    DensityLimit,
+    BetaLimit,
+    KinkLimit,
+    RadiativeCollapse,
+    LockedMode,
+    WallContact,
+}
+
+impl DisruptionCause {
+    /// Snake-case name for snapshots and logs.
+    pub fn name(self) -> &'static str {
+        match self {
+            DisruptionCause::None => "",
+            DisruptionCause::DensityLimit => "density_limit",
+            DisruptionCause::BetaLimit => "beta_limit",
+            DisruptionCause::KinkLimit => "kink_limit",
+            DisruptionCause::RadiativeCollapse => "radiative_collapse",
+            DisruptionCause::LockedMode => "locked_mode",
+            DisruptionCause::WallContact => "wall_contact",
+        }
+    }
+}
+
 /// Disruption risk model state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisruptionModel {
@@ -60,6 +88,8 @@ pub struct DisruptionModel {
     pub disrupted: bool,
     /// Current phase of the disruption
     pub phase: Option<DisruptionPhase>,
+    /// What triggered it (None until a disruption starts)
+    pub cause: DisruptionCause,
     /// RNG state (simple xorshift for reproducibility in WASM)
     rng_state: u64,
 }
@@ -75,6 +105,7 @@ impl Default for DisruptionModel {
             risk_locked_mode: 0.0,
             disrupted: false,
             phase: None,
+            cause: DisruptionCause::None,
             rng_state: 0xDEAD_BEEF_CAFE_BABE,
         }
     }
@@ -178,6 +209,26 @@ impl DisruptionModel {
         }
     }
 
+    /// The hazard term contributing most to the combined rate right now,
+    /// weighted exactly as `update_risk` combines them (the limit terms
+    /// enter cubed, the locked-mode baseline linearly).
+    pub fn dominant_cause(&self) -> DisruptionCause {
+        let terms = [
+            (self.risk_greenwald.powi(3), DisruptionCause::DensityLimit),
+            (self.risk_beta.powi(3), DisruptionCause::BetaLimit),
+            (self.risk_q95.powi(3), DisruptionCause::KinkLimit),
+            (self.risk_radiation.powi(3), DisruptionCause::RadiativeCollapse),
+            (self.risk_locked_mode, DisruptionCause::LockedMode),
+        ];
+        let mut best = (0.0, DisruptionCause::LockedMode);
+        for &(w, c) in &terms {
+            if w > best.0 {
+                best = (w, c);
+            }
+        }
+        best.1
+    }
+
     /// Check if a disruption should be triggered this timestep.
     /// Returns true if a new disruption starts.
     pub fn check_trigger(&mut self, dt: f64) -> bool {
@@ -190,6 +241,7 @@ impl DisruptionModel {
 
         if self.rand() < prob {
             self.disrupted = true;
+            self.cause = self.dominant_cause();
             // Start with precursor phase
             let precursor_duration = 0.05 + 0.05 * self.rand(); // 50-100ms
             self.phase = Some(DisruptionPhase::Precursor {
@@ -376,6 +428,7 @@ impl DisruptionModel {
             return;
         }
         self.disrupted = true;
+        self.cause = DisruptionCause::WallContact;
         self.risk = 1.0;
         self.phase = Some(DisruptionPhase::Precursor {
             remaining: 0.005, // 5ms — very fast for wall contact
@@ -393,6 +446,7 @@ impl DisruptionModel {
         self.risk_locked_mode = 0.0;
         self.disrupted = false;
         self.phase = None;
+        self.cause = DisruptionCause::None;
     }
 }
 
@@ -602,5 +656,53 @@ mod tests {
         assert!((sigmoid(0.0, 0.0, 0.1) - 0.5).abs() < 0.01);
         assert!(sigmoid(1.0, 0.0, 0.1) > 0.99);
         assert!(sigmoid(-1.0, 0.0, 0.1) < 0.01);
+    }
+
+    #[test]
+    fn test_trigger_names_the_dominant_term() {
+        // Density well past the Greenwald limit, everything else benign:
+        // a trigger must be attributed to the density limit.
+        let mut model = DisruptionModel::default();
+        model.seed(3);
+        model.update_risk(1.15, 1.0, 4.0, 0.2, 1.0);
+        // sigmoid(1.15; 1.0, 0.08)^3 = 0.65: a 65 %/s hazard.
+        assert!(model.risk > 0.5, "risk {} should be dominated by the density term", model.risk);
+        assert_eq!(model.dominant_cause(), DisruptionCause::DensityLimit);
+        assert_eq!(model.cause, DisruptionCause::None);
+        // A 100 s step at 65 %/s fires with probability 1 - e^-65.
+        assert!(model.check_trigger(100.0));
+        assert_eq!(model.cause, DisruptionCause::DensityLimit);
+        assert_eq!(model.cause.name(), "density_limit");
+
+        // Beta past the no-wall limit instead.
+        let mut model = DisruptionModel::default();
+        model.update_risk(0.5, 3.2, 4.0, 0.2, 1.0);
+        assert_eq!(model.dominant_cause(), DisruptionCause::BetaLimit);
+
+        // Kink: q95 under 2.
+        let mut model = DisruptionModel::default();
+        model.update_risk(0.5, 1.0, 1.8, 0.2, 1.0);
+        assert_eq!(model.dominant_cause(), DisruptionCause::KinkLimit);
+
+        // Radiative collapse.
+        let mut model = DisruptionModel::default();
+        model.update_risk(0.5, 1.0, 4.0, 0.98, 1.0);
+        assert_eq!(model.dominant_cause(), DisruptionCause::RadiativeCollapse);
+
+        // Nothing near a limit: only the locked-mode baseline is left.
+        let mut model = DisruptionModel::default();
+        model.update_risk(0.5, 1.0, 4.0, 0.2, 1.0);
+        assert_eq!(model.dominant_cause(), DisruptionCause::LockedMode);
+    }
+
+    #[test]
+    fn test_wall_contact_is_named_and_reset_clears_it() {
+        let mut model = DisruptionModel::default();
+        model.force_disruption();
+        assert!(model.disrupted);
+        assert_eq!(model.cause, DisruptionCause::WallContact);
+        model.reset();
+        assert_eq!(model.cause, DisruptionCause::None);
+        assert_eq!(model.cause.name(), "");
     }
 }
