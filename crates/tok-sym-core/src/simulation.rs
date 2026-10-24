@@ -1767,6 +1767,37 @@ mod tests {
     }
 
     #[test]
+    fn test_seeded_radiation_is_split_between_core_and_divertor() {
+        // Same DIII-D H-mode pulse with and without neon seeding from 2.5 s.
+        let device = devices::diiid();
+        let base = PulseProgram::standard_hmode(&device);
+        let mut seeded = base.clone();
+        let d = base.duration;
+        seeded.neon_puff = vec![(0.0, 0.0), (2.5, 0.0), (3.0, 0.4), (d, 0.4)];
+        let mut a = Simulation::new(device.clone(), base);
+        let mut b = Simulation::new(device, seeded);
+        a.seed_disruption(11);
+        b.seed_disruption(11);
+        a.start();
+        b.start();
+        let (mut sa, mut sb) = (a.step(0.005), b.step(0.005));
+        while sa.time < 5.0 {
+            sa = a.step(0.005);
+            sb = b.step(0.005);
+        }
+        let (div_a, div_b) = (a.transport.p_rad_div, b.transport.p_rad_div);
+        assert!(div_a.abs() < 1e-9, "no seeding, no divertor radiation");
+        assert!(div_b > 0.5, "seeded pulse radiates in the divertor: {div_b}");
+        // 70 % of the seeded radiation is booked outside the core, 30 % inside:
+        // the core increase over the unseeded pulse is about 3/7 of the
+        // divertor part (density and temperature shift slightly, so allow a
+        // wide band).
+        let core_increase = sb.p_rad - sa.p_rad;
+        let ratio = core_increase / div_b;
+        assert!(ratio > 0.25 && ratio < 0.6, "core/divertor split off: {ratio} (core +{core_increase}, div {div_b})");
+    }
+
+    #[test]
     fn test_disruption_shows_ip_spike_then_decays() {
         // Over-fuelled DIII-D pulse with a fixed seed: coarse steps until the
         // trigger fires, then fine steps through the quench, as the frontend

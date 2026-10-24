@@ -66,6 +66,14 @@ const REFERENCES: Ref[] = [
     doi: '10.1088/0029-5515/53/9/093031',
   },
   {
+    id: 'goldston2017',
+    authors: 'R. J. Goldston, M. L. Reinke, and J. A. Schwartz',
+    title: 'A new scaling for divertor detachment',
+    journal: 'Plasma Phys. Control. Fusion 59, 055015',
+    year: 2017,
+    doi: '10.1088/1361-6587/aa5e6e',
+  },
+  {
     id: 'martin2008',
     authors: 'Y. R. Martin, T. Takizuka, and the ITPA CDBM H-mode Threshold Database Working Group',
     title: 'Power requirement for accessing the H-mode in ITER',
@@ -526,16 +534,36 @@ export default function Bibliography() {
         {/* ─── 13. Detachment ─── */}
         <Section number={13} title="Divertor Detachment Model">
           <p>
-            The divertor detachment fraction is modeled as a sigmoid function of the
-            Greenwald fraction:
+            Detachment is a regime where the divertor plasma cools and recombines before reaching
+            the target plates, dramatically reducing the heat flux. It needs the divertor to radiate
+            away most of the power crossing the separatrix. Goldston, Reinke and Schwartz<RefTag id="goldston2017" />
+            argue that the impurity cooling that does this is set by the upstream density, itself tied
+            to the Greenwald limit, and find the impurity fraction required for detachment scales as
           </p>
           <Eq>
-            {'f_detach = min(1 − 1/(1 + (f_GW / 0.7)⁶), 0.97)'}
+            {'c_z,det ∝ P_sep / [ <B_p> (1 + κ²)^(3/2) (n_sep / n_GW)² ],   <B_p> = μ₀ I_p / [2π a √((1+κ²)/2)]'}
           </Eq>
           <p>
-            Detachment is a regime where the divertor plasma cools and recombines before reaching
-            the target plates, dramatically reducing the heat flux. It typically occurs at high
-            Greenwald fraction due to increased edge radiation and volumetric power dissipation.
+            with no explicit size dependence (their eq. 9). The constant is fixed by their ASDEX Upgrade
+            comparison case (P<sub>sep</sub> 10.7 MW, &lt;B<sub>p</sub>&gt; 0.34 T, &kappa; 1.63,
+            n<sub>sep</sub>/n<sub>GW</sub> 0.486, c<sub>N</sub> = 4% in the divertor). P<sub>sep</sub>
+            is floored at the Martin L-H threshold power<RefTag id="martin2008" /> at the present density,
+            as Reinke does when applying the scaling to reactors. Three stated assumptions map it onto
+            the engine: n<sub>sep</sub> = 0.6 n̄<sub>e</sub>; neon needs about
+            half the fraction nitrogen does (their fig. 1); and a divertor neon enrichment of about 3
+            over the core fraction the engine carries. Intrinsic radiators count as an equivalent 0.3%
+            core neon, c<sub>int</sub>, chosen so an unseeded DIII-D-like H-mode is half detached at
+            f<sub>GW</sub> = 0.7:
+          </p>
+          <Eq>
+            {'D = (c_int + c_z) / c_z,det,   f_detach = min(1 − 1/(1 + D³), 0.97)'}
+          </Eq>
+          <p>
+            At fixed power the density dependence keeps the (f<sub>GW</sub>/f₀)⁶ shape of the earlier
+            model; detachment now also gets harder with separatrix power and easier with plasma current
+            and shaping, and seeding can bring it on at any density. c<sub>z</sub> accumulates from the
+            neon puff in the transport model with a 0.5 s confinement time; above the device&rsquo;s
+            impurity collapse threshold the core radiation fraction climbs toward collapse.
           </p>
         </Section>
 
