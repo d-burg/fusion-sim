@@ -15,8 +15,9 @@ import type { GlowTuning } from './config'
 const BAND_SLICES = 96          // toroidal resolution of each ribbon
 const BAND_POL = 21             // poloidal samples across each ribbon
 const MAX_STRIKE_POINTS = 8
-const MAX_BAND_VERTS = MAX_STRIKE_POINTS * BAND_SLICES * BAND_POL
-const MAX_BAND_INDICES = MAX_STRIKE_POINTS * (BAND_SLICES - 1) * (BAND_POL - 1) * 6
+const BAND_POL_CAP = BAND_POL + 24   // regular grid plus corners (see sampleWallThroughStrike)
+const MAX_BAND_VERTS = MAX_STRIKE_POINTS * BAND_SLICES * BAND_POL_CAP
+const MAX_BAND_INDICES = MAX_STRIKE_POINTS * (BAND_SLICES - 1) * (BAND_POL_CAP - 1) * 6
 // Lift off the tile surface along the inward normal so the ribbon is not
 // swallowed by the wall's depth test; a polygon offset does the rest.
 const BAND_LIFT = 0.004
@@ -67,38 +68,6 @@ export interface GlowUpdateParams {
   time: number
 }
 
-/**
- * Create a canvas-based Gaussian glow texture for point sprites.
- * Radial falloff: exp(-r * 3.0). Used by the ELM filament system.
- */
-export function createGlowTexture(size = 64): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')!
-  const center = size / 2
-  const imageData = ctx.createImageData(size, size)
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dx = (x - center) / center  // -1 to 1
-      const dy = (y - center) / center
-      const r = Math.sqrt(dx * dx + dy * dy)
-      const falloff = r <= 1.0 ? Math.exp(-r * 3.0) : 0
-      const idx = (y * size + x) * 4
-      imageData.data[idx] = 255
-      imageData.data[idx + 1] = 255
-      imageData.data[idx + 2] = 255
-      imageData.data[idx + 3] = Math.round(falloff * 255)
-    }
-  }
-
-  ctx.putImageData(imageData, 0, 0)
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.needsUpdate = true
-  return texture
-}
-
 /** A sample along the wall polyline: position, inward normal, signed arclength from the strike. */
 interface WallSample {
   r: number
@@ -108,21 +77,39 @@ interface WallSample {
   s: number
 }
 
+/** Maximum poloidal samples per ribbon: the regular grid plus any polygon
+ *  corners that fall inside the window. */
+const BAND_POL_MAX = BAND_POL_CAP
+
+/** Signed area of the (R, Z) polygon: positive for counter-clockwise. */
+function signedArea(poly: [number, number][]): number {
+  let a = 0
+  for (let j = 0; j < poly.length; j++) {
+    const [x0, y0] = poly[j]
+    const [x1, y1] = poly[(j + 1) % poly.length]
+    a += x0 * y1 - x1 * y0
+  }
+  return a / 2
+}
+
 /**
- * Walk the wall polygon through the strike point and return samples at
- * equal arclength steps from -halfLen to +halfLen, each with the unit
- * normal pointing into the vessel (toward the axis).
+ * Walk the wall polygon through the strike point and return samples from
+ * -halfLen to +halfLen in arclength: a regular grid plus every polygon
+ * corner inside the window, so the ribbon follows the tiles around steps
+ * and baffles instead of cutting across them. The inward normal comes from
+ * the polygon's winding (an orientation test against the axis fails on
+ * target faces that face away from it, such as a vertical target's outer
+ * face or a shelf step).
  */
-function sampleWallThroughStrike(
+export function sampleWallThroughStrike(
   wall: [number, number][],
   sp: StrikePoint,
   halfLen: number,
-  nSamples: number,
-  axisR: number,
-  axisZ: number,
+  nRegular: number,
 ): WallSample[] | null {
   const n = wall.length
   if (n < 3) return null
+  const ccw = signedArea(wall) > 0
 
   // Closest segment and the projection parameter on it
   let bestD = Infinity, bestJ = 0, bestT = 0
@@ -147,7 +134,6 @@ function sampleWallThroughStrike(
   const pointAt = (s: number): { r: number; z: number; j: number } => {
     let j = bestJ
     let along = bestT * segLen(bestJ) + s   // arclength from the start of segment j
-    // Walk forward or backward across segment boundaries
     let guard = 0
     while (along > segLen(j) && guard++ < n) { along -= segLen(j); j = (j + 1) % n }
     while (along < 0 && guard++ < 2 * n) { j = (j - 1 + n) % n; along += segLen(j) }
@@ -158,17 +144,48 @@ function sampleWallThroughStrike(
     return { r: ax + t * (bx - ax), z: az + t * (bz - az), j }
   }
 
+  // Arclength positions: the regular grid plus corners inside the window.
+  const sVals: number[] = []
+  for (let i = 0; i < nRegular; i++) sVals.push(-halfLen + (2 * halfLen * i) / (nRegular - 1))
+  // Corners forward of the foot
+  let acc = (1 - bestT) * segLen(bestJ)
+  for (let k = 1; k <= n && acc < halfLen; k++) {
+    sVals.push(acc)
+    acc += segLen((bestJ + k) % n)
+  }
+  // Corners backward of the foot
+  acc = -bestT * segLen(bestJ)
+  for (let k = 0; k < n && acc > -halfLen; k++) {
+    sVals.push(acc)
+    acc -= segLen((bestJ - 1 - k + 2 * n) % n)
+  }
+  sVals.sort((a, b) => a - b)
+  // Drop near-duplicates and cap the count
+  const uniq: number[] = []
+  for (const v of sVals) {
+    if (uniq.length === 0 || v - uniq[uniq.length - 1] > 1e-4) uniq.push(v)
+  }
+  while (uniq.length > BAND_POL_MAX) {
+    // Remove the regular sample closest to a neighbour (corners stay)
+    let bestI = 1, bestGap = Infinity
+    for (let i = 1; i < uniq.length - 1; i++) {
+      const gap = Math.min(uniq[i] - uniq[i - 1], uniq[i + 1] - uniq[i])
+      if (gap < bestGap) { bestGap = gap; bestI = i }
+    }
+    uniq.splice(bestI, 1)
+  }
+
   const out: WallSample[] = []
-  for (let i = 0; i < nSamples; i++) {
-    const s = -halfLen + (2 * halfLen * i) / (nSamples - 1)
+  for (const s of uniq) {
+    // Sample a hair inside the segment so a corner takes that segment's normal
     const p = pointAt(s)
     const [ax, az] = wall[p.j]
     const [bx, bz] = wall[(p.j + 1) % n]
     const dx = bx - ax, dz = bz - az
     const L = Math.hypot(dx, dz) || 1
-    // Normal to the segment; pick the sign that points toward the axis
+    // Left-hand normal of the travel direction points inward for a CCW polygon
     let nr = -dz / L, nz = dx / L
-    if ((axisR - p.r) * nr + (axisZ - p.z) * nz < 0) { nr = -nr; nz = -nz }
+    if (!ccw) { nr = -nr; nz = -nz }
     out.push({ r: p.r, z: p.z, nr, nz, s })
   }
   return out
@@ -232,19 +249,19 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
 
   const rebuild = (params: GlowUpdateParams, sigma: number) => {
     const wall = params.wallPts!
-    const axisZ = params.axisZ ?? 0
     const halfLen = BAND_HALF_SIGMAS * sigma * SKIRT_SIGMA_RATIO
     let vi = 0
     let ii = 0
     for (const sp of params.strikePoints) {
-      if (vi + BAND_SLICES * BAND_POL > MAX_BAND_VERTS) break
-      const samples = sampleWallThroughStrike(wall, sp, halfLen, BAND_POL, params.axisR, axisZ)
+      const samples = sampleWallThroughStrike(wall, sp, halfLen, BAND_POL)
       if (!samples) continue
+      const nPol = samples.length
+      if (vi + BAND_SLICES * nPol > MAX_BAND_VERTS) break
       const base = vi
       for (let si = 0; si < BAND_SLICES; si++) {
         const phi = cfg.phiMin + (si / (BAND_SLICES - 1)) * phiSpan
         const fade = Math.exp(-Math.abs(phi) * STRIKE_FADE_RATE)
-        for (let pi = 0; pi < BAND_POL; pi++) {
+        for (let pi = 0; pi < nPol; pi++) {
           const w = samples[pi]
           const v = toroidal(w.r + w.nr * BAND_LIFT, w.z + w.nz * BAND_LIFT, phi)
           posBuffer[vi * 3] = v.x
@@ -261,12 +278,12 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
         }
       }
       for (let si = 0; si < BAND_SLICES - 1; si++) {
-        for (let pi = 0; pi < BAND_POL - 1; pi++) {
+        for (let pi = 0; pi < nPol - 1; pi++) {
           if (ii + 6 > MAX_BAND_INDICES) break
-          const a = base + si * BAND_POL + pi
-          const b = base + (si + 1) * BAND_POL + pi
-          const c = base + (si + 1) * BAND_POL + pi + 1
-          const d = base + si * BAND_POL + pi + 1
+          const a = base + si * nPol + pi
+          const b = base + (si + 1) * nPol + pi
+          const c = base + (si + 1) * nPol + pi + 1
+          const d = base + si * nPol + pi + 1
           idxBuffer[ii++] = a; idxBuffer[ii++] = b; idxBuffer[ii++] = c
           idxBuffer[ii++] = a; idxBuffer[ii++] = c; idxBuffer[ii++] = d
         }
@@ -274,7 +291,12 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
     }
     activeVerts = vi
     activeIndices = ii
+    // Upload only the part of each buffer that is in use.
+    posAttr.clearUpdateRanges()
+    posAttr.addUpdateRange(0, vi * 3)
     posAttr.needsUpdate = true
+    idxAttr.clearUpdateRanges()
+    idxAttr.addUpdateRange(0, ii)
     idxAttr.needsUpdate = true
   }
 
@@ -312,6 +334,8 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
       colBuffer[vi * 3 + 1] = col.g * b
       colBuffer[vi * 3 + 2] = col.b * b
     }
+    colAttr.clearUpdateRanges()
+    colAttr.addUpdateRange(0, activeVerts * 3)
     colAttr.needsUpdate = true
     geometry.setDrawRange(0, activeIndices)
     mesh.visible = true
