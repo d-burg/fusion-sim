@@ -102,10 +102,10 @@ export function densifyContour(pts: [number, number][], maxGap: number): [number
 
 export function subsample(pts: [number, number][], maxPts: number): [number, number][] {
   if (pts.length <= maxPts) return pts
-  const step = pts.length / maxPts
+  const step = (pts.length - 1) / (maxPts - 1)
   const out: [number, number][] = []
   for (let i = 0; i < maxPts; i++) {
-    out.push(pts[Math.floor(i * step)])
+    out.push(pts[Math.min(pts.length - 1, Math.round(i * step))])
   }
   return out
 }

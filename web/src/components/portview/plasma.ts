@@ -86,6 +86,22 @@ const N_LEG_SHELLS = LEG_SHELL_OFFSETS.length
 const LEG_FRESNEL_EXPONENT = 2.0
 const LEG_BASE_INTENSITY = 0.12
 
+// ── Detachment front ──
+// A detached divertor does not look like a dim attached strike point: the
+// power is radiated away in a cold, dense cloud that lifts off the target
+// and moves up the leg toward the X-point as detachment deepens (the
+// radiation front; at the density limit it sits at the X-point as a MARFE).
+// Rendered as a bright band on the leg shells whose centre slides along the
+// leg with the detachment fraction, broadening as it goes.
+const DETACH_GAIN = 12.0          // peak brightening of the leg shells at full detachment
+const DETACH_WIDTH_MIN = 0.10     // band half-width as a fraction of leg length (attached)
+const DETACH_WIDTH_MAX = 0.32     // ... at full detachment
+const DETACH_FRONT_TRAVEL = 0.82  // front position: 1 (target) → 1 − travel (near the X-point)
+// Recycling/line-radiation colour of the front: deuterium Balmer pink-red,
+// pulled toward orange-red by neon seeding.
+const DETACH_COLOR = { r: 1.0, g: 0.32, b: 0.52 }
+const DETACH_COLOR_NEON = { r: 1.0, g: 0.40, b: 0.22 }
+
 export interface PlasmaGroup {
   group: THREE.Group
   sepMaterial: THREE.MeshBasicMaterial
@@ -118,6 +134,8 @@ export interface PlasmaUpdateParams {
   neonPuff: number
   /** Radiated power fraction p_rad/p_loss — a radiative edge emits more */
   pRadFrac: number
+  /** Divertor detachment fraction 0..1 — drives the radiation front on the legs */
+  detachFrac?: number
   opacity: number
   limiterPts: [number, number][]
   /** Scene clock (seconds) for event envelopes */
@@ -548,6 +566,7 @@ function rebuildLegGeometry(
   camPos: THREE.Vector3,
   positions: Float32Array,
   baseBright: Float32Array,
+  legParam: Float32Array,
   indices: Uint32Array,
 ): { vertCount: number; idxCount: number } {
   const { separatrix, xpointR, xpointZ, xpointUpperR, xpointUpperZ, limiterPts } = params
@@ -648,6 +667,15 @@ function rebuildLegGeometry(
       cNormals.push([-dZ / len, dR / len])
     }
 
+    // Normalised arclength along the leg: 0 at the X-point, 1 at the target.
+    const arc: number[] = [0]
+    for (let i = 1; i < nPts; i++) {
+      const dR = smoothed[i][0] - smoothed[i - 1][0]
+      const dZ = smoothed[i][1] - smoothed[i - 1][1]
+      arc.push(arc[i - 1] + Math.sqrt(dR * dR + dZ * dZ))
+    }
+    const arcTotal = arc[nPts - 1] || 1
+
     const nQuadsPol = nPts - 1  // open contour
 
     for (let sh = 0; sh < N_LEG_SHELLS; sh++) {
@@ -708,6 +736,7 @@ function rebuildLegGeometry(
 
           // Cache geometry-dependent brightness (without opacity/ELM which change per-frame)
           baseBright[vi] = LEG_BASE_INTENSITY * fresnel * dFade
+          legParam[vi] = arc[pi] / arcTotal
 
           vi++
         }
@@ -817,6 +846,7 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   const legPositions = new Float32Array(LEG_MAX_VERTS * 3)
   const legColors = new Float32Array(LEG_MAX_VERTS * 3)
   const legBaseBright = new Float32Array(LEG_MAX_VERTS)
+  const legParam = new Float32Array(LEG_MAX_VERTS)
   const legIdxBuf = new Uint32Array(LEG_MAX_INDICES)
 
   const legGeom = new THREE.BufferGeometry()
@@ -928,11 +958,33 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       const lg = legColor.g + ELM_WHITE_SHIFT * legEnv
       const lb = legColor.b + ELM_WHITE_SHIFT * legEnv
       const lScale = scale * (1 + ELM_PED_GAIN * legEnv)
+      // Detachment front: a Gaussian band in normalised leg arclength whose
+      // centre slides from the target toward the X-point and whose width
+      // and brightness grow with the detachment fraction.
+      const det = Math.min(Math.max(p.detachFrac ?? 0, 0), 1)
+      const frontOn = det > 0.05
+      const frontPos = 1 - DETACH_FRONT_TRAVEL * det
+      const frontW = DETACH_WIDTH_MIN + (DETACH_WIDTH_MAX - DETACH_WIDTH_MIN) * det
+      // Scaled by the square root of the device's edge-opacity tuning rather
+      // than the tuning itself: ITER's edge is set nearly invisible (0.012)
+      // and a detached divertor must still read there.
+      const frontGain = DETACH_GAIN * det * det * Math.sqrt(p.opacity)
+      const fr = DETACH_COLOR.r + (DETACH_COLOR_NEON.r - DETACH_COLOR.r) * neon
+      const fg = DETACH_COLOR.g + (DETACH_COLOR_NEON.g - DETACH_COLOR.g) * neon
+      const fb = DETACH_COLOR.b + (DETACH_COLOR_NEON.b - DETACH_COLOR.b) * neon
       for (let i = 0; i < legVertCount; i++) {
         const b = legBaseBright[i] * lScale
-        legColors[i * 3] = lr * b
-        legColors[i * 3 + 1] = lg * b
-        legColors[i * 3 + 2] = lb * b
+        let r = lr * b, g = lg * b, bl = lb * b
+        if (frontOn) {
+          const u = (legParam[i] - frontPos) / frontW
+          const band = Math.exp(-u * u) * frontGain * legBaseBright[i]
+          r += fr * band
+          g += fg * band
+          bl += fb * band
+        }
+        legColors[i * 3] = r
+        legColors[i * 3 + 1] = g
+        legColors[i * 3 + 2] = bl
       }
       legColAttr.needsUpdate = true
       legGeom.setDrawRange(0, legIdxCount)
@@ -990,7 +1042,7 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       // Legs share the same fingerprint (if contour changed, legs change too)
       const legResult = rebuildLegGeometry(
         cfg, params, camPos,
-        legPositions, legBaseBright, legIdxBuf,
+        legPositions, legBaseBright, legParam, legIdxBuf,
       )
       legVertCount = legResult.vertCount
       legIdxCount = legResult.idxCount
