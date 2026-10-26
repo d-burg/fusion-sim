@@ -97,10 +97,17 @@ const DETACH_GAIN = 12.0          // peak brightening of the leg shells at full 
 const DETACH_WIDTH_MIN = 0.10     // band half-width as a fraction of leg length (attached)
 const DETACH_WIDTH_MAX = 0.32     // ... at full detachment
 const DETACH_FRONT_TRAVEL = 0.82  // front position: 1 (target) → 1 − travel (near the X-point)
-// Recycling/line-radiation colour of the front: deuterium Balmer pink-red,
-// pulled toward orange-red by neon seeding.
+// Visible color of the radiating front. Unseeded it is the deuterium
+// Balmer pink-red; a seeded front takes on its species' visible lines:
+// nitrogen's N II green-teal (500 and 568 nm), neon's orange-red (585 to
+// 640 nm), argon's Ar II blue-violet (435, 461 and 481 nm). Most of the
+// radiated power is in the vacuum ultraviolet; this is what a camera sees.
 const DETACH_COLOR = { r: 1.0, g: 0.32, b: 0.52 }
-const DETACH_COLOR_NEON = { r: 1.0, g: 0.40, b: 0.22 }
+const SPECIES_COLOR = {
+  n: { r: 0.30, g: 0.95, b: 0.75 },
+  ne: { r: 1.0, g: 0.40, b: 0.22 },
+  ar: { r: 0.50, g: 0.45, b: 1.0 },
+}
 
 export interface PlasmaGroup {
   group: THREE.Group
@@ -136,6 +143,9 @@ export interface PlasmaUpdateParams {
   pRadFrac: number
   /** Divertor detachment fraction 0..1 — drives the radiation front on the legs */
   detachFrac?: number
+  /** Share of the front's radiation carried by each seeded species (sum ≤ 1;
+   *  the remainder is fuel and intrinsic light) */
+  seedMix?: { n: number; ne: number; ar: number }
   opacity: number
   limiterPts: [number, number][]
   /** Scene clock (seconds) for event envelopes */
@@ -969,9 +979,12 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       // than the tuning itself: ITER's edge is set nearly invisible (0.012)
       // and a detached divertor must still read there.
       const frontGain = DETACH_GAIN * det * det * Math.sqrt(p.opacity)
-      const fr = DETACH_COLOR.r + (DETACH_COLOR_NEON.r - DETACH_COLOR.r) * neon
-      const fg = DETACH_COLOR.g + (DETACH_COLOR_NEON.g - DETACH_COLOR.g) * neon
-      const fb = DETACH_COLOR.b + (DETACH_COLOR_NEON.b - DETACH_COLOR.b) * neon
+      // Blend the fuel color toward the seeded species by their shares.
+      const mix = p.seedMix ?? { n: 0, ne: 0, ar: 0 }
+      const fuelShare = Math.max(0, 1 - mix.n - mix.ne - mix.ar)
+      const fr = DETACH_COLOR.r * fuelShare + SPECIES_COLOR.n.r * mix.n + SPECIES_COLOR.ne.r * mix.ne + SPECIES_COLOR.ar.r * mix.ar
+      const fg = DETACH_COLOR.g * fuelShare + SPECIES_COLOR.n.g * mix.n + SPECIES_COLOR.ne.g * mix.ne + SPECIES_COLOR.ar.g * mix.ar
+      const fb = DETACH_COLOR.b * fuelShare + SPECIES_COLOR.n.b * mix.n + SPECIES_COLOR.ne.b * mix.ne + SPECIES_COLOR.ar.b * mix.ar
       for (let i = 0; i < legVertCount; i++) {
         const b = legBaseBright[i] * lScale
         let r = lr * b, g = lg * b, bl = lb * b

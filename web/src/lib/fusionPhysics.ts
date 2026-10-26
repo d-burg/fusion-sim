@@ -443,45 +443,59 @@ const K_GRS = GRS_AUG_C_N_DIV
 // separatrix density is lower. Taken as n_sep = 0.6 n̄ (AUG and JET H-mode
 // pedestals put n_sep at 0.4–0.7 n̄; GRS note good H-mode needs n_sep < n̄/2).
 const N_SEP_OVER_NBAR = 0.6
-// The calibration is divertor nitrogen; the model's seeded impurity is the
-// core neon fraction. Two conversions, both stated as assumptions:
-//  - neon dissipates a given parallel heat flux at a smaller fraction than
-//    nitrogen: at the calibration case's impurity lifetime (nτ = 5e16 s/m³)
-//    GRS fig. 1d puts neon about 1.9× above nitrogen in q_det/(n √F_z),
-//    i.e. about 3.6× in F_z; taken as 3.5;
-//  - the divertor is enriched in neon relative to the core by a factor of
-//    about 3 (assumption).
-const NEON_VS_NITROGEN = 3.5
+// The calibration is divertor nitrogen; the engine's seeded impurities are
+// core fractions of nitrogen, neon and argon. Two conversions, both stated
+// as assumptions:
+//  - the species differ in how much parallel heat flux a given fraction can
+//    dissipate: at the calibration case's impurity lifetime (nτ = 5e16 s/m³)
+//    GRS fig. 1d puts neon about 1.9× and argon about 2.4× above nitrogen
+//    in q_det/(n √F_z), that is about 3.6× and 6× in F_z. Each species is
+//    therefore counted in nitrogen-equivalent units with these weights;
+//  - the divertor is enriched in seeded impurities relative to the core by
+//    a factor of about 3 (assumption, taken the same for every species).
+export const SEED_EFFICIENCY = { n: 1.0, ne: 3.5, ar: 6.0 } as const
 const DIVERTOR_ENRICHMENT = 3.0
+
+/** Seeded impurity content in nitrogen-equivalent core fraction. Older
+ *  snapshots carry only the total `impurity_fraction`, which was neon. */
+export function seededNitrogenEquivalent(snapshot: Snapshot): number {
+  if (snapshot.imp_n !== undefined || snapshot.imp_ne !== undefined || snapshot.imp_ar !== undefined) {
+    return (snapshot.imp_n ?? 0) * SEED_EFFICIENCY.n
+      + (snapshot.imp_ne ?? 0) * SEED_EFFICIENCY.ne
+      + (snapshot.imp_ar ?? 0) * SEED_EFFICIENCY.ar
+  }
+  return Math.max(snapshot.impurity_fraction ?? 0, 0) * SEED_EFFICIENCY.ne
+}
 const DETACH_CAP = 0.97
 // The devices carry the separatrix elongation; the 95 % surface is rounder.
 // κ95 ≈ 1 + 0.75 (κ_sep − 1) reproduces ITER (2.1 → 1.83 against 1.8 in
 // the paper's table) and DIII-D (1.7 → 1.53).
 const kappa95 = (kappaSep: number) => 1 + 0.75 * (kappaSep - 1)
 
-/** Core neon fraction needed to detach, from the calibrated GRS scaling,
- *  for a current (MA), minor radius (m), separatrix elongation, separatrix
- *  power (MW) and line-averaged Greenwald fraction. */
+/** Core seeded fraction, in nitrogen-equivalent units, needed to detach,
+ *  from the calibrated GRS scaling, for a current (MA), minor radius (m),
+ *  separatrix elongation, separatrix power (MW) and line-averaged Greenwald
+ *  fraction. */
 function thresholdCore(ip_MA: number, a: number, kappaSep: number, p_sep: number, f_gw: number): number {
   const MU0 = 4 * Math.PI * 1e-7
   const kappa = kappa95(kappaSep)
   const bp = MU0 * ip_MA * 1e6 / (2 * Math.PI * a * Math.sqrt((1 + kappa * kappa) / 2))
   const f_sep = f_gw * N_SEP_OVER_NBAR
   const c_n_div = K_GRS * p_sep / (bp * Math.pow(1 + kappa * kappa, 1.5) * f_sep * f_sep)
-  return c_n_div / (NEON_VS_NITROGEN * DIVERTOR_ENRICHMENT)
+  return c_n_div / DIVERTOR_ENRICHMENT
 }
 
 // Intrinsic radiators (fuel Balmer/Lyman light, wall impurities) expressed
-// as an equivalent core neon fraction: the threshold of an unseeded
-// DIII-D-like H-mode (1.5 MA, a 0.56 m, κ_sep 1.7, P_sep 4.4 MW) at
-// f_GW = 0.7, so that pulse is half detached there, which is where the
-// earlier density-only sigmoid put it. About 0.2 %.
+// as an equivalent core fraction in nitrogen units: the threshold of an
+// unseeded DIII-D-like H-mode (1.5 MA, a 0.56 m, κ_sep 1.7, P_sep 4.4 MW)
+// at f_GW = 0.7, so that pulse is half detached there, which is where the
+// earlier density-only sigmoid put it. About 0.7 % nitrogen-equivalent.
 export const INTRINSIC_C_Z_EQUIV = thresholdCore(1.5, 0.56, 1.7, 4.4, 0.7)
 
 /**
- * Core neon fraction at which the divertor detaches, from the
- * Goldston–Reinke–Schwartz scaling calibrated as above. Returns Infinity
- * when there is no current (nothing to detach).
+ * Core seeded fraction (nitrogen-equivalent) at which the divertor
+ * detaches, from the Goldston–Reinke–Schwartz scaling calibrated as above.
+ * Returns Infinity when there is no current (nothing to detach).
  */
 export function detachmentThreshold(snapshot: Snapshot, device: Device): number {
   if (!(snapshot.ip > 0)) return Infinity
@@ -508,8 +522,9 @@ export function detachmentThreshold(snapshot: Snapshot, device: Device): number 
 /**
  * Divertor detachment fraction, 0 (attached) to 0.97 (fully detached).
  *
- * The intrinsic radiators plus the seeded neon fraction are compared with
- * the fraction the GRS scaling says is needed, D = (c_int + c_z) / c_det,
+ * The intrinsic radiators plus the seeded fractions (nitrogen-equivalent)
+ * are compared with the fraction the GRS scaling says is needed,
+ * D = (c_int + c_z) / c_det,
  * and mapped through a sigmoid, f_detach = 1 − 1/(1 + D³). Because c_det
  * falls as f_GW², the density dependence at fixed power is the same
  * (f_GW/f_0)^6 shape as the earlier density-only model; what is new is
@@ -520,7 +535,7 @@ export function detachmentThreshold(snapshot: Snapshot, device: Device): number 
 export function detachmentFraction(snapshot: Snapshot, device: Device): number {
   const c_det = detachmentThreshold(snapshot, device)
   if (!Number.isFinite(c_det)) return 0
-  const c_z = Math.max(snapshot.impurity_fraction ?? 0, 0)
+  const c_z = seededNitrogenEquivalent(snapshot)
   const qualifier = (INTRINSIC_C_Z_EQUIV + c_z) / c_det
   return Math.min(1 - 1 / (1 + Math.pow(qualifier, 3)), DETACH_CAP)
 }

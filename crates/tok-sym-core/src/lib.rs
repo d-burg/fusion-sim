@@ -65,6 +65,8 @@ pub mod contour;
 pub mod profiles;
 
 /// Zero-dimensional power balance transport model.
+pub mod cooling_tables;
+pub mod cooling;
 pub mod transport;
 
 /// Disruption risk assessment and multi-phase disruption dynamics.

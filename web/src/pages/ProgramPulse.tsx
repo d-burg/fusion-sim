@@ -16,6 +16,7 @@ import {
   type ProgramHandoff,
   type ScalarParam,
   paramRange,
+  channelAvailable,
 } from '../lib/program'
 import WaveformDrawer from '../components/WaveformDrawer'
 
@@ -272,11 +273,13 @@ function ProgramChart({
   overrides,
   onEdit,
   onReset,
+  deviceId,
 }: {
   program: PulseProgram
   overrides: Record<string, OverrideValue>
   onEdit: (param: ScalarParam) => void
-  onReset: (key: string) => void
+  onReset: (key: string) => void,
+  deviceId?: string
 }) {
   const duration = program.duration
   const step = tickStep(duration)
@@ -287,7 +290,7 @@ function ProgramChart({
 
   const param = (key: string) => SCALAR_PARAMS.find((p) => p.key === key)
 
-  const channels: Channel[] = [
+  const allChannels: Channel[] = [
     { key: 'ip', symbol: <><i>I</i><sub>p</sub></>, unit: 'MA', title: 'Plasma current', points: program.ip, param: param('ip') },
     { key: 'bt', symbol: <><i>B</i><sub>t</sub></>, unit: 'T', title: 'Toroidal magnetic field', points: program.bt },
     { key: 'ne', symbol: <><i>n̄</i><sub>e</sub></>, unit: '10²⁰ m⁻³', title: 'Line-averaged electron density', points: program.ne_target, param: param('ne') },
@@ -295,10 +298,14 @@ function ProgramChart({
     { key: 'ech', symbol: <><i>P</i><sub>ECH</sub></>, unit: 'MW', title: 'Electron cyclotron heating power', points: program.p_ech, param: param('p_ech') },
     { key: 'ich', symbol: <><i>P</i><sub>ICH</sub></>, unit: 'MW', title: 'Ion cyclotron heating power', points: program.p_ich },
     { key: 'd2_puff', symbol: <><i>Γ</i><sub>D₂</sub></>, unit: '10²⁰/s', title: 'Deuterium gas puff rate', points: program.d2_puff ?? [], param: param('d2_puff') },
+    { key: 'n2_puff', symbol: <><i>Γ</i><sub>N₂</sub></>, unit: '10²⁰/s', title: 'Nitrogen seeding rate', points: program.n2_puff ?? [], param: param('n2_puff') },
     { key: 'neon_puff', symbol: <><i>Γ</i><sub>Ne</sub></>, unit: '10²⁰/s', title: 'Neon seeding rate', points: program.neon_puff ?? [], param: param('neon_puff') },
+    { key: 'argon_puff', symbol: <><i>Γ</i><sub>Ar</sub></>, unit: '10²⁰/s', title: 'Argon seeding rate', points: program.argon_puff ?? [], param: param('argon_puff') },
     { key: 'kappa', symbol: <i>κ</i>, unit: '', title: 'Elongation', points: program.kappa, param: param('kappa') },
     { key: 'delta', symbol: <i>δ</i>, unit: '', title: 'Triangularity', points: program.delta, param: param('delta') },
   ]
+  // Seeding strips only for the gas lines this machine has.
+  const channels = allChannels.filter((c) => channelAvailable(c.key, deviceId))
 
   return (
     <div className="border-y border-gray-800 flex flex-col h-full min-h-0">
@@ -587,7 +594,7 @@ export default function ProgramPulse() {
             <>
               <h2 className="panel-title pb-2 shrink-0">Programmed waveforms</h2>
               <div className="h-[30rem] md:tall:h-auto md:tall:flex-1 min-h-0">
-                <ProgramChart
+                <ProgramChart deviceId={deviceId}
                   key={selected}
                   program={program}
                   overrides={overrides}

@@ -162,6 +162,13 @@ const HEATING: { key: 'prog_p_nbi' | 'prog_p_ech' | 'prog_p_ich'; wf: 'p_nbi' | 
   { key: 'prog_p_ich', wf: 'p_ich', name: 'ICH' },
 ]
 const HEAT_ON = 0.05 // MW
+/** Seeding gas lines whose on/off edges are logged (10²⁰ atoms/s). */
+const SEEDING: { key: 'n2_puff' | 'neon_puff' | 'argon_puff'; name: string }[] = [
+  { key: 'n2_puff', name: 'Nitrogen seeding' },
+  { key: 'neon_puff', name: 'Neon seeding' },
+  { key: 'argon_puff', name: 'Argon seeding' },
+]
+const SEED_ON = 0.01
 
 /** The level a programmed ramp starting at `t` is heading for: the value at
  *  the next breakpoint after `t`. Falls back to the current value. */
@@ -227,6 +234,17 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
       push('info', `${h.name} ${next[h.key] > prev[h.key] ? 'up' : 'down'} to ${next[h.key].toFixed(1)} MW`)
     }
     else if (was && !now && !next.disrupted) push('info', `${h.name} off`)
+  }
+
+  // ── Seeding gas lines ──
+  for (const g of SEEDING) {
+    const was = (prev?.[g.key] ?? 0) >= SEED_ON
+    const level = next[g.key] ?? 0
+    const now = level >= SEED_ON
+    if (now && !was) {
+      const target = rampTarget(ctx.program?.[g.key], next.time, level)
+      push('info', `${g.name} on${target > level * 1.2 ? `, ramping to ${target.toFixed(2)}` : `, ${level.toFixed(2)}`} ×10²⁰/s`)
+    } else if (was && !now && !next.disrupted) push('info', `${g.name} off`)
   }
 
   // ── Confinement regime ──

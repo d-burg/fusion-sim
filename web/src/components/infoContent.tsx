@@ -485,9 +485,13 @@ export const divertorInfo = (
       equivalent 0.2% core neon and the seeded neon added to it. Unseeded,
       a DIII-D-size divertor is half detached at f<sub>GW</sub> = 0.7, and
       the large machines are no longer detached for free at high density.
-      Seeded impurities radiate mostly in the divertor, so only 30% of their
-      radiation is charged to the core; over-seed and that core share still
-      climbs toward collapse. The divertor row reports Attached / Partial /
+      Three seeding species are available, by machine: nitrogen radiates
+      in the divertor, neon in the divertor and edge, argon into the mantle
+      and core. Their core radiation, Z<sub>eff</sub> and fuel dilution follow
+      ADAS cooling curves; what they radiate in the divertor is what this model
+      represents. The port view tints the radiating front by the visible lines
+      of what is radiating: nitrogen green-teal, neon orange-red, argon
+      blue-violet. Over-seed and the core radiation climbs toward collapse. The divertor row reports Attached / Partial /
       Detached at f<sub>det</sub> = 0.3 and 0.6.
     </p>
 

@@ -2,7 +2,7 @@
  * Standalone sanity tests for the detachment model.
  * Run with: npx tsx src/lib/detachment.test.ts
  */
-import { detachmentFraction, detachmentThreshold } from './fusionPhysics'
+import { detachmentFraction, detachmentThreshold, seededNitrogenEquivalent, SEED_EFFICIENCY } from './fusionPhysics'
 import type { Snapshot } from './types'
 import type { Device } from './wasm'
 
@@ -27,7 +27,7 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
   const p_lh = o.p_lh ?? 0.0488 * Math.pow(ne_bar, 0.717) * Math.pow(bt, 0.803) * Math.pow(dev.surface_area, 0.941)
   // Heating power: enough that H-mode is accessible unless a test says otherwise
   const p_input = o.p_input ?? Math.max(o.p_loss, p_lh) * 1.2
-  return { p_rad: 0, impurity_fraction: 0, q95: 3.5, ...o, ne_bar, bt, p_lh, p_input } as Snapshot
+  return { p_rad: 0, impurity_fraction: 0, imp_n: 0, imp_ne: 0, imp_ar: 0, q95: 3.5, ...o, ne_bar, bt, p_lh, p_input } as Snapshot
 }
 
 // ── 1. GRS calibration: the AUG comparison case (P_sep 10.7 MW, <Bp> 0.34 T,
@@ -42,7 +42,8 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
   const aug = { id: 'aug', a, kappa: kappaSep, bt_max: 2.5, surface_area: 42 } as Device
   const s = snap(aug, { ip: ip_MA, p_loss: 10.7, f_greenwald: (7e19 / 1.44e20) / 0.6, p_lh: 0 })
   const c_core = detachmentThreshold(s, aug)
-  assert(near(c_core * 3.5 * 3.0, 0.04, 1e-6), `AUG calibration: c_N,div expected 0.04, got ${(c_core * 10.5).toFixed(5)}`)
+  // threshold is core nitrogen-equivalent: the 4 % divertor nitrogen over the enrichment of 3
+  assert(near(c_core * 3.0, 0.04, 1e-6), `AUG calibration: c_N,div expected 0.04, got ${(c_core * 3).toFixed(5)}`)
 }
 
 // ── 2. Unseeded DIII-D H-mode: half detached at f_GW = 0.7 (the calibration
@@ -79,8 +80,16 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
   assert(near(got, want, 1e-9), `threshold ∝ 1/(1+κ95²): got ${got}, want ${want}`)
   // Seeding brings detachment on at fixed density
   const lo = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6 }), diiid)
-  const seeded = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6, impurity_fraction: 0.003 }), diiid)
+  const seeded = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6, imp_ne: 0.003 }), diiid)
   assert(seeded > 0.6 && seeded > lo, `0.3 % neon at f_GW 0.6 should detach a DIII-D-like divertor, got ${seeded.toFixed(3)}`)
+  // Species weighting: the same fraction of argon detaches more than neon, neon more than nitrogen,
+  // and a legacy total fraction is read as neon.
+  const fN = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6, imp_n: 0.003 }), diiid)
+  const fAr = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6, imp_ar: 0.003 }), diiid)
+  assert(fAr > seeded && seeded > fN, `species order Ar ${fAr.toFixed(2)} > Ne ${seeded.toFixed(2)} > N ${fN.toFixed(2)}`)
+  const legacy = { ...snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6 }), impurity_fraction: 0.003 } as Partial<Snapshot>
+  delete legacy.imp_n; delete legacy.imp_ne; delete legacy.imp_ar
+  assert(near(seededNitrogenEquivalent(legacy as Snapshot), 0.003 * SEED_EFFICIENCY.ne, 1e-12), 'legacy fraction counts as neon')
 }
 
 // ── 4. ITER-like flat-top, self-consistent density (f_GW 0.85 → n̄ ≈ 1.4):
@@ -92,9 +101,9 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
   s.p_lh = 0.35 * (s.p_lh ?? 0)   // the engine applies the device factor
   assert(0.8 * (s.p_lh ?? 0) < 90, 'floor inactive at an ITER flat-top')
   const c_det = detachmentThreshold(s, iter)
-  assert(c_det > 0.002 && c_det < 0.012, `ITER core-neon threshold should be a few tenths of a percent, got ${(c_det * 100).toFixed(2)} %`)
+  assert(c_det > 0.005 && c_det < 0.04, `ITER nitrogen-equivalent threshold should be of order a percent, got ${(c_det * 100).toFixed(2)} %`)
   assert(detachmentFraction(s, iter) < 0.3, 'unseeded ITER flat-top should be attached')
-  assert(detachmentFraction({ ...s, impurity_fraction: 1.5 * c_det } as Snapshot, iter) > 0.7, 'ITER detaches once c_z exceeds the threshold')
+  assert(detachmentFraction({ ...s, imp_n: 1.5 * c_det } as Snapshot, iter) > 0.7, 'ITER detaches once c_z exceeds the threshold')
 }
 
 // ── 5. Monotone in both drivers, capped, finite with no plasma, and the
@@ -102,7 +111,7 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
 {
   let prev = -1
   for (let c = 0; c <= 0.05; c += 0.005) {
-    const f = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6, impurity_fraction: c }), diiid)
+    const f = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6, imp_ne: c }), diiid)
     assert(f >= prev, `not monotone in c_z at ${c}`)
     prev = f
   }
@@ -112,7 +121,7 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
     assert(f >= prev, `not monotone in f_GW at ${g}`)
     prev = f
   }
-  assert(detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 2.0, impurity_fraction: 0.1 }), diiid) <= 0.97, 'cap at 0.97')
+  assert(detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 2.0, imp_ar: 0.1 }), diiid) <= 0.97, 'cap at 0.97')
   assert(detachmentFraction(snap(diiid, { ip: 0, p_loss: 0, f_greenwald: 0 }), diiid) === 0, 'no plasma → attached (0)')
   const ramp = snap(diiid, { ip: 1.0, p_loss: 1.2, p_rad: 0.2, f_greenwald: 0.5 })
   assert(detachmentFraction(ramp, diiid) < 0.6, `ohmic ramp-up should not be fully detached, got ${detachmentFraction(ramp, diiid).toFixed(2)}`)

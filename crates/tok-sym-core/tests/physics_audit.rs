@@ -798,6 +798,8 @@ fn make_prog(device: &Device, ip: f64, bt: f64, p_nbi: f64, p_ech: f64, p_ich: f
         delta: (device.delta_upper + device.delta_lower) / 2.0,
         d2_puff: 0.0,
         neon_puff: 0.0,
+        n2_puff: 0.0,
+        argon_puff: 0.0,
     }
 }
 

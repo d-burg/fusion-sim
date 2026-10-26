@@ -243,6 +243,9 @@ export default function StatusPanel({
           <Param label={<>H<sub>98</sub></>} value={s.h_factor} unit="" invalid={invalid} />
           <Param label={<>l<sub>i</sub></>} value={s.li} unit="" invalid={invalid} />
           <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" />
+
+          <Param label={<>Z<sub>eff</sub></>} value={s.z_eff ?? 0} unit="" invalid={invalid} warn={(s.z_eff ?? 0) > 2.5} danger={(s.z_eff ?? 0) > 3.5} />
+          <Param label={<>c<sub>z</sub></>} value={100 * ((s.imp_n ?? 0) + (s.imp_ne ?? 0) + (s.imp_ar ?? 0))} unit="%" invalid={invalid} />
         </div>
       </div>
 

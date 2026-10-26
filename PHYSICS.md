@@ -237,27 +237,54 @@ heating power): CENTAUR's negative-triangularity edge carries a threshold
 factor of 3 precisely so that it never is, and takes the scaling as is.
 
 Three stated assumptions convert the calibration to the quantities the
-engine carries:
+engine carries (each seeded species is counted in nitrogen-equivalent
+units):
 
 - the separatrix density is taken as n_sep = 0.6 n̄_e (the engine carries
   the line-averaged Greenwald fraction);
-- neon dissipates a given parallel heat flux at a smaller fraction than
-  nitrogen: at the calibration case's impurity lifetime (nτ = 5e16 s/m³)
-  GRS fig. 1d puts neon about 1.9× above nitrogen in q_det/(n √F_z), that
-  is about 3.6× in F_z; taken as 3.5;
-- the divertor is enriched in neon relative to the core by a factor of
-  about 3 (an assumption; the engine's seeded fraction is the core
-  fraction).
+- the species differ in how much parallel heat flux a given fraction can
+  dissipate: at the calibration case's impurity lifetime (nτ = 5e16 s/m³)
+  GRS fig. 1d puts neon about 1.9× and argon about 2.4× above nitrogen in
+  q_det/(n √F_z), that is about 3.6× and 6× in F_z; the weights used are
+  nitrogen 1, neon 3.5, argon 6;
+- the divertor is enriched in seeded impurities relative to the core by a
+  factor of about 3 (an assumption, taken the same for every species; the
+  engine's seeded fractions are core fractions).
 
-Seeded impurities are injected to radiate in the divertor and scrape-off
-layer, where the cold dense plasma makes them radiate most. The transport
-model therefore books only 30 % of its seeded-impurity radiation inside
-the separatrix, where it costs confinement, counts toward the L-H
-threshold and feeds the radiation-fraction hazard; the remaining 70 % is
-taken to be dissipated between the separatrix and the target, which is
-what f_detach represents. The P_rad readouts and the bolometer show the
-core part only. Intrinsic and fuel radiation are unchanged, so unseeded
-pulses are unaffected by the split.
+### 4.3 Seeded impurity species
+
+Three seeding species are modeled, nitrogen, neon and argon, each with its
+own core fraction c_z accumulating from its gas line (10²⁰ atoms/s, 30 %
+reaching the core per unit n_e V, 0.5 s confinement time). Their atomic
+physics comes from OpenADAS adf11 data (tools/adas_cooling/): the coronal
+ionization balance at n_e = 1e20 m⁻³ gives the mean charge <Z>(T_e) and
+<Z²>(T_e), and the line and recombination power coefficients give the
+cooling curve L_z(T_e) in W m³. The engine uses them at the core
+temperature for
+
+- core radiation, P_rad,z = c_z n_e² L_z(T_core) V: nitrogen and neon
+  radiate little at keV temperatures (divertor radiators), argon keeps a
+  10⁻³² W m³ tail into the keV range (a mantle radiator);
+- the effective charge, Z_eff = Z_eff,intrinsic + Σ c_z (<Z²> − <Z>),
+  which raises bremsstrahlung and resistivity;
+- fuel dilution, n_fuel/n_e = 1 − Σ c_z <Z>, which lowers the fusion rate.
+
+What the seeded species radiate in the divertor and scrape-off layer is not
+in the core power balance; it is the dissipation the detachment model
+represents, calibrated on its own. The curves are coronal: in a cold,
+dense divertor with finite impurity residence time the low-Z species
+radiate more (non-coronal enhancement), which the detachment calibration
+absorbs. The P_rad readouts and the bolometer show the core part only.
+Intrinsic and fuel radiation are unchanged, so unseeded pulses are
+unaffected.
+
+Each machine exposes the gas lines it has, or would have: DIII-D and JET
+nitrogen, neon and argon; ITER neon and argon (nitrogen forms ammonia with
+tritium); CENTAUR nitrogen and neon, following the species SPARC's
+divertor paper scales (Kuang et al. 2020). The port view tints the
+radiating front by the visible lines of what is radiating: deuterium pink,
+nitrogen's N II green-teal, neon's orange-red, argon's Ar II blue-violet.
+
 
 Intrinsic radiators (fuel Balmer and Lyman light, wall impurities) are
 represented as an equivalent core neon fraction c_int, defined as the
@@ -287,13 +314,9 @@ The planner's gas channels (D₂ puff, neon seeding) scale their range with
 plasma volume so the same fraction is reachable on every machine; the
 numbers are in 10²⁰ particles per second.
 
-Known limitation: the seeded-impurity radiation coefficient is hand-tuned
-to DIII-D seeding rates and scales as n_e² V, so on the dense, large
-machines (CENTAUR, ITER) a core neon fraction well below the detachment
-threshold already radiates more than the heating power. Seeding on those
-machines in the current engine ends in a radiative collapse before the
-divertor detaches. Reconciling the two calibrations per device is a
-follow-up.
+Known limitation: the divertor part of the seeded radiation is not fed
+back into the core power balance or the bolometer, and the species
+weights come from one figure of one paper at one impurity lifetime.
 
 Maximum detachment reduces the target heat flux by 97 %. The port view
 draws the radiation front moving up the divertor leg with f_detach, and the
@@ -304,6 +327,8 @@ f_detach = 0.3 and 0.6.
 - Goldston, Reinke and Schwartz, Plasma Phys. Control. Fusion 59 (2017) 055015
 - Kallenbach et al., Plasma Phys. Control. Fusion 58 (2016) 045013 (the calibration case)
 - Martin et al., J. Phys.: Conf. Ser. 123 (2008) 012033 (L-H threshold scaling)
+- OpenADAS, open.adas.ac.uk (adf11 scd/acd/plt/prb for N, Ne, Ar), H. P. Summers et al.
+- Kuang et al., J. Plasma Phys. 86 (2020) 865860505 (SPARC divertor; nitrogen and neon fractions)
 
 ---
 
