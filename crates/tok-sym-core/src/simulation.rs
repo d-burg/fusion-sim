@@ -88,6 +88,12 @@ pub struct PulseProgram {
     pub d2_puff: Vec<WaveformPoint>,
     /// Neon impurity seeding rate (s, 10²⁰ particles/s)
     pub neon_puff: Vec<WaveformPoint>,
+    /// Nitrogen seeding rate (s, 10²⁰ atoms/s); absent in older programmes
+    #[serde(default)]
+    pub n2_puff: Vec<WaveformPoint>,
+    /// Argon seeding rate (s, 10²⁰ atoms/s); absent in older programmes
+    #[serde(default)]
+    pub argon_puff: Vec<WaveformPoint>,
     /// Total pulse duration (s)
     pub duration: f64,
     /// Magnetic configuration override ("LowerSingleNull", "UpperSingleNull",
@@ -140,6 +146,8 @@ impl PulseProgram {
             delta: Self::interpolate(&self.delta, t),
             d2_puff: Self::interpolate(&self.d2_puff, t),
             neon_puff: Self::interpolate(&self.neon_puff, t),
+            n2_puff: Self::interpolate(&self.n2_puff, t),
+            argon_puff: Self::interpolate(&self.argon_puff, t),
         }
     }
 
@@ -264,6 +272,8 @@ impl PulseProgram {
                 (duration, 0.0),
             ],
             neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
+            n2_puff: vec![(0.0, 0.0), (duration, 0.0)],
+            argon_puff: vec![(0.0, 0.0), (duration, 0.0)],
             duration,
             config_override: None,
         }
@@ -329,6 +339,8 @@ impl PulseProgram {
                 (duration, 0.0),
             ],
             neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
+            n2_puff: vec![(0.0, 0.0), (duration, 0.0)],
+            argon_puff: vec![(0.0, 0.0), (duration, 0.0)],
             duration,
             config_override: None,
         }
@@ -400,6 +412,8 @@ impl PulseProgram {
                 (duration, 0.0),
             ],
             neon_puff: vec![(0.0, 0.0), (duration, 0.0)],
+            n2_puff: vec![(0.0, 0.0), (duration, 0.0)],
+            argon_puff: vec![(0.0, 0.0), (duration, 0.0)],
             duration,
             config_override: None,
         }
@@ -456,6 +470,16 @@ pub struct SimulationSnapshot {
     pub impurity_fraction: f64,
     pub d2_puff: f64,
     pub neon_puff: f64,
+    pub n2_puff: f64,
+    pub argon_puff: f64,
+    /// Core seeded-impurity fractions n_z/n_e per species
+    pub imp_n: f64,
+    pub imp_ne: f64,
+    pub imp_ar: f64,
+    /// Effective charge including the seeded species
+    pub z_eff: f64,
+    /// Fuel ion fraction n_fuel/n_e after dilution by the seeded species
+    pub fuel_fraction: f64,
 
     // Disruption
     /// Hazard rate: probability per second of a disruption starting.
@@ -1438,6 +1462,13 @@ impl Simulation {
             impurity_fraction: self.transport.impurity_fraction,
             d2_puff: prog.d2_puff,
             neon_puff: prog.neon_puff,
+            n2_puff: prog.n2_puff,
+            argon_puff: prog.argon_puff,
+            imp_n: self.transport.imp_n,
+            imp_ne: self.transport.imp_ne,
+            imp_ar: self.transport.imp_ar,
+            z_eff: self.transport.z_eff,
+            fuel_fraction: self.transport.fuel_fraction,
             te_profile: self.profiles.te_profile_array(),
             ne_profile: self.profiles.ne_profile_array(),
             disruption_risk: self.disruption.risk,
@@ -1789,34 +1820,59 @@ mod tests {
     }
 
     #[test]
-    fn test_seeded_radiation_is_split_between_core_and_divertor() {
-        // Same DIII-D H-mode pulse with and without neon seeding from 2.5 s.
+    fn test_seeded_species_radiate_dilute_and_raise_zeff() {
+        // The same DIII-D H-mode pulse seeded from 2.5 s with 0.3e20 atoms/s
+        // of nitrogen, neon or argon. At 5 s each species has built a similar
+        // core fraction; argon radiates far more in the core than neon, and
+        // neon more than nitrogen; Z_eff and the dilution rise with Z.
         let device = devices::diiid();
         let base = PulseProgram::standard_hmode(&device);
-        let mut seeded = base.clone();
         let d = base.duration;
-        seeded.neon_puff = vec![(0.0, 0.0), (2.5, 0.0), (3.0, 0.4), (d, 0.4)];
-        let mut a = Simulation::new(device.clone(), base);
-        let mut b = Simulation::new(device, seeded);
-        a.seed_disruption(11);
-        b.seed_disruption(11);
-        a.start();
-        b.start();
-        let (mut sa, mut sb) = (a.step(0.005), b.step(0.005));
-        while sa.time < 5.0 {
-            sa = a.step(0.005);
-            sb = b.step(0.005);
+        let puff = vec![(0.0, 0.0), (2.5, 0.0), (3.0, 0.3), (d, 0.3)];
+        let mut programs = vec![base.clone()];
+        for which in 0..3 {
+            let mut p = base.clone();
+            match which {
+                0 => p.n2_puff = puff.clone(),
+                1 => p.neon_puff = puff.clone(),
+                _ => p.argon_puff = puff.clone(),
+            }
+            programs.push(p);
         }
-        let (div_a, div_b) = (a.transport.p_rad_div, b.transport.p_rad_div);
-        assert!(div_a.abs() < 1e-9, "no seeding, no divertor radiation");
-        assert!(div_b > 0.5, "seeded pulse radiates in the divertor: {div_b}");
-        // 70 % of the seeded radiation is booked outside the core, 30 % inside:
-        // the core increase over the unseeded pulse is about 3/7 of the
-        // divertor part (density and temperature shift slightly, so allow a
-        // wide band).
-        let core_increase = sb.p_rad - sa.p_rad;
-        let ratio = core_increase / div_b;
-        assert!(ratio > 0.25 && ratio < 0.6, "core/divertor split off: {ratio} (core +{core_increase}, div {div_b})");
+        let mut snaps = Vec::new();
+        for p in programs {
+            let mut sim = Simulation::new(device.clone(), p);
+            sim.seed_disruption(11);
+            sim.start();
+            let mut s = sim.step(0.005);
+            while s.time < 5.0 {
+                s = sim.step(0.005);
+            }
+            snaps.push(s);
+        }
+        let (plain, n, ne, ar) = (&snaps[0], &snaps[1], &snaps[2], &snaps[3]);
+        assert!(plain.imp_n == 0.0 && plain.imp_ne == 0.0 && plain.imp_ar == 0.0);
+        assert!(n.imp_n > 0.002 && ne.imp_ne > 0.002 && ar.imp_ar > 0.002, "fractions {} {} {}", n.imp_n, ne.imp_ne, ar.imp_ar);
+        assert!((n.imp_n - ar.imp_ar).abs() < 0.3 * n.imp_n, "same puff gives similar fractions");
+        let rad = |s: &SimulationSnapshot| s.p_rad - plain.p_rad;
+        assert!(rad(ar) > 3.0 * rad(ne), "argon core radiation {} vs neon {}", rad(ar), rad(ne));
+        assert!(rad(ne) >= rad(n) * 0.9, "neon core radiation {} vs nitrogen {}", rad(ne), rad(n));
+        assert!(rad(ar) > 0.5, "0.3e20/s argon on DIII-D should radiate > 0.5 MW in the core, got {}", rad(ar));
+        assert!(ar.z_eff > ne.z_eff && ne.z_eff > n.z_eff && n.z_eff > plain.z_eff, "Z_eff ordering");
+        assert!(ar.z_eff - plain.z_eff > 0.3, "0.3 % argon should add > 0.3 to Z_eff, got {}", ar.z_eff - plain.z_eff);
+    }
+
+    #[test]
+    fn test_programme_json_without_species_channels_loads() {
+        let device = devices::diiid();
+        let mut json = serde_json::to_value(PulseProgram::standard_hmode(&device)).unwrap();
+        let obj = json.as_object_mut().unwrap();
+        obj.remove("n2_puff");
+        obj.remove("argon_puff");
+        let prog: PulseProgram = serde_json::from_value(json).expect("older programme JSON still loads");
+        let v = prog.values_at(5.0);
+        assert_eq!(v.n2_puff, 0.0);
+        assert_eq!(v.argon_puff, 0.0);
     }
 
     #[test]

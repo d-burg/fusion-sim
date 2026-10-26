@@ -78,6 +78,17 @@ export interface Snapshot {
   impurity_fraction: number
   d2_puff: number
   neon_puff: number
+  /** Nitrogen and argon seeding rates (10²⁰ atoms/s) */
+  n2_puff?: number
+  argon_puff?: number
+  /** Core seeded-impurity fractions per species */
+  imp_n?: number
+  imp_ne?: number
+  imp_ar?: number
+  /** Effective charge including the seeded species */
+  z_eff?: number
+  /** Fuel ion fraction n_fuel/n_e after dilution by the seeded species */
+  fuel_fraction?: number
 
   // Profiles (51-point arrays, rho = 0.00 to 1.00)
   te_profile: number[]

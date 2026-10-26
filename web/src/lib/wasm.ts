@@ -64,6 +64,9 @@ export interface PulseProgram {
   delta: WaveformPoint[]
   d2_puff: WaveformPoint[]
   neon_puff: WaveformPoint[]
+  /** Nitrogen and argon seeding (10²⁰ atoms/s); optional in older programmes */
+  n2_puff?: WaveformPoint[]
+  argon_puff?: WaveformPoint[]
   duration: number
   config_override?: string
 }

@@ -239,7 +239,7 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
       <b>Radiated power (P<sub>rad</sub>)</b> &mdash; power lost by
       electromagnetic radiation: bremsstrahlung, intrinsic impurity
       radiation from wall materials (carbon, tungsten), and intentional
-      impurity seeding (neon). Measured by bolometer arrays. Typical
+      impurity seeding (nitrogen, neon or argon). Measured by bolometer arrays. Typical
       H-mode radiative fractions are 15&ndash;30%.
       High P<sub>rad</sub>/P<sub>in</sub> ratios can lead to radiative
       collapse.
@@ -482,12 +482,17 @@ export const divertorInfo = (
       with no size dependence: harder with power, easier with plasma current,
       shaping and density. The model uses that form, calibrated on their
       ASDEX Upgrade case, with the fuel and wall impurities counted as an
-      equivalent 0.2% core neon and the seeded neon added to it. Unseeded,
+      equivalent 0.7% nitrogen and the seeded species added to it in
+      nitrogen-equivalent units. Unseeded,
       a DIII-D-size divertor is half detached at f<sub>GW</sub> = 0.7, and
       the large machines are no longer detached for free at high density.
-      Seeded impurities radiate mostly in the divertor, so only 30% of their
-      radiation is charged to the core; over-seed and that core share still
-      climbs toward collapse. The divertor row reports Attached / Partial /
+      Three seeding species are available, by machine: nitrogen radiates
+      in the divertor, neon in the divertor and edge, argon into the mantle
+      and core. Their core radiation, Z<sub>eff</sub> and fuel dilution follow
+      ADAS cooling curves; what they radiate in the divertor is what this model
+      represents. The port view tints the radiating front by the visible lines
+      of what is radiating: nitrogen green-teal, neon orange-red, argon
+      blue-violet. Over-seed and the core radiation climbs toward collapse. The divertor row reports Attached / Partial /
       Detached at f<sub>det</sub> = 0.3 and 0.6.
     </p>
 

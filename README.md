@@ -22,6 +22,10 @@ for exploring tokamak plasma behavior.
   flux with surface temperature modeling
 - **Post-pulse analysis:** Time scrubbing, radial profile viewer with
   synthetic Thomson scattering
+- **Impurity seeding:** Nitrogen, neon and argon gas lines per machine, with
+  ADAS cooling curves for core radiation, Z_eff and dilution, a
+  Goldston-Reinke-Schwartz detachment threshold, and a radiating divertor
+  front tinted by the seeded species
 - **Pulse record:** Persistent pulse numbers, an append-only event log with
   alarm severities, a named cause and operator action for every disruption,
   an achieved-versus-programmed report, and the previous pulse as a reference

@@ -74,6 +74,22 @@ const REFERENCES: Ref[] = [
     doi: '10.1088/1361-6587/aa5e6e',
   },
   {
+    id: 'openadas',
+    authors: 'H. P. Summers, W. J. Dickson, M. G. O\'Mullane, N. R. Badnell, A. D. Whiteford, D. H. Brooks, J. Lang, S. D. Loch and D. C. Griffin',
+    title: 'Ionization state, excited populations and emission of impurities in dynamic finite density plasmas: I. The generalized collisional-radiative model for light elements (the ADAS data used here are the adf11 ionization, recombination and radiated-power coefficients from open.adas.ac.uk)',
+    journal: 'Plasma Phys. Control. Fusion 48, 263',
+    year: 2006,
+    doi: '10.1088/0741-3335/48/2/007',
+  },
+  {
+    id: 'kuang2020',
+    authors: 'A. Q. Kuang et al.',
+    title: 'Divertor heat flux challenge and mitigation in SPARC',
+    journal: 'J. Plasma Phys. 86, 865860505',
+    year: 2020,
+    doi: '10.1017/S0022377820001117',
+  },
+  {
     id: 'kallenbach2016',
     authors: 'A. Kallenbach et al.',
     title: 'Analytical calculations for impurity seeded partially detached divertor conditions',
@@ -573,9 +589,15 @@ export default function Bibliography() {
             At fixed power the density dependence keeps the (f<sub>GW</sub>/f₀)⁶ shape of the earlier
             model; detachment now also gets harder with separatrix power and easier with plasma current
             and shaping, and seeding can bring it on at any density. c<sub>z</sub> accumulates from the
-            neon puff in the transport model with a 0.5 s confinement time; 70% of its radiation is
-            booked in the divertor and 30% in the core, and above the device&rsquo;s impurity collapse
-            threshold the core radiation fraction climbs toward collapse.
+            seeding gas lines in the transport model with a 0.5 s confinement time. Three species are
+            modeled, nitrogen, neon and argon, each counted in nitrogen-equivalent units with the weights
+            1, 3.5 and 6 from their fig. 1d. Their core radiation, Z<sub>eff</sub> and fuel dilution come
+            from coronal OpenADAS cooling curves and charge states<RefTag id="openadas" /> at the core
+            temperature; what they radiate in the divertor is the dissipation this model represents. Each
+            machine exposes the gas lines it has: nitrogen is avoided on tritium machines (ITER), and
+            CENTAUR follows the species SPARC&rsquo;s divertor paper scales<RefTag id="kuang2020" />, nitrogen
+            and neon. Above the device&rsquo;s impurity collapse threshold the core radiation fraction climbs
+            toward collapse.
           </p>
         </Section>
 

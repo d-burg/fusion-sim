@@ -43,6 +43,36 @@ export type ProgramHandoff = {
   configOverride: MagneticConfig | null
 }
 
+/* ─── Seeding gas lines per device ──────────────────────── */
+
+export type SeedingKey = 'n2_puff' | 'neon_puff' | 'argon_puff'
+
+/**
+ * Which seeding species each machine has, or would have, on its gas
+ * system. DIII-D (carbon wall) has run nitrogen, neon and argon in
+ * radiative-divertor experiments. JET with the ITER-like wall used nitrogen
+ * for the divertor and neon as the ITER-relevant species, with argon from
+ * its carbon-wall era. ITER plans neon as the baseline and argon for core
+ * radiation; nitrogen is avoided because it forms ammonia with tritium.
+ * CENTAUR follows SPARC, whose divertor paper (Kuang et al. 2020) scales
+ * the nitrogen and neon fractions needed for dissipative operation.
+ */
+export const DEVICE_SEEDING: Record<string, SeedingKey[]> = {
+  diiid: ['n2_puff', 'neon_puff', 'argon_puff'],
+  jet: ['n2_puff', 'neon_puff', 'argon_puff'],
+  iter: ['neon_puff', 'argon_puff'],
+  centaur: ['n2_puff', 'neon_puff'],
+}
+const SEEDING_KEYS: SeedingKey[] = ['n2_puff', 'neon_puff', 'argon_puff']
+
+/** Whether a planner channel is available on this device (seeding channels
+ *  depend on the machine's gas lines; everything else is universal). */
+export function channelAvailable(key: string, deviceId: string | undefined): boolean {
+  if (!(SEEDING_KEYS as string[]).includes(key)) return true
+  const lines = deviceId ? DEVICE_SEEDING[deviceId] : undefined
+  return lines ? lines.includes(key as SeedingKey) : true
+}
+
 /* ─── Parameter definitions ─────────────────────────────── */
 
 export const SCALAR_PARAMS: ScalarParam[] = [
@@ -51,7 +81,9 @@ export const SCALAR_PARAMS: ScalarParam[] = [
   { key: 'p_ech', label: 'ECH power', unit: 'MW', waveformKey: 'p_ech', min: 0, max: 20, step: 0.5, precision: 1 },
   { key: 'ne', label: 'Density target', unit: '10²⁰m⁻³', waveformKey: 'ne_target', min: 0.1, max: 3.0, step: 0.05, precision: 2 },
   { key: 'd2_puff', label: 'D₂ gas puff', unit: '10²⁰/s', waveformKey: 'd2_puff', min: 0, max: 10, step: 0.5, precision: 1, scalesWithVolume: true },
-  { key: 'neon_puff', label: 'Neon seeding', unit: '10²⁰/s', waveformKey: 'neon_puff', min: 0, max: 2.0, step: 0.05, precision: 2, scalesWithVolume: true },
+  { key: 'n2_puff', label: 'Nitrogen seeding', unit: '10²⁰ atoms/s', waveformKey: 'n2_puff', min: 0, max: 2.0, step: 0.05, precision: 2, scalesWithVolume: true },
+  { key: 'neon_puff', label: 'Neon seeding', unit: '10²⁰ atoms/s', waveformKey: 'neon_puff', min: 0, max: 2.0, step: 0.05, precision: 2, scalesWithVolume: true },
+  { key: 'argon_puff', label: 'Argon seeding', unit: '10²⁰ atoms/s', waveformKey: 'argon_puff', min: 0, max: 1.0, step: 0.02, precision: 2, scalesWithVolume: true },
   { key: 'kappa', label: 'Elongation κ', unit: '', waveformKey: 'kappa', min: 1.0, max: 2.2, step: 0.05, precision: 2 },
   { key: 'delta', label: 'Triangularity δ', unit: '', waveformKey: 'delta', min: -0.6, max: 0.8, step: 0.05, precision: 2 },
 ]
@@ -105,6 +137,7 @@ export function scaleWaveform(waveform: WaveformPoint[], newValue: number): Wave
 /** Every waveform channel of a programme, in `PulseProgram` order. */
 const WAVEFORM_KEYS: (keyof PulseProgram)[] = [
   'ip', 'bt', 'ne_target', 'p_nbi', 'p_ech', 'p_ich', 'kappa', 'delta', 'd2_puff', 'neon_puff',
+  'n2_puff', 'argon_puff',
 ]
 
 /**

@@ -16,6 +16,7 @@ import {
   type OverrideValue,
   type ScalarParam,
   paramRange,
+  channelAvailable,
 } from '../lib/program'
 
 /* ─── Types ─────────────────────────────────────────────── */
@@ -131,7 +132,9 @@ export default function PulsePlanner({
     p_ech: '#8b5cf6',
     ne: '#a78bfa',
     d2_puff: '#60a5fa',
-    neon_puff: '#86efac',
+    n2_puff: '#2dd4bf',
+    neon_puff: '#fb923c',
+    argon_puff: '#818cf8',
     kappa: '#f59e0b',
     delta: '#ef4444',
   }
@@ -240,7 +243,7 @@ export default function PulsePlanner({
         </div>
 
         {/* Scalar parameter editors */}
-        {SCALAR_PARAMS.map((param) => {
+        {SCALAR_PARAMS.filter((param) => channelAvailable(param.key, deviceId)).map((param) => {
           const value = getEffectiveValue(param)
           const waveform = getEffectiveWaveform(param)
           const color = paramColors[param.key] ?? '#94a3b8'

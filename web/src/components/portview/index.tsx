@@ -9,6 +9,7 @@ import { createPlasmaGroup } from './plasma'
 import { createGlowGroup, findStrikePoints, type StrikePoint } from './glow'
 import { createPostProcessing } from './postprocessing'
 import { DivertorVisuals } from './divertorVisuals'
+import { INTRINSIC_C_Z_EQUIV, SEED_EFFICIENCY } from '../../lib/fusionPhysics'
 import { toroidal } from './types'
 
 interface Props {
@@ -47,6 +48,17 @@ interface SceneState {
 
 /** No sim-time change for this long ⇒ treat the pulse as paused. */
 const PAUSE_GRACE_MS = 200
+
+/** Share of the detachment front's radiation per seeded species: each
+ *  species' nitrogen-equivalent content over the total including the
+ *  intrinsic radiators the detachment model assumes. */
+function seedMix(snapshot: Snapshot): { n: number; ne: number; ar: number } {
+  const n = (snapshot.imp_n ?? 0) * SEED_EFFICIENCY.n
+  const ne = (snapshot.imp_ne ?? 0) * SEED_EFFICIENCY.ne
+  const ar = (snapshot.imp_ar ?? 0) * SEED_EFFICIENCY.ar
+  const total = INTRINSIC_C_Z_EQUIV + n + ne + ar
+  return { n: n / total, ne: ne / total, ar: ar / total }
+}
 
 export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, deviceR0, deviceA }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -400,6 +412,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         neonPuff: snapshot.neon_puff,
         pRadFrac: snapshot.p_loss > 0.1 ? snapshot.p_rad / snapshot.p_loss : 0,
         detachFrac: divVis.detachFrac,
+        seedMix: seedMix(snapshot),
         opacity: opacityScale,
         limiterPts: pts,
         time: state.animTime,
