@@ -260,7 +260,7 @@ export default function StatusPanel({
       </div>
 
       {/* Divertor thermal loading */}
-      <DivertorLoading divertor={divertor} invalid={invalid} />
+      <DivertorLoading divertor={divertor} invalid={invalid} divertorActive={s.xpoint_r > 0 && s.ip >= 0.1} />
 
       {/* Neutron diagnostic + Q display side by side */}
       <div className="flex gap-2 border-t border-gray-800 pt-1.5">
@@ -493,7 +493,7 @@ const W_RECRYST_TEMP = 1300
 /** Tungsten recrystallization heat flux threshold (MW/m²) — approximate steady-state limit. */
 const W_RECRYST_QFLUX = 10
 
-function DivertorLoading({ divertor, invalid = false }: { divertor: DivertorState | null; invalid?: boolean }) {
+function DivertorLoading({ divertor, invalid = false, divertorActive = false }: { divertor: DivertorState | null; invalid?: boolean; divertorActive?: boolean }) {
   const q = divertor?.q_peak ?? 0
   const lambda = divertor?.lambda_q ?? 0
   const fDet = divertor?.f_detach ?? 0
@@ -537,6 +537,7 @@ function DivertorLoading({ divertor, invalid = false }: { divertor: DivertorStat
         <span className="text-xs text-gray-600 ml-auto" style={invalidStyle} title={invalidTitle}>
           f<sub>det</sub>=<span className="font-mono tabular-nums">{invalid ? '—' : fDet.toFixed(2)}</span>
         </span>
+        <DetachmentTag fDet={fDet} active={divertorActive} />
       </div>
 
       {/* Heat flux bar */}
@@ -599,6 +600,51 @@ function DivertorLoading({ divertor, invalid = false }: { divertor: DivertorStat
         </div>
       )}
     </div>
+  )
+}
+
+/** Divertor regime from the detachment fraction. Thresholds match the point
+ *  where the port view's radiation front has visibly lifted off the target. */
+type DivertorRegime = 'attached' | 'partial' | 'detached'
+function divertorRegime(fDet: number): DivertorRegime {
+  return fDet >= 0.6 ? 'detached' : fDet >= 0.3 ? 'partial' : 'attached'
+}
+
+/**
+ * Static state tag for the divertor regime (ATTACHED / PARTIAL / DETACHED),
+ * the same pattern as the neutron detector's Active/Idle tag. A regime
+ * change is marked once, with a single highlight that fades over a second,
+ * rather than a blinking element: the control room keeps nothing blinking
+ * that is not an unacknowledged alarm.
+ */
+function DetachmentTag({ fDet, active }: { fDet: number; active: boolean }) {
+  const regime = active ? divertorRegime(fDet) : null
+  // Highlight only an actual change of regime, not the first render: the
+  // panel mounts afresh on every pulse start and device switch. The one-shot
+  // animation is restarted imperatively so no state update is needed.
+  const prevRef = useRef<DivertorRegime | null>(null)
+  const elRef = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    const el = elRef.current
+    if (el && regime !== null && prevRef.current !== null && regime !== prevRef.current) {
+      el.classList.remove('state-change')
+      void el.offsetWidth // restart the animation
+      el.classList.add('state-change')
+    }
+    prevRef.current = regime
+  }, [regime])
+  const label = regime === 'detached' ? 'Detached' : regime === 'partial' ? 'Partial' : regime === 'attached' ? 'Attached' : '—'
+  const color = regime === 'detached' ? 'var(--c-accent)' : regime === 'partial' ? 'var(--c-ink-dim)' : 'var(--c-ink-faint)'
+  const dot = regime === 'detached' ? 'var(--c-accent)' : regime === 'partial' ? 'var(--c-ink-dim)' : 'var(--c-line-strong)'
+  return (
+    <span
+      ref={elRef}
+      className="ml-2 flex items-center gap-1 shrink-0"
+      title={regime === null ? 'No diverted plasma' : 'Divertor regime from the detachment fraction'}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dot }} />
+      <span className="text-[10px] uppercase tracking-wider" style={{ color }}>{label}</span>
+    </span>
   )
 }
 
