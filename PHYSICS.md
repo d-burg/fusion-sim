@@ -433,6 +433,21 @@ integration step. The frontend steps and records the physics at 0.25 ms
 through both quench phases (5 ms elsewhere), so the spike and the decay
 render as curves.
 
+**Cause attribution.** When the stochastic trigger fires, the model records
+which hazard term dominated at that instant, weighted exactly as the terms
+combine in the hazard (the four limit terms cubed, the locked-mode baseline
+linearly): density limit, beta limit, kink limit, radiative collapse or
+locked mode. A disruption forced by the last closed flux surface crossing
+the first wall is recorded as wall contact. The snapshot carries the cause
+(`disruption_cause`), the five individual terms (`risk_*`) and the L-H
+threshold (`p_lh`), so the control room can say why a pulse ended and what
+an operator would change. Whenever there is no plasma to reconstruct, below
+0.1 MA at the start and end of a pulse and once the current quench is
+complete, the reconstructed quantities (q95, βN, l_i, τE, H98, f_GW, λq,
+f_det) have no physical meaning and the control room marks them INVALID
+rather than showing a number; l_i in particular is a profile-shape ratio
+and does not go to zero with the current.
+
 ---
 
 ## 8. Diagnostic Noise Model
