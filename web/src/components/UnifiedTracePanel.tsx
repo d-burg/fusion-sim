@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import type { TracePoint } from '../lib/types'
+import type { PreviousPulse } from '../lib/useSimulation'
 import type { PulseProgram } from '../lib/wasm'
 import { getDevice } from '../lib/wasm'
 import { computeTargetTraces, type TargetTraces } from '../lib/targetTraces'
@@ -94,6 +95,66 @@ interface Props {
   scrubTime: number | null
   onScrub: (time: number | null) => void
   elmActive: boolean
+  /** The previous pulse, drawn in grey behind the live traces as a reference. */
+  reference?: PreviousPulse | null
+}
+
+/**
+ * Stroke one series. For Dα the ELM spikes are drawn as vertical lines
+ * (up and back down at the same x) so they read as transient events rather
+ * than triangular "tent poles"; `isSpike` marks the one point per ELM that
+ * carries the spike, and adjacent latched points are drawn at the baseline.
+ */
+function strokeSeries(
+  ctx: CanvasRenderingContext2D,
+  pts: TracePoint[],
+  vals: number[],
+  toX: (t: number) => number,
+  toY: (v: number) => number,
+  isSpike: boolean[] | null,
+) {
+  ctx.beginPath()
+  for (let i = 0; i < pts.length; i++) {
+    const x = toX(pts[i].t)
+    const y = toY(vals[i])
+    if (i === 0) {
+      ctx.moveTo(x, y)
+    } else if (isSpike && isSpike[i]) {
+      let baseVal = vals[i - 1]
+      for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+        if (!pts[j].elm_active) { baseVal = vals[j]; break }
+      }
+      const baseY = toY(baseVal)
+      ctx.lineTo(x, baseY)
+      ctx.lineTo(x, y)
+      ctx.lineTo(x, baseY)
+    } else if (isSpike && pts[i].elm_active) {
+      let baseVal = vals[i]
+      for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+        if (!pts[j].elm_active) { baseVal = vals[j]; break }
+      }
+      ctx.lineTo(x, toY(baseVal))
+    } else {
+      ctx.lineTo(x, y)
+    }
+  }
+  ctx.stroke()
+}
+
+/** One spike flag per ELM (the tallest of each run of latched points). */
+function elmSpikes(pts: TracePoint[], vals: number[]): boolean[] | null {
+  if (pts.length <= 2) return null
+  const isSpike: boolean[] = new Array(pts.length).fill(false)
+  for (let i = 1; i < pts.length - 1; i++) {
+    if (pts[i].elm_active) isSpike[i] = true
+  }
+  for (let i = 1; i < pts.length; i++) {
+    if (isSpike[i] && isSpike[i - 1]) {
+      if (vals[i] >= vals[i - 1]) isSpike[i - 1] = false
+      else isSpike[i] = false
+    }
+  }
+  return isSpike
 }
 
 export default function UnifiedTracePanel({
@@ -105,9 +166,13 @@ export default function UnifiedTracePanel({
   scrubTime,
   onScrub,
   elmActive,
+  reference = null,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // The reference overlay only makes sense against the same machine.
+  const ref = reference && reference.deviceId === deviceId && reference.history.length > 1 ? reference : null
+  const [showRef, setShowRef] = useState(true)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => defaultKeysForDevice(deviceId))
   // Reset defaults when device changes
   const prevDeviceRef = useRef(deviceId)
@@ -267,6 +332,17 @@ export default function UnifiedTracePanel({
         vMin = Math.min(vMin, ...vals)
         vMax = Math.max(vMax, ...vals)
       }
+      // The reference pulse shares the scale so the two are comparable.
+      const refVals = ref && showRef
+        ? ref.history.map((pt) => {
+            const v = pt[cfg.key] as number
+            return isImpurityPct ? v * 100 : v
+          })
+        : null
+      if (refVals && !cfg.clampToTarget && refVals.length > 0) {
+        vMin = Math.min(vMin, ...refVals)
+        vMax = Math.max(vMax, ...refVals)
+      }
 
       // Fallback if no data yet
       if (!isFinite(vMin) || !isFinite(vMax)) {
@@ -327,6 +403,15 @@ export default function UnifiedTracePanel({
       ctx.rect(MARGIN_LEFT, row * ROW_H, plotW, ROW_H)
       ctx.clip()
 
+      // ── Reference pulse (grey, behind everything) ──
+      if (refVals && ref) {
+        ctx.strokeStyle = isRetro ? '#2a9d2a' : '#8a9096'
+        ctx.lineWidth = 1.5
+        ctx.globalAlpha = 0.5
+        strokeSeries(ctx, ref.history, refVals, toX, toY, cfg.key === 'd_alpha' ? elmSpikes(ref.history, refVals) : null)
+        ctx.globalAlpha = 1
+      }
+
       // ── Draw target trace (dashed, 50% opacity) ──
       if (targetPts && targetPts.length >= 2) {
         ctx.strokeStyle = traceColor
@@ -350,69 +435,10 @@ export default function UnifiedTracePanel({
         ctx.strokeStyle = traceColor
         ctx.lineWidth = isRetro ? 1.5 : 2
         ctx.globalAlpha = 0.95
-
-        // For D-alpha, detect ELM spikes and render them as perfectly vertical
-        // lines (up and back down at the same x) so they appear as transient
-        // events rather than triangular "tent poles".
-        //
-        // Pre-compute a local baseline for each point using a wider window
-        // (±3 points, excluding the point itself and any spikes) so that
-        // adjacent elevated points from ELM latching don't inflate the baseline.
-        const isElmTrace = cfg.key === 'd_alpha'
-        // For Dα, use the elm_active flag from the simulation to identify
-        // ELM spikes directly — no heuristic threshold needed.
-        // Deduplicate adjacent flagged points to render one vertical line per ELM.
-        let isSpike: boolean[] | null = null
-        if (isElmTrace && history.length > 2) {
-          isSpike = new Array(history.length).fill(false)
-          for (let i = 1; i < history.length - 1; i++) {
-            if (history[i].elm_active) {
-              isSpike[i] = true
-            }
-          }
-          // Deduplicate: in each run of adjacent spikes, keep only the tallest
-          for (let i = 1; i < history.length; i++) {
-            if (isSpike[i] && isSpike[i - 1]) {
-              if (vals[i] >= vals[i - 1]) {
-                isSpike[i - 1] = false
-              } else {
-                isSpike[i] = false
-              }
-            }
-          }
-        }
-
-        ctx.beginPath()
-        for (let i = 0; i < history.length; i++) {
-          const x = toX(history[i].t)
-          const y = toY(vals[i])
-
-          if (i === 0) {
-            ctx.moveTo(x, y)
-          } else if (isSpike && isSpike[i]) {
-            // ELM spike: draw as vertical line at this x position
-            // Find baseline from nearest non-ELM point
-            let baseVal = vals[i - 1]
-            for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
-              if (!history[j].elm_active) { baseVal = vals[j]; break }
-            }
-            const baseY = toY(baseVal)
-            ctx.lineTo(x, baseY)  // continue baseline to spike x
-            ctx.lineTo(x, y)      // vertical up to peak
-            ctx.lineTo(x, baseY)  // vertical back down
-          } else if (isSpike && history[i].elm_active) {
-            // Adjacent ELM point (not the tallest) — render at baseline
-            // to suppress tent pole shoulders from elevated latched Dα
-            let baseVal = vals[i]
-            for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
-              if (!history[j].elm_active) { baseVal = vals[j]; break }
-            }
-            ctx.lineTo(x, toY(baseVal))
-          } else {
-            ctx.lineTo(x, y)
-          }
-        }
-        ctx.stroke()
+        // Dα: ELM spikes come from the simulation's elm_active flag, no
+        // heuristic threshold needed.
+        const isSpike = cfg.key === 'd_alpha' ? elmSpikes(history, vals) : null
+        strokeSeries(ctx, history, vals, toX, toY, isSpike)
         ctx.globalAlpha = 1
       }
 
@@ -530,7 +556,7 @@ export default function UnifiedTracePanel({
     ctx.textAlign = 'right'
     ctx.fillStyle = '#4b5563'
     ctx.fillText('[sec]', toX(0) - 12, totalH - 12)
-  }, [history, duration, targets, scrubTime, elmActive, activeTraces, isRetro])
+  }, [history, duration, targets, scrubTime, elmActive, activeTraces, isRetro, ref, showRef])
 
   // Redraw on data changes
   useEffect(() => {
@@ -591,6 +617,19 @@ export default function UnifiedTracePanel({
         <InfoPopup title="Trace Reference" position="left">
           {traceInfoContent(ALL_TRACES)}
         </InfoPopup>
+        {ref && (
+          <button
+            onClick={() => setShowRef((v) => !v)}
+            aria-pressed={showRef}
+            title={showRef ? 'Hide the previous pulse' : 'Show the previous pulse'}
+            className={`px-2 py-0.5 text-xs rounded border transition-colors cursor-pointer
+                        ${showRef
+                          ? 'bg-gray-800/80 text-gray-300 border-gray-600/50 hover:bg-gray-700/80 hover:text-white'
+                          : 'bg-transparent text-gray-500 border-gray-700/50 hover:text-gray-300'}`}
+          >
+            Ref{ref.number !== null && <> <span className="font-mono tabular-nums">{ref.number}</span></>}
+          </button>
+        )}
         <button
           onClick={() => setDropdownOpen((v) => !v)}
           className="px-2 py-0.5 text-xs rounded

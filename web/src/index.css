@@ -47,6 +47,10 @@
      so alarm TEXT uses a lifted variant; fills/borders keep --c-bad.
      #dd7059 = 5.54:1 on --c-surface, 5.03:1 on --c-raised. */
   --c-bad-ink:     #dd7059;
+  /* INVALID (EPICS/ISA-101 convention): a readout with no physical meaning,
+     e.g. a reconstructed quantity with no plasma. Magenta so it is never
+     confused with an alarm. #c98bd0 = 6.3:1 on --c-surface. */
+  --c-invalid:     #c98bd0;
 
   /* Legacy aliases — kept so any component reading these via var() still
      resolves to the new palette. */
@@ -465,6 +469,7 @@ html[data-theme="retro"] {
   --c-accent: #33ff33;
   --c-accent-hi: #66ff66;
   --c-bad-ink: var(--c-bad);
+  --c-invalid: #d070d0;
 }
 
 [data-theme="retro"] body {
