@@ -266,10 +266,27 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
   v_loop: (
     <>
       <b>Loop voltage (V<sub>loop</sub>)</b> &mdash; the toroidal
-      electric field driving the plasma current, measured by flux loops.
-      In steady-state (fully driven) plasmas, V<sub>loop</sub> &rarr; 0.
-      A spike in V<sub>loop</sub> often precedes a disruption as the
-      current channel collapses.
+      electromotive force the central solenoid applies to drive the plasma
+      current, measured by flux loops. Several volts during the current
+      ramp (L<sub>p</sub>&middot;dI<sub>p</sub>/dt), a fraction of a volt in
+      flat-top (R<sub>p</sub>&middot;I<sub>p</sub>, less the bootstrap and
+      beam-driven current the solenoid need not supply), negative in
+      ramp-down. In steady-state (fully driven) plasmas, V<sub>loop</sub>
+      &rarr; 0. During a current quench it spikes to the resistive drop
+      across the cold plasma.
+    </>
+  ),
+  psi_oh: (
+    <>
+      <b>Solenoid flux (&Psi;<sub>OH</sub>)</b> &mdash; the volt-seconds
+      the central solenoid has spent, as a fraction of its swing. Every
+      tokamak pulse is a transformer pulse: the ramp-up takes the
+      inductive flux L<sub>p</sub>I<sub>p</sub> (part of which the
+      vertical-field coils supply) plus the resistive flux of the cold
+      start-up plasma, and the flat-top burns V<sub>loop</sub> every second.
+      When the swing is gone the solenoid can push no further and the
+      current decays on its resistive time, which is what ends an
+      inductive flat-top on a real machine.
     </>
   ),
   impurity_fraction: (
@@ -434,9 +451,19 @@ export const stabilityInfo = (
     </p>
     <Heading>V<sub>loop</sub> &mdash; Loop Voltage</Heading>
     <p>
-      The inductive drive. A sudden rise in V<sub>loop</sub> is a
+      The inductive drive, from the plasma circuit equation
+      L<sub>p</sub>dI<sub>p</sub>/dt + R<sub>p</sub>(I<sub>p</sub> &minus; I<sub>ni</sub>)
+      = V<sub>loop</sub>. A sudden rise in V<sub>loop</sub> is a
       precursor to current quench and disruption. In steady-state
       scenarios with full non-inductive current drive, V<sub>loop</sub> &rarr; 0.
+    </p>
+    <Heading>&Psi;<sub>OH</sub> &mdash; Solenoid Flux</Heading>
+    <p>
+      The fraction of the central solenoid's volt-second swing already
+      spent. Past 100 % the solenoid holds its flux and the current decays
+      on the resistive time: the pulse must end or be sustained
+      non-inductively. ITER's solenoid carries 277 V&middot;s; DIII-D's
+      Ohmic coil about 7.5 V&middot;s.
     </p>
     <Ref>
       Freidberg, <i>Ideal MHD</i>, Cambridge Univ. Press (2014) &mdash; stability theory.

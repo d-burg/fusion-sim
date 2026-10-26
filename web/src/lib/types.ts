@@ -110,6 +110,22 @@ export interface Snapshot {
   /** L-H power threshold (MW). */
   p_lh?: number
 
+  // Ohmic drive
+  /** Surface loop voltage (V) the poloidal-field system applies; the
+   *  resistive drop across the cold plasma during a current quench. */
+  v_loop?: number
+  /** Solenoid flux swing used so far and available (Wb = V·s). */
+  flux_consumed?: number
+  flux_budget?: number
+  /** Non-inductive current (MA): bootstrap, and beam/EC driven. */
+  i_bootstrap?: number
+  i_cd?: number
+  /** The Ohmic supply is at its voltage limit (or the flux is gone) and Ip
+   *  is not following its programme. */
+  oh_saturated?: boolean
+  /** The flux swing is used up: no more positive loop voltage. */
+  flux_exhausted?: boolean
+
   // Diagnostics
   diagnostics: DiagnosticSignals
 
@@ -145,6 +161,9 @@ export interface TracePoint {
   li: number
   q95: number
   v_loop: number
+  /** Solenoid flux used (V·s) and non-inductive current (MA). */
+  psi_oh: number
+  i_ni: number
   h_factor: number
   f_greenwald: number
   ne_ped: number

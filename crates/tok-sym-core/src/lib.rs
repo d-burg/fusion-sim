@@ -19,6 +19,8 @@
 //!   electron temperature and density profiles
 //! - **[`devices`]** — Tokamak device definitions (DIII-D, JET, ITER, CENTAUR) with
 //!   engineering parameters and wall geometry
+//! - **[`circuit`]** — Ohmic drive: the plasma circuit equation, a PCS-like
+//!   current controller, the solenoid's volt-second budget
 //! - **[`disruption`]** — Disruption risk assessment and multi-phase
 //!   disruption dynamics (precursor → thermal quench → current quench)
 //! - **[`diagnostics`]** — Synthetic diagnostic signal generation with
@@ -63,6 +65,9 @@ pub mod contour;
 
 /// OMFIT tanh-pedestal radial profile model (Te, ne, pressure).
 pub mod profiles;
+
+/// Ohmic drive circuit: solenoid flux swing, loop voltage, current control.
+pub mod circuit;
 
 /// Zero-dimensional power balance transport model.
 pub mod cooling_tables;

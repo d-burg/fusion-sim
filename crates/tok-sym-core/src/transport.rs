@@ -84,6 +84,12 @@ pub struct TransportModel {
     pub z_eff: f64,
     /// Fuel ion fraction n_fuel/n_e after dilution by the seeded species
     pub fuel_fraction: f64,
+    /// One-turn resistance (Ω) and non-inductive current (MA) supplied by
+    /// the Ohmic drive circuit for this step, so the Ohmic heating is the
+    /// same R_p·I_p·(I_p − I_ni) the loop voltage was computed from. None
+    /// falls back to the model's own volume-averaged Spitzer estimate.
+    #[serde(skip)]
+    ohmic_drive: Option<(f64, f64)>,
 }
 
 impl Default for TransportModel {
@@ -124,6 +130,7 @@ impl Default for TransportModel {
             imp_ar: 0.0,
             z_eff: 1.5,
             fuel_fraction: 1.0,
+            ohmic_drive: None,
         }
     }
 }
@@ -158,6 +165,12 @@ pub struct ProgramValues {
 }
 
 impl TransportModel {
+    /// Hand the Ohmic circuit's resistance (Ω) and non-inductive current
+    /// (MA) to the next step's power balance.
+    pub fn set_ohmic_drive(&mut self, r_plasma: f64, i_ni: f64) {
+        self.ohmic_drive = Some((r_plasma, i_ni));
+    }
+
     /// Simple xorshift RNG returning a value in [0, 1).
     fn next_rng(&mut self) -> f64 {
         let mut x = self.elm_rng_state;
@@ -302,8 +315,15 @@ impl TransportModel {
         // of the areal elongation, so κ_a is the correct factor here.
         let cross_section = std::f64::consts::PI * a * a * kappa_a;
         let resistance = eta * loop_length / cross_section; // Ω
-        self.p_ohmic = resistance * (ip * 1e6).powi(2) * 1e-6; // MW
-        self.p_ohmic = self.p_ohmic.min(5.0); // Cap for numerical stability
+        self.p_ohmic = match self.ohmic_drive {
+            // P_OH = ∫η j·(j − j_ni) dV ≈ R_p I_p (I_p − I_ni): the driven
+            // part of the current dissipates, the non-inductive part does not.
+            // Bounded at 50 MW: the resistance is floored at a 100 eV channel,
+            // which at full current on a large machine would otherwise put
+            // hundreds of megawatts into a thermal-quench step.
+            Some((r_p, i_ni)) => (r_p * ip * (ip - i_ni).max(0.0) * 1e6).min(50.0), // MW
+            None => (resistance * (ip * 1e6).powi(2) * 1e-6).min(5.0), // cap for numerical stability
+        };
 
         // ── Alpha self-heating (0D estimate for burning plasma feedback) ──
         // Gamow-peak DT reactivity parameterization (valid 2–100 keV):

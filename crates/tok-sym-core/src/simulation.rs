@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::contour::{self, Contour};
 use crate::devices::{Device, MagneticConfig};
+use crate::circuit::{self, OhmicCircuit};
 use crate::diagnostics::{DiagnosticSignals, NoiseGen};
 use crate::disruption::DisruptionModel;
 use crate::equilibrium::{CerfonEquilibrium, ShapeParams};
@@ -49,6 +50,15 @@ pub type WaveformPoint = (f64, f64);
 /// Fraction of the post-formation elongation range over which the boundary
 /// triangularity fades from its formation value (`DELTA_XPOINT_MIN`) to the
 /// programmed one.
+/// Neutral-beam current-drive figure of merit γ = n̄₂₀R₀I_cd/P_cd
+/// (10²⁰ A W⁻¹ m⁻²) at a 10 keV volume-averaged temperature. The ITER
+/// design row of the PROCESS physics paper (Kovari et al., Table 5: 1 MA
+/// beam-driven from 33 MW at n̄ = 1.0×10²⁰ m⁻³, R = 6.2 m) gives 0.19.
+const GAMMA_NBCD_10KEV: f64 = 0.2;
+/// Electron-cyclotron current-drive figure of merit at 10 keV. Taken equal
+/// to the beam value; the ITER design figure was not verified (assumption).
+const GAMMA_ECCD_10KEV: f64 = 0.2;
+
 const DELTA_FADE_SPAN: f64 = 0.3;
 
 /// Smallest boundary triangularity a diverted solve is given. The X-point
@@ -164,7 +174,10 @@ impl PulseProgram {
             // CENTAUR: 9.6 MA, 20s pulse, 30 MW ICRH, fGW = 0.65
             // NT breakeven scenario — high-field compact DT machine
             "centaur" => (device.ip_max, 20.0,  0.0,   0.0, 30.0, 0.65),
-            _         => (device.ip_max * 0.4, 10.0, 5.0, 0.0, 0.0, 0.60),
+            // DIII-D: 7 s is what its Ohmic coil's 7.5 V·s pays for at
+            // 1.2 MA with this plasma's flat-top loop voltage (~0.5 V):
+            // about 85 % of the swing. A real DIII-D shot is 5–7 s long.
+            _         => (device.ip_max * 0.4, 7.0, 5.0, 0.0, 0.0, 0.60),
         };
         // ITER and CENTAUR use full toroidal field; other devices typically
         // run slightly below max.
@@ -178,9 +191,17 @@ impl PulseProgram {
         // ITER: fast ramp (most of 100s is flat-top/burn phase)
         // JET/DIII-D: standard ramp fractions
         let (f_ramp0, f_ramp1, f_end, f_down) = match device.id.as_str() {
-            "iter"    => (0.01, 0.08, 0.88, 0.95),
-            "centaur" => (0.02, 0.20, 0.70, 0.85), // slow ramp for high-field: ~4s up, 10s flat, ~4s down
-            _         => (0.05, 0.15, 0.80, 0.90),
+            // ITER: the ramp is what the Ohmic supply can drive. 15 MA
+            // through L_p ≈ 10 µH at ~12 V is at best ~1 MA/s, so the
+            // current reaches flat-top at 25 s and takes 16 s to come down
+            // (the machine itself takes ~80 s each way); the burn phase is
+            // the ~55 s between.
+            "iter"    => (0.05, 0.25, 0.84, 0.92),
+            // CENTAUR: 0.6 MA/s through 3 µH during the first second, within
+            // the supply; the rest of the ramp at ~1.9 MA/s.
+            "centaur" => (0.05, 0.20, 0.70, 0.85), // ~4s up, 10s flat, ~4s down
+            // DIII-D: ramp 0.5/1.5 s, flat-top to 4.9 s, down from 5.95 s.
+            _         => (0.071, 0.214, 0.70, 0.85),
         };
         let (f_heat_on, f_heat_full, f_heat_off0, f_heat_off) = match device.id.as_str() {
             // ITER: keep the auxiliary heating on into the early ramp-down and
@@ -191,14 +212,18 @@ impl PulseProgram {
             // trigger suppression engages, so ~3/4 of pulses that reached the
             // ramp-down died there. Real terminations keep heating on to
             // control the H–L transition (Politzer NF 2010; de Vries NF 2018).
-            "iter"    => (0.10, 0.12, 0.88, 0.92),
+            // ITER heating comes on once Ip is at flat-top (0.25).
+            "iter"    => (0.26, 0.30, 0.84, 0.88),
             "centaur" => (0.18, 0.22, 0.68, 0.80), // ICRH on during flat-top, off before Ip ramp-down
-            _         => (0.20, 0.25, 0.75, 0.80),
+            // DIII-D: NBI on at 1.5 s, full at 1.9 s, tapering 4.7–5.2 s.
+            _         => (0.214, 0.27, 0.67, 0.74),
         };
         let (f_ne0, f_ne1, f_ne_end, f_ne_off) = match device.id.as_str() {
-            "iter"    => (0.06, 0.12, 0.88, 0.95),
+            // ITER density follows the slower current ramp, so the Greenwald
+            // fraction stays below ~0.8 while Ip is still rising.
+            "iter"    => (0.12, 0.28, 0.84, 0.92),
             "centaur" => (0.10, 0.22, 0.68, 0.82),
-            _         => (0.10, 0.20, 0.80, 0.90),
+            _         => (0.107, 0.214, 0.70, 0.85),
         };
 
         PulseProgram {
@@ -286,7 +311,11 @@ impl PulseProgram {
         // Device-specific timing for consistent ramp rates
         let (duration, t_ramp_start, t_ramp_end, t_flat_end, t_down) = match device.id.as_str() {
             "centaur" => (16.0, 1.0, 4.0, 12.0, 14.0),
-            "iter"    => (50.0, 1.0, 5.0, 40.0, 47.0),
+            // ITER: 6 MA at ≤ 0.5 MA/s, what ~12 V drives through ~10 µH.
+            "iter"    => (50.0, 4.0, 12.0, 40.0, 47.0),
+            // DIII-D: an L-mode plasma at 1.2 MA burns ~1.3 V·s per second
+            // of flat-top, so 7.5 V·s pays for ~2 s after a 4.3 V·s ramp.
+            "diiid"   => (5.5,  0.5, 1.5, 3.5,  4.5),
             _         => (8.0,  0.5, 1.5, 6.0,  7.0),
         };
         let ne_target = device.greenwald_density(ip_max) * 0.4;
@@ -353,7 +382,12 @@ impl PulseProgram {
         // CENTAUR needs longer duration for slower ramps (high-field machine)
         let (duration, t_ramp_start, t_ramp_end, t_flat_end, t_down) = match device.id.as_str() {
             "centaur" => (16.0, 1.0, 4.0, 12.0, 14.0),
-            "iter"    => (50.0, 1.0, 5.0, 40.0, 47.0),
+            // ITER: 6 MA at ≤ 0.5 MA/s, what ~12 V drives through ~10 µH.
+            "iter"    => (50.0, 4.0, 12.0, 40.0, 47.0),
+            // DIII-D keeps the 8 s timing on purpose: at 1.5 MA its Ohmic
+            // coil's 7.5 V·s is gone at ~4.5 s of this push, and the sagging
+            // current then drives the Greenwald fraction up — two limits
+            // met in one pulse, both in the event log.
             _         => (8.0,  0.5, 1.5, 6.0,  7.0),
         };
         let ne_target = device.greenwald_density(ip_max) * 1.1; // Above Greenwald!
@@ -500,6 +534,22 @@ pub struct SimulationSnapshot {
     /// L-H power threshold (MW) the transition logic compares net heating to.
     pub p_lh: f64,
 
+    // Ohmic drive
+    /// Surface loop voltage the poloidal-field system applies (V); the
+    /// resistive drop of the cold plasma during a current quench.
+    pub v_loop: f64,
+    /// Solenoid flux swing used so far (Wb) and the swing available.
+    pub flux_consumed: f64,
+    pub flux_budget: f64,
+    /// Non-inductive current (MA): bootstrap and beam/EC driven.
+    pub i_bootstrap: f64,
+    pub i_cd: f64,
+    /// The Ohmic supply is at its voltage limit (or the flux is gone) and
+    /// Ip is not following its programme.
+    pub oh_saturated: bool,
+    /// The flux swing is used up: no more positive loop voltage.
+    pub flux_exhausted: bool,
+
     // Profiles (51-point arrays, ρ = 0.00 to 1.00)
     pub te_profile: Vec<f64>,
     pub ne_profile: Vec<f64>,
@@ -595,6 +645,15 @@ pub struct Simulation {
     // Smoothed l_i (resistive timescale ~ 200ms)
     smoothed_li: f64,
 
+    // Ohmic drive: the solenoid circuit that actually carries Ip to its
+    // programme, with the flux-swing budget that ends the flat-top.
+    circuit: OhmicCircuit,
+    // Poloidal beta from the last step, for the bootstrap current.
+    beta_p: f64,
+    // Non-inductive current split (MA) from the last step: bootstrap, driven.
+    i_bootstrap: f64,
+    i_cd: f64,
+
     // Equilibrium grid resolution
     eq_nr: usize,
     eq_nz: usize,
@@ -623,6 +682,10 @@ impl Simulation {
             smoothed_p_rad_frac: 0.0,
             peak_prog_ip: 0.0,
             smoothed_li: 1.2,
+            circuit: OhmicCircuit::new(device.flux_swing_vs, device.v_loop_max),
+            beta_p: 0.0,
+            i_bootstrap: 0.0,
+            i_cd: 0.0,
             eq_nr: 48,
             eq_nz: 72,
             n_flux_surfaces: 10,
@@ -679,6 +742,29 @@ impl Simulation {
         (prog_ip / self.program_ip_peak()).clamp(0.0, 1.0)
     }
 
+    /// Non-inductive current (MA) as (bootstrap, driven) from the last step's
+    /// plasma. Bootstrap follows the ITER Physics Design Guidelines form
+    /// (Uckan et al. 1990, as given by Sakai, Fujita & Okamoto 2019 eqs 24–25):
+    /// f_bs = C_bs (√ε β_p)^1.3 with C_bs = 1.32 − 0.235 x + 0.0185 x²,
+    /// x = q95/q0, taking q0 ≈ 1. Beam and EC current drive use figures of
+    /// merit γ = n̄₂₀ R₀ I_cd / P_cd that scale with the plasma temperature
+    /// (Fisch: η_cd ∝ T_e/n_e), normalised at 10 keV. ICRF is heating only.
+    fn non_inductive_current(&self, prog: &ProgramValues) -> (f64, f64) {
+        if self.actual_ip < 0.1 || self.transport.ne_bar < 0.05 {
+            return (0.0, 0.0);
+        }
+        let eps = self.device.epsilon();
+        let x = self.transport.q95.clamp(2.0, 8.0);
+        let c_bs = 1.32 - 0.235 * x + 0.0185 * x * x;
+        let f_bs = (c_bs * (eps.sqrt() * self.beta_p.max(0.0)).powf(1.3)).min(0.9);
+        let i_bs = f_bs * self.actual_ip;
+        let te_scale = (self.profiles.te_vol_avg() / 10.0).clamp(0.0, 1.0);
+        let denom = self.transport.ne_bar * self.device.r0;
+        let i_nb = GAMMA_NBCD_10KEV * te_scale * prog.p_nbi / denom;
+        let i_ec = GAMMA_ECCD_10KEV * te_scale * prog.p_ech / denom;
+        (i_bs, i_nb + i_ec)
+    }
+
     pub fn seed_disruption(&mut self, seed: u64) {
         self.disruption.seed(seed);
     }
@@ -695,6 +781,11 @@ impl Simulation {
         self.smoothed_f_greenwald = 0.0;
         self.smoothed_p_rad_frac = 0.0;
         self.peak_prog_ip = 0.0;
+        self.smoothed_li = 1.2;
+        self.circuit.reset();
+        self.beta_p = 0.0;
+        self.i_bootstrap = 0.0;
+        self.i_cd = 0.0;
     }
 
     /// Start or resume the simulation.
@@ -725,11 +816,35 @@ impl Simulation {
         // Get programmed values
         let prog = self.program.values_at(self.time);
 
-        // ── Transport step ──
-        self.transport
-            .step(dt, &self.device, &prog, self.device.z_eff);
+        // ── Ohmic drive ──
+        // The solenoid circuit carries the current toward its programme;
+        // the transport model then sees the current that actually flows.
+        let (i_bs, i_cd) = self.non_inductive_current(&prog);
+        self.i_bootstrap = i_bs;
+        self.i_cd = i_cd;
+        let i_ni = (i_bs + i_cd).min(self.actual_ip.max(0.0));
+        let l_p = circuit::plasma_inductance(&self.device, self.smoothed_li);
+        let r_p = circuit::plasma_resistance(
+            &self.device,
+            |rho| self.profiles.te(rho),
+            |rho| self.profiles.ne(rho),
+            self.transport.q95,
+            self.transport.z_eff,
+            circuit::TE_FLOOR_DRIVE,
+        );
+        if !self.disruption.disrupted {
+            let ip_next = PulseProgram::interpolate(&self.program.ip, self.time + dt);
+            let dip_dt = (ip_next - prog.ip) / dt;
+            let psi_v = circuit::vertical_field_flux(&self.device, self.actual_ip, self.beta_p, self.smoothed_li);
+            self.circuit.step(dt, prog.ip, dip_dt, l_p, r_p, i_ni, psi_v);
+            self.actual_ip = self.circuit.ip;
+        }
+        self.transport.set_ohmic_drive(r_p, i_ni);
 
-        self.actual_ip = prog.ip;
+        // ── Transport step ──
+        let prog_driven = ProgramValues { ip: self.actual_ip, ..prog.clone() };
+        self.transport
+            .step(dt, &self.device, &prog_driven, self.device.z_eff);
 
         // ── Disruption check ──
         // Only evaluate radiation fraction when there's meaningful auxiliary
@@ -798,6 +913,19 @@ impl Simulation {
             }
             self.transport.te0 *= disruption_effects.te_multiplier;
             self.transport.w_th *= disruption_effects.te_multiplier; // Energy drops with Te
+            // The quench owns the current; the loop voltage reads the
+            // resistive drop across the cooling plasma, which is the spike a
+            // flux loop sees in a current quench.
+            let cold = (self.transport.te0 / self.profiles.te(0.0).max(1e-3)).clamp(0.0, 1.0);
+            let r_cold = circuit::plasma_resistance(
+                &self.device,
+                |rho| self.profiles.te(rho) * cold,
+                |rho| self.profiles.ne(rho),
+                self.transport.q95,
+                self.transport.z_eff,
+                circuit::TE_FLOOR_QUENCH,
+            );
+            self.circuit.override_current(self.actual_ip, r_cold);
 
             if self.actual_ip < 0.01 {
                 self.status = SimulationStatus::Disrupted;
@@ -867,6 +995,20 @@ impl Simulation {
             } else {
                 0.0
             }
+        } else {
+            0.0
+        };
+        // For the bootstrap current use the conventional β_p with the
+        // perimeter-averaged poloidal field ⟨B_p⟩ = μ₀I_p/(2πa√((1+κ²)/2));
+        // the circular-edge value above is the equilibrium's A parameter and
+        // reads ~2.5× low on an elongated plasma.
+        self.beta_p = if self.actual_ip > 0.1 {
+            let p_avg_pa = self.profiles.pressure_vol_avg() * 1.602e4;
+            let mu0 = 4.0 * std::f64::consts::PI * 1e-7;
+            let kappa = prog.kappa.max(1.0);
+            let perimeter = 2.0 * std::f64::consts::PI * self.device.a * ((1.0 + kappa * kappa) / 2.0).sqrt();
+            let bp_avg = mu0 * self.actual_ip * 1e6 / perimeter;
+            2.0 * mu0 * p_avg_pa / (bp_avg * bp_avg)
         } else {
             0.0
         };
@@ -1419,6 +1561,7 @@ impl Simulation {
             } else {
                 0.0
             },
+            self.circuit.v_loop,
             &mut noise,
         );
 
@@ -1481,6 +1624,13 @@ impl Simulation {
             risk_radiation: self.disruption.risk_radiation,
             risk_locked_mode: self.disruption.risk_locked_mode,
             p_lh: self.transport.p_lh_threshold,
+            v_loop: self.circuit.v_loop,
+            flux_consumed: self.circuit.flux_consumed,
+            flux_budget: self.circuit.flux_budget,
+            i_bootstrap: self.i_bootstrap,
+            i_cd: self.i_cd,
+            oh_saturated: self.circuit.saturated,
+            flux_exhausted: self.circuit.exhausted,
             diagnostics,
             flux_surfaces,
             separatrix,
@@ -1819,13 +1969,170 @@ mod tests {
         }
     }
 
+    /// Run a programme to its end, returning every snapshot.
+    fn run_pulse(device: Device, program: PulseProgram, seed: u64) -> Vec<SimulationSnapshot> {
+        let mut sim = Simulation::new(device, program);
+        sim.seed_disruption(seed);
+        sim.start();
+        let mut out = Vec::new();
+        loop {
+            let s = sim.step(0.005);
+            let done = s.status == SimulationStatus::Complete || s.status == SimulationStatus::Disrupted;
+            out.push(s);
+            if done {
+                break;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_driven_current_tracks_the_programme_on_every_device() {
+        // The controller holds Ip on its waveform through ramp-up and
+        // flat-top; the loop voltage is volts in the ramp, under a volt and a
+        // half on flat-top, negative in ramp-down; and no standard H-mode
+        // pulse uses up its solenoid swing (DIII-D's is sized to use ~80 %;
+        // see test_diiid_budget_ends_the_flat_top).
+        for (id, flat_v_max) in [("diiid", 0.8), ("jet", 1.5), ("iter", 0.6), ("centaur", 0.8)] {
+            let device = devices::get_device(id).unwrap();
+            let program = PulseProgram::standard_hmode(&device);
+            let peak = program.ip.iter().map(|p| p.1).fold(0.0, f64::max);
+            let snaps = run_pulse(device, program, 7);
+            let mut flat_err: f64 = 0.0;
+            let mut flat_v = Vec::new();
+            let mut ramp_v_max: f64 = 0.0;
+            let mut down_v_min: f64 = 0.0;
+            let mut psi_max: f64 = 0.0;
+            let mut saw_rampdown = false;
+            for s in &snaps {
+                if s.disrupted {
+                    break;
+                }
+                psi_max = psi_max.max(s.flux_consumed);
+                if s.prog_ip >= 0.98 * peak {
+                    flat_err = flat_err.max((s.ip - s.prog_ip).abs() / peak);
+                    flat_v.push(s.v_loop);
+                } else if s.prog_ip < 0.9 * peak && s.time > 0.5 * s.duration {
+                    saw_rampdown = true;
+                    down_v_min = down_v_min.min(s.v_loop);
+                } else {
+                    ramp_v_max = ramp_v_max.max(s.v_loop);
+                }
+            }
+            if flat_v.len() < 10 {
+                continue; // a stochastic early disruption (JET seed-dependent); nothing to check
+            }
+            let flat_mean = flat_v.iter().sum::<f64>() / flat_v.len() as f64;
+            assert!(flat_err < 0.02, "{id}: Ip off programme by {:.1} % of peak in flat-top", 100.0 * flat_err);
+            assert!(ramp_v_max > 2.0, "{id}: ramp-up loop voltage {ramp_v_max} V");
+            assert!(flat_mean > 0.05 && flat_mean < flat_v_max, "{id}: flat-top <V_loop> {flat_mean} V");
+            // (A stochastic disruption on flat-top, as JET's preset has with
+            // some seeds, never reaches the ramp-down.)
+            assert!(!saw_rampdown || down_v_min < -0.5, "{id}: ramp-down loop voltage {down_v_min} V should be negative");
+            assert!(psi_max < snaps[0].flux_budget, "{id}: used {psi_max} of {} V·s", snaps[0].flux_budget);
+            assert!(!snaps.iter().any(|s| s.flux_exhausted), "{id}: flux exhausted");
+        }
+    }
+
+    #[test]
+    fn test_flux_exhaustion_ends_the_flat_top() {
+        // A solenoid with a tenth of ITER's swing runs out during the ramp:
+        // the current then falls away from its programme, the loop voltage
+        // never goes positive again, and the alarm flags are set.
+        let mut device = devices::iter();
+        device.flux_swing_vs = 30.0;
+        let program = PulseProgram::standard_hmode(&device);
+        let snaps = run_pulse(device, program, 7);
+        let first = snaps.iter().position(|s| s.flux_exhausted).expect("flux should run out");
+        let at = &snaps[first];
+        assert!(at.time < 20.0, "exhausted at {} s", at.time);
+        assert!((at.flux_consumed - 30.0).abs() < 0.5, "Ψ {} at exhaustion", at.flux_consumed);
+        // Two seconds on, before the sagging current and the density
+        // programmed for 15 MA bring on a Greenwald disruption.
+        let later = &snaps[(first + 400).min(snaps.len() - 1)];
+        assert!(!later.disrupted, "disrupted already at {} s", later.time);
+        assert!(later.ip < 0.9 * later.prog_ip, "Ip {} should sag below programme {}", later.ip, later.prog_ip);
+        assert!(later.oh_saturated);
+        assert!(snaps[first..].iter().take(400).all(|s| s.v_loop <= 1e-9), "no positive volts after exhaustion");
+    }
+
+    #[test]
+    fn test_diiid_budget_ends_the_flat_top() {
+        // The 7.5 s DIII-D H-mode preset uses most of the Ohmic coil's
+        // 7.5 V·s but not all of it. Stretched to the planner's 10 s limit
+        // (every waveform's time axis scaled, as the planner does) the swing
+        // runs out on flat-top and the current falls away from its programme.
+        let device = devices::diiid();
+        let program = PulseProgram::standard_hmode(&device);
+        let snaps = run_pulse(device.clone(), program.clone(), 7);
+        let used = snaps.iter().map(|s| s.flux_consumed).fold(0.0, f64::max);
+        assert!(used > 0.7 * 7.5 && used < 0.9 * 7.5, "preset uses {used} of 7.5 V·s");
+        assert!(!snaps.iter().any(|s| s.flux_exhausted), "the preset must not exhaust the solenoid");
+
+        let k = 10.0 / program.duration;
+        let mut long = program.clone();
+        for wf in [&mut long.ip, &mut long.bt, &mut long.ne_target, &mut long.p_nbi, &mut long.p_ech, &mut long.p_ich, &mut long.kappa, &mut long.delta, &mut long.d2_puff, &mut long.neon_puff, &mut long.n2_puff, &mut long.argon_puff] {
+            for p in wf.iter_mut() {
+                p.0 *= k;
+            }
+        }
+        long.duration = 10.0;
+        let snaps = run_pulse(device, long, 7);
+        let first = snaps.iter().position(|s| s.flux_exhausted).expect("the 10 s pulse runs out of flux");
+        let at = &snaps[first];
+        assert!(at.time > 6.0 && at.time < 9.0, "exhaustion at {} s", at.time);
+        assert!(at.ip > 0.5, "the solenoid runs out while the plasma still carries {} MA", at.ip);
+    }
+
+    #[test]
+    fn test_supply_saturation_slows_a_fast_ramp() {
+        // Ask DIII-D for 0.6 MA in 0.1 s: 6 MA/s through 3 µH needs ~18 V,
+        // the supply has 10, so Ip lags and the controller reports it. (0.6 MA
+        // keeps q95 above the kink limit while the κ programme is still round.)
+        let device = devices::diiid();
+        let mut program = PulseProgram::standard_hmode(&device);
+        program.ip = vec![(0.0, 0.0), (0.1, 0.6), (8.0, 0.6), (9.0, 0.3), (10.0, 0.0)];
+        let snaps = run_pulse(device, program, 7);
+        let at = snaps.iter().find(|s| s.time >= 0.1).unwrap();
+        assert!(at.oh_saturated, "supply should be saturated at the end of the ramp");
+        assert!((at.v_loop - 10.0).abs() < 1e-6, "V_loop {} should sit on the 10 V limit", at.v_loop);
+        assert!(at.ip < 0.9 * 0.6, "Ip {} lags the 0.6 MA programme", at.ip);
+        let caught = snaps.iter().find(|s| s.time >= 1.0).unwrap();
+        assert!(!caught.disrupted);
+        assert!((caught.ip - 0.6).abs() < 0.02, "Ip {} should have caught up by 1 s", caught.ip);
+    }
+
+    #[test]
+    fn test_non_inductive_current_lowers_the_loop_voltage() {
+        // ITER flat-top: bootstrap plus beam/EC drive carry a few MA, so the
+        // loop voltage is below R_p·I_p by that fraction. Compare the circuit
+        // against its own resistance.
+        let device = devices::iter();
+        let program = PulseProgram::standard_hmode(&device);
+        let snaps = run_pulse(device, program, 7);
+        let s = snaps.iter().find(|s| s.time >= 60.0).unwrap();
+        let i_ni = s.i_bootstrap + s.i_cd;
+        assert!(s.i_bootstrap > 1.0 && s.i_bootstrap < 4.0, "ITER bootstrap {} MA", s.i_bootstrap);
+        assert!(s.i_cd > 0.3 && s.i_cd < 3.0, "ITER driven current {} MA", s.i_cd);
+        assert!(i_ni < 0.5 * s.ip);
+        // P_ohmic = R_p·I_p·(I_p − I_ni) and V_loop = R_p·(I_p − I_ni) on flat-top.
+        let r_from_power = s.p_ohmic / (s.ip * (s.ip - i_ni)); // MW/MA² = Ω
+        let v_expected = r_from_power * (s.ip - i_ni);
+        assert!((s.v_loop - v_expected).abs() < 0.05 * v_expected.max(0.05), "V_loop {} vs R(I−I_ni) {}", s.v_loop, v_expected);
+    }
+
     #[test]
     fn test_seeded_species_radiate_dilute_and_raise_zeff() {
         // The same DIII-D H-mode pulse seeded from 2.5 s with 0.3e20 atoms/s
-        // of nitrogen, neon or argon. At 5 s each species has built a similar
-        // core fraction; argon radiates far more in the core than neon, and
-        // neon more than nitrogen; Z_eff and the dilution rise with Z.
-        let device = devices::diiid();
+        // of nitrogen, neon or argon. At 4.5 s (late flat-top of the 7 s
+        // pulse) each species has built a similar core fraction; argon
+        // radiates far more in the core than neon, and neon more than
+        // nitrogen; Z_eff and the dilution rise with Z.
+        let mut device = devices::diiid();
+        // The species physics is compared at 5 s of flat-top; give the
+        // solenoid an unlimited swing so the flux budget does not end the
+        // flat-top first (see the drive tests for that).
+        device.flux_swing_vs = 1e9;
         let base = PulseProgram::standard_hmode(&device);
         let d = base.duration;
         let puff = vec![(0.0, 0.0), (2.5, 0.0), (3.0, 0.3), (d, 0.3)];
@@ -1845,9 +2152,10 @@ mod tests {
             sim.seed_disruption(11);
             sim.start();
             let mut s = sim.step(0.005);
-            while s.time < 5.0 {
+            while s.time < 4.5 && s.status == SimulationStatus::Running {
                 s = sim.step(0.005);
             }
+            assert_eq!(s.status, SimulationStatus::Running, "pulse ended early at {:.2} s", s.time);
             snaps.push(s);
         }
         let (plain, n, ne, ar) = (&snaps[0], &snaps[1], &snaps[2], &snaps[3]);

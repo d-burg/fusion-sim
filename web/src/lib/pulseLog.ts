@@ -33,6 +33,9 @@ export interface LogContext {
   started: boolean
   ipEstablished: boolean
   flatTop: boolean
+  /** Highest programmed Ip seen so far (MA): the engine's ramp-down test
+   *  compares against this running peak, not the programme's. */
+  progIpSeen: number
   rampDown: boolean
   elmCount: number
   /** Sim time the disruption sequence started, once it has. */
@@ -41,6 +44,9 @@ export interface LogContext {
   disruptionLabel: string | null
   /** Whether the INVALID "plasma terminated" line has been written. */
   terminatedLogged: boolean
+  /** Solenoid flux milestones already logged (one line each). */
+  fluxWarned: boolean
+  fluxExhausted: boolean
   /** Alarm keys currently raised (hysteresis). */
   alarms: Set<string>
   /** Sim time each alarm condition first became true, for the debounce. */
@@ -61,11 +67,14 @@ export function newLogContext(pulseNumber: number | null, deviceName: string, pr
     started: false,
     ipEstablished: false,
     flatTop: false,
+    progIpSeen: 0,
     rampDown: false,
     elmCount: 0,
     disruptionTime: null,
     disruptionLabel: null,
     terminatedLogged: false,
+    fluxWarned: false,
+    fluxExhausted: false,
     alarms: new Set(),
     alarmSince: new Map(),
     lastRegimeChange: -Infinity,
@@ -93,6 +102,10 @@ interface AlarmDef {
 
 const pradFrac = (s: Snapshot) => (s.p_input > 1 ? s.p_rad / s.p_input : 0)
 const pct = (x: number) => (x * 100).toFixed(0)
+/** Ip tracking error as a fraction of the programmed peak. */
+const ipError = (s: Snapshot) => Math.abs(s.ip - s.prog_ip) / Math.max(s.prog_ip_peak ?? 0, 0.1)
+/** Solenoid flux used as a fraction of the swing (0 when the engine has no budget). */
+export const fluxFraction = (s: Snapshot) => ((s.flux_budget ?? 0) > 0 ? (s.flux_consumed ?? 0) / (s.flux_budget as number) : 0)
 
 /** Threshold alarms with hysteresis so a noisy signal cannot chatter. The
  *  "on" numbers match the color thresholds used on the status panel; the
@@ -140,6 +153,14 @@ const ALARMS: AlarmDef[] = [
     on: (s) => pradFrac(s) > 0.7, off: (s) => pradFrac(s) < 0.6,
     raise: (s) => `P_rad/P_in ${pradFrac(s).toFixed(2)}, radiative collapse risk`,
     clear: 'P_rad/P_in back below 0.7',
+  },
+  {
+    // The current controller has run out of voltage (or of flux) and Ip has
+    // fallen off its programme by more than 5 % of the peak.
+    key: 'ip_tracking', severity: 'minor',
+    on: (s) => !!s.oh_saturated && ipError(s) > 0.05, off: (s) => ipError(s) < 0.02,
+    raise: (s) => `Ip ${s.ip.toFixed(2)} MA against ${s.prog_ip.toFixed(2)} MA programmed: ${s.flux_exhausted ? 'solenoid flux exhausted' : 'Ohmic supply at its voltage limit'}`,
+    clear: 'Ip back on its programme',
   },
   {
     key: 'hazard_minor', severity: 'minor',
@@ -213,9 +234,12 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
     ctx.flatTop = true
     push('info', `Ip flat-top, ${ipPeak.toFixed(2)} MA programmed`)
   }
-  // Ramp-down as the engine defines it (prog_ip under 90 % of the peak once
-  // the peak is above 0.5 MA), re-evaluated every step; logged once.
-  const inRampDown = ipPeak > 0.5 && next.prog_ip < 0.9 * ipPeak
+  // Ramp-down as the engine defines it (prog_ip under 90 % of the highest
+  // programmed value so far, once that is above 0.5 MA), re-evaluated every
+  // step; logged once. Against the programme's final peak the start of the
+  // ramp-up would count as a ramp-down.
+  ctx.progIpSeen = Math.max(ctx.progIpSeen, next.prog_ip)
+  const inRampDown = ctx.progIpSeen > 0.5 && next.prog_ip < 0.9 * ctx.progIpSeen
   if (inRampDown && !ctx.rampDown && !next.disrupted) push('info', 'Ip ramp-down')
   ctx.rampDown = inRampDown
 
@@ -311,6 +335,23 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
         ctx.alarms.delete(a.key)
         push('info', a.clear)
       }
+    }
+  }
+
+  // ── Solenoid flux ──
+  // One line at 80 % of the swing and one when it is gone; the current is
+  // no longer driven after that, whatever the programme asks for.
+  if (!next.disrupted && (next.flux_budget ?? 0) > 0) {
+    const frac = fluxFraction(next)
+    const budget = next.flux_budget as number
+    if (!ctx.fluxWarned && frac >= 0.8) {
+      ctx.fluxWarned = true
+      push('minor', `Solenoid flux ${pct(frac)} % used, Ψ ${(next.flux_consumed ?? 0).toFixed(1)} of ${budget.toFixed(1)} V·s`)
+    }
+    if (!ctx.fluxExhausted && next.flux_exhausted) {
+      ctx.fluxExhausted = true
+      push('major', `Solenoid flux exhausted, Ψ ${budget.toFixed(1)} V·s; Ip no longer driven`,
+        'The solenoid holds its flux and the current decays on the plasma\'s resistive time. End the pulse, or sustain the current non-inductively.')
     }
   }
 
@@ -489,11 +530,13 @@ export interface ReportInput {
   cause: DisruptionCause | undefined
   disruptionTime: number | null
   elmCount: number
+  /** Solenoid flux swing (V·s), for the flux row. */
+  fluxBudget?: number
 }
 
 /** Achieved-versus-programmed summary of a finished pulse. */
 export function buildReport(input: ReportInput): ReportRow[] {
-  const { history, programJson, disrupted, cause, disruptionTime, elmCount } = input
+  const { history, programJson, disrupted, cause, disruptionTime, elmCount, fluxBudget } = input
   if (history.length === 0) return []
   let program: PulseProgram | null = null
   try {
@@ -509,6 +552,8 @@ export function buildReport(input: ReportInput): ReportRow[] {
   // Time-weighted statistics over the recorded trace.
   const dtOf = (i: number) => (i > 0 ? history[i].t - history[i - 1].t : 0)
   let flatIpSum = 0, flatT = 0
+  let flatVSum = 0
+  let psiMax = 0
   let tH = 0
   let wMax = 0, betaMax = 0, fgwMax = 0, q95Min = Infinity, pFusMax = 0, qMax = 0
   for (let i = 0; i < history.length; i++) {
@@ -516,8 +561,10 @@ export function buildReport(input: ReportInput): ReportRow[] {
     const dt = dtOf(i)
     if (ipPeakProg > 0 && interp(ipProg, p.t) >= 0.98 * ipPeakProg) {
       flatIpSum += p.ip * dt
+      flatVSum += (p.v_loop ?? 0) * dt
       flatT += dt
     }
+    psiMax = Math.max(psiMax, p.psi_oh ?? 0)
     if (p.in_hmode) tH += dt
     wMax = Math.max(wMax, p.w_th)
     pFusMax = Math.max(pFusMax, p.p_fus)
@@ -548,6 +595,18 @@ export function buildReport(input: ReportInput): ReportRow[] {
     achieved: `${ipFlat.toFixed(2)} MA`,
     status: ipPeakProg > 0 && Math.abs(ipFlat - ipPeakProg) > 0.05 * ipPeakProg ? 'minor' : 'ok',
   })
+  if (flatT > 0) {
+    rows.push({ label: 'Flat-top V_loop', achieved: `${(flatVSum / flatT).toFixed(2)} V` })
+  }
+  if (fluxBudget && fluxBudget > 0) {
+    const frac = psiMax / fluxBudget
+    rows.push({
+      label: 'Solenoid flux',
+      programmed: `${fluxBudget.toFixed(1)} V·s`,
+      achieved: `${psiMax.toFixed(1)} V·s (${pct(Math.min(frac, 1))} %)`,
+      status: frac >= 1 ? 'major' : frac > 0.8 ? 'minor' : 'ok',
+    })
+  }
   rows.push({ label: 'Peak W_th', achieved: `${wMax.toFixed(2)} MJ` })
   rows.push({
     label: 'Peak βN',

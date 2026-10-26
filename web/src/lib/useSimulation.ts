@@ -295,6 +295,8 @@ export function useSimulation(
         li: s.li,
         q95: s.q95,
         v_loop: s.diagnostics.v_loop,
+        psi_oh: s.flux_consumed ?? 0,
+        i_ni: (s.i_bootstrap ?? 0) + (s.i_cd ?? 0),
         h_factor: s.h_factor,
         f_greenwald: s.f_greenwald,
         ne_ped: s.ne_ped,

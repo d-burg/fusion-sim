@@ -191,6 +191,14 @@ pub struct Device {
     /// captured by generic scalings: wall conditioning, NBI deposition
     /// geometry, divertor closure, etc. 1.0 = unmodified.
     pub confinement_factor: f64,
+    /// Poloidal-field (central solenoid) flux swing available to drive the
+    /// plasma current, in weber (volt-seconds). Charged with ∫V_loop dt over
+    /// the pulse; when it is used up the flat-top ends (see `circuit`).
+    pub flux_swing_vs: f64,
+    /// Loop-voltage rating of the Ohmic supply at the plasma (V): the most
+    /// the current controller can apply, so a ramp faster than
+    /// V_max/L_p leaves Ip lagging its programme.
+    pub v_loop_max: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -684,6 +692,12 @@ pub fn diiid() -> Device {
         },
         p_lh_factor: 1.0, // well-characterized; Martin scaling fits DIII-D data directly
         confinement_factor: 1.0,
+        // 7.5 V·s: the Ohmic (E-coil) design swing restored after the 1997
+        // lead reinforcement (DIII-D Research Operations Annual Report FY1997,
+        // GA-A22827). The 10 V supply limit is an assumption of order the
+        // 0.2–0.3 V/m start-up fields DIII-D reports.
+        flux_swing_vs: 7.5,
+        v_loop_max: 10.0,
     }
 }
 
@@ -746,6 +760,11 @@ pub fn iter() -> Device {
         // Target P_LH ≈ 30–35 MW so net_heating (≈40 MW) crosses threshold.
         p_lh_factor: 0.35,
         confinement_factor: 1.0,
+        // 277 V·s is the central solenoid's maximum flux swing (Mann et al.,
+        // ITER CS cold test facility, SOFE 2009). The 12 V limit is the
+        // 0.3 V/m start-up field around 2πR₀ (IPB 2007 ch. 8).
+        flux_swing_vs: 277.0,
+        v_loop_max: 12.0,
     }
 }
 
@@ -793,6 +812,11 @@ pub fn jet() -> Device {
         // and ILW wall conditioning. 1.25× brings P_fus into the 5-15 MW
         // range consistent with DTE2/DTE3 results.
         confinement_factor: 1.35,
+        // ~34 V·s is the figure quoted for JET's poloidal-field system at
+        // start-up (Europhysics News 1983) — NOT verified against a primary
+        // source; treat as an estimate. 12 V supply limit assumed.
+        flux_swing_vs: 34.0,
+        v_loop_max: 12.0,
     }
 }
 
@@ -876,6 +900,11 @@ pub fn centaur() -> Device {
         // the ELM penalty. High factor keeps the plasma in L-mode.
         p_lh_factor: 3.0,
         confinement_factor: 1.0,
+        // SPARC's CS + PF set gives 42 Wb for 8.7 MA at R₀ = 1.85 m (Creely
+        // et al. 2020 §4.1); CENTAUR carries 9.6 MA at 2.0 m, so its budget
+        // is scaled by R₀·I_p: 42 × (2.0·9.6)/(1.85·8.7) ≈ 50 Wb. 12 V assumed.
+        flux_swing_vs: 50.0,
+        v_loop_max: 12.0,
     }
 }
 

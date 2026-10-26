@@ -93,6 +93,7 @@ export default function ControlRoom() {
       cause: state.snapshot?.disruption_cause,
       disruptionTime: state.disruptionTime,
       elmCount: state.elmCount,
+      fluxBudget: state.snapshot?.flux_budget,
     })
   }, [finished, history, programJson, state.snapshot, state.disruptionTime, state.elmCount])
 
