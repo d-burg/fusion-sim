@@ -482,12 +482,13 @@ export const divertorInfo = (
       with no size dependence: harder with power, easier with plasma current,
       shaping and density. The model uses that form, calibrated on their
       ASDEX Upgrade case, with the fuel and wall impurities counted as an
-      equivalent 0.3% core neon and the seeded neon added to it. Unseeded,
-      a DIII-D-size divertor is half detached at f<sub>GW</sub> = 0.7; an
-      unseeded ITER flat-top is attached and needs of order 1% core neon,
-      close to its impurity collapse threshold. Over-seed and the core
-      radiation fraction climbs toward collapse. The divertor row reports
-      Attached / Partial / Detached at f<sub>det</sub> = 0.3 and 0.6.
+      equivalent 0.2% core neon and the seeded neon added to it. Unseeded,
+      a DIII-D-size divertor is half detached at f<sub>GW</sub> = 0.7, and
+      the large machines are no longer detached for free at high density.
+      Seeded impurities radiate mostly in the divertor, so only 30% of their
+      radiation is charged to the core; over-seed and that core share still
+      climbs toward collapse. The divertor row reports Attached / Partial /
+      Detached at f<sub>det</sub> = 0.3 and 0.6.
     </p>
 
     <Heading>Surface Temperature</Heading>
@@ -698,7 +699,7 @@ export const eventLogInfo = (
     </p>
     <Heading>Severities</Heading>
     <p>
-      Nominal sequence events are uncoloured. A green dot marks a favourable
+      Nominal sequence events are uncolored. A green dot marks a favorable
       transition. <b>MINOR</b> (amber) means a limit is being approached
       (f<sub>GW</sub> &gt; 0.8, β<sub>N</sub> &gt; 2.5, q<sub>95</sub> &lt; 2.5,
       hazard &gt; 30 %/s); <b>MAJOR</b> (red) means it has been reached.

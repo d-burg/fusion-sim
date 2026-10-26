@@ -24,10 +24,10 @@ export function paramRange(param: ScalarParam, deviceVolume: number | undefined)
   if (!param.scalesWithVolume || !deviceVolume || deviceVolume <= 0) {
     return { min: param.min, max: param.max, step: param.step }
   }
-  const k = deviceVolume / REFERENCE_VOLUME
-  // Keep the step a round multiple of the base step
-  const step = param.step * Math.max(1, Math.round(k))
-  return { min: param.min * k, max: param.max * k, step }
+  // One decimal in the scale factor keeps max an exact multiple of step
+  // (the base max is one), so number inputs never flag the range invalid.
+  const k = Math.max(0.1, Math.round((deviceVolume / REFERENCE_VOLUME) * 10) / 10)
+  return { min: param.min * k, max: param.max * k, step: param.step * k }
 }
 
 export type MagneticConfig = 'LowerSingleNull' | 'DoubleNull' | 'UpperSingleNull'

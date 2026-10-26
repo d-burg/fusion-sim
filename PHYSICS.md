@@ -213,29 +213,41 @@ cooling that does this is set by the upstream density, which is itself tied
 to the Greenwald limit, and find that the impurity fraction required for
 detachment scales as
 
-    c_z,det ∝ P_sep / [ <B_p> (1 + κ²)^(3/2) (n_sep / n_GW)² ]
-    <B_p>   = μ0 I_p / [ 2π a √((1 + κ²)/2) ]
+    c_z,det ∝ P_sep / [ <B_p> (1 + κ95²)^(3/2) (n_sep / n_GW)² ]
+    <B_p>   = μ0 I_p / [ 2π a √((1 + κ95²)/2) ]
 
 with no explicit dependence on machine size (their eq. 9). The model uses
-this form with its constant fixed by their ASDEX Upgrade comparison case:
-P_sep = 10.7 MW, <B_p> = 0.34 T, κ = 1.63, n_sep/n_GW = 0.486, detached at
-c_N = 4 % in the divertor (their Table 2). P_sep is the transport loss
-power less core radiation, floored at the Martin L-H threshold power at the
-present density: the scaling was built on H-mode SOL widths and heat
-fluxes, below that power its threshold fraction collapses toward zero and
-would call a cold ohmic ramp-up fully detached, and pinning P_sep to P_LH
-is also how Reinke (Nucl. Fusion 57, 2017, 034004) applies the scaling to
-reactors. Three stated assumptions convert the calibration to the
-quantities the engine carries:
+this form with its constant fixed by their comparison case, the ASDEX
+Upgrade model case of Kallenbach et al. (PPCF 58, 2016, 045013),
+calibrated against AUG data and partially detached: P_sep = 10.7 MW,
+<B_p> = 0.34 T, κ95 = 1.63, n_sep/n_GW = 0.486, c_N = 4 % in the divertor
+(their Table 2). The devices here carry the separatrix elongation; the
+model maps it to κ95 ≈ 1 + 0.75 (κ_sep − 1), which reproduces ITER's 1.8.
+
+P_sep is the transport loss power less core radiation, floored at the
+engine's own H-L back-transition power, 0.8 P_LH (the device-adjusted
+Martin threshold the transport model uses). The scaling was built on
+H-mode SOL widths and heat fluxes and its threshold fraction vanishes as
+P_sep → 0, which would call a cold ohmic ramp-up fully detached; with the
+floor the scaling is applied as published throughout H-mode and only the
+L-mode and ohmic phases are regularized. Where the floor is active the
+density dependence is weaker than f_GW², because P_LH rises with density.
+The floor applies only where H-mode is accessible at all (P_LH within the
+heating power): CENTAUR's negative-triangularity edge carries a threshold
+factor of 3 precisely so that it never is, and takes the scaling as is.
+
+Three stated assumptions convert the calibration to the quantities the
+engine carries:
 
 - the separatrix density is taken as n_sep = 0.6 n̄_e (the engine carries
   the line-averaged Greenwald fraction);
-- neon dissipates a given parallel heat flux at about half the fraction
-  nitrogen needs over 100–300 eV (GRS fig. 1: the detachable q_∥ goes as
-  √F_z and the neon curve sits ~1.4× above nitrogen);
+- neon dissipates a given parallel heat flux at a smaller fraction than
+  nitrogen: at the calibration case's impurity lifetime (nτ = 5e16 s/m³)
+  GRS fig. 1d puts neon about 1.9× above nitrogen in q_det/(n √F_z), that
+  is about 3.6× in F_z; taken as 3.5;
 - the divertor is enriched in neon relative to the core by a factor of
-  about 3, the order found in ITER divertor modelling. The engine's seeded
-  fraction is the core fraction.
+  about 3 (an assumption; the engine's seeded fraction is the core
+  fraction).
 
 Seeded impurities are injected to radiate in the divertor and scrape-off
 layer, where the cold dense plasma makes them radiate most. The transport
@@ -243,23 +255,15 @@ model therefore books only 30 % of its seeded-impurity radiation inside
 the separatrix, where it costs confinement, counts toward the L-H
 threshold and feeds the radiation-fraction hazard; the remaining 70 % is
 taken to be dissipated between the separatrix and the target, which is
-what f_detach represents. Intrinsic and fuel radiation are unchanged, so
-unseeded pulses are unaffected.
-
-Known limitation: the seeded-impurity radiation coefficient is hand-tuned
-to DIII-D seeding rates and scales as n_e² V, so on the dense, large
-machines (CENTAUR, ITER) a core neon fraction well below the detachment
-threshold already radiates more than the heating power. Seeding on those
-machines in the current engine ends in a radiative collapse before the
-divertor detaches, and their unseeded H-mode flat-tops now show the
-attached, overheated targets the scaling implies. Reconciling the two
-calibrations per device is a follow-up.
+what f_detach represents. The P_rad readouts and the bolometer show the
+core part only. Intrinsic and fuel radiation are unchanged, so unseeded
+pulses are unaffected by the split.
 
 Intrinsic radiators (fuel Balmer and Lyman light, wall impurities) are
-represented as an equivalent core neon fraction c_int = 0.3 %, chosen so
-that an unseeded DIII-D-like H-mode (P_sep 4.4 MW, 1.5 MA) is half
-detached at f_GW = 0.7, where the earlier density-only sigmoid put it.
-Then
+represented as an equivalent core neon fraction c_int, defined as the
+threshold of an unseeded DIII-D-like H-mode (1.5 MA, a = 0.56 m,
+κ_sep = 1.7, P_sep = 4.4 MW) at f_GW = 0.7, about 0.2 %, so that pulse is
+half detached there, where the earlier density-only sigmoid put it. Then
 
     D = (c_int + c_z) / c_z,det
     f_detach = min(1 − 1 / (1 + D³), 0.97)
@@ -269,16 +273,27 @@ the same (f_GW/f_0)^6 shape as the earlier model. What is new: detachment
 gets harder with separatrix power and easier with plasma current (poloidal
 field) and shaping, as the scaling says; seeding (c_z from the neon puff in
 the transport model, 0.5 s confinement) can bring it on at any density;
-and the large machines are no longer detached for free. An unseeded ITER
-flat-top at 90 MW through the separatrix is attached and needs core neon
-of order 1 % to detach, which is below ITER's impurity collapse threshold
-(1.5 %) but not by much: a seeded ITER lives between the two limits, which
-is the real design problem. Over-seeding on any machine takes the core
-past its collapse threshold and the radiation-fraction hazard rises.
+and the large machines are no longer detached for free at high density.
+Through the engine at 60 % of each H-mode preset: an unseeded DIII-D
+flat-top (P_sep 3.9 MW, f_GW 0.55) is 15 % detached (19 % before) and
+0.3e20/s of neon takes it to 82 % while it stays in H-mode with a core
+radiated fraction of 0.25; an unseeded ITER flat-top (P_sep 36 MW,
+f_GW 0.8) is 25 % detached (69 % before) with the target at about
+16 MW/m², and needs about 0.3 % core neon, well below its 1.5 % collapse
+threshold; CENTAUR (P_sep 28 MW) is 22 % detached unseeded (39 % before)
+and 92 % with 0.9e20/s of neon.
 
 The planner's gas channels (D₂ puff, neon seeding) scale their range with
 plasma volume so the same fraction is reachable on every machine; the
 numbers are in 10²⁰ particles per second.
+
+Known limitation: the seeded-impurity radiation coefficient is hand-tuned
+to DIII-D seeding rates and scales as n_e² V, so on the dense, large
+machines (CENTAUR, ITER) a core neon fraction well below the detachment
+threshold already radiates more than the heating power. Seeding on those
+machines in the current engine ends in a radiative collapse before the
+divertor detaches. Reconciling the two calibrations per device is a
+follow-up.
 
 Maximum detachment reduces the target heat flux by 97 %. The port view
 draws the radiation front moving up the divertor leg with f_detach, and the
@@ -287,7 +302,7 @@ f_detach = 0.3 and 0.6.
 
 **References:**
 - Goldston, Reinke and Schwartz, Plasma Phys. Control. Fusion 59 (2017) 055015
-- Reinke, Nucl. Fusion 57 (2017) 034004 (P_sep pinned to the L-H threshold)
+- Kallenbach et al., Plasma Phys. Control. Fusion 58 (2016) 045013 (the calibration case)
 - Martin et al., J. Phys.: Conf. Ser. 123 (2008) 012033 (L-H threshold scaling)
 
 ---

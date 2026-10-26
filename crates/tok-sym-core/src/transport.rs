@@ -184,6 +184,7 @@ impl TransportModel {
             self.p_loss = 0.0;
             self.p_ohmic = 0.0;
             self.p_rad = 0.0;
+            self.p_rad_div = 0.0;
             self.in_hmode = false;
             return;
         }

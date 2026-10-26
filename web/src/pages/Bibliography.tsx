@@ -74,6 +74,14 @@ const REFERENCES: Ref[] = [
     doi: '10.1088/1361-6587/aa5e6e',
   },
   {
+    id: 'kallenbach2016',
+    authors: 'A. Kallenbach et al.',
+    title: 'Analytical calculations for impurity seeded partially detached divertor conditions',
+    journal: 'Plasma Phys. Control. Fusion 58, 045013',
+    year: 2016,
+    doi: '10.1088/0741-3335/58/4/045013',
+  },
+  {
     id: 'martin2008',
     authors: 'Y. R. Martin, T. Takizuka, and the ITPA CDBM H-mode Threshold Database Working Group',
     title: 'Power requirement for accessing the H-mode in ITER',
@@ -541,18 +549,21 @@ export default function Bibliography() {
             to the Greenwald limit, and find the impurity fraction required for detachment scales as
           </p>
           <Eq>
-            {'c_z,det ∝ P_sep / [ <B_p> (1 + κ²)^(3/2) (n_sep / n_GW)² ],   <B_p> = μ₀ I_p / [2π a √((1+κ²)/2)]'}
+            {'c_z,det ∝ P_sep / [ <B_p> (1 + κ₉₅²)^(3/2) (n_sep / n_GW)² ],   <B_p> = μ₀ I_p / [2π a √((1+κ₉₅²)/2)]'}
           </Eq>
           <p>
-            with no explicit size dependence (their eq. 9). The constant is fixed by their ASDEX Upgrade
-            comparison case (P<sub>sep</sub> 10.7 MW, &lt;B<sub>p</sub>&gt; 0.34 T, &kappa; 1.63,
+            with no explicit size dependence (their eq. 9). The constant is fixed by their comparison
+            case, the ASDEX Upgrade model case of Kallenbach et al.<RefTag id="kallenbach2016" />
+            (P<sub>sep</sub> 10.7 MW, &lt;B<sub>p</sub>&gt; 0.34 T, &kappa;<sub>95</sub> 1.63,
             n<sub>sep</sub>/n<sub>GW</sub> 0.486, c<sub>N</sub> = 4% in the divertor). P<sub>sep</sub>
-            is floored at the Martin L-H threshold power<RefTag id="martin2008" /> at the present density,
-            as Reinke does when applying the scaling to reactors. Three stated assumptions map it onto
-            the engine: n<sub>sep</sub> = 0.6 n̄<sub>e</sub>; neon needs about
-            half the fraction nitrogen does (their fig. 1); and a divertor neon enrichment of about 3
-            over the core fraction the engine carries. Intrinsic radiators count as an equivalent 0.3%
-            core neon, c<sub>int</sub>, chosen so an unseeded DIII-D-like H-mode is half detached at
+            is floored at the engine&rsquo;s H-L back-transition power, 0.8 P<sub>LH</sub> from the
+            device-adjusted Martin scaling,<RefTag id="martin2008" /> so the scaling is applied as published
+            throughout H-mode and only ohmic and L-mode phases are regularized (no floor where H-mode is
+            out of reach of the heating, as on CENTAUR&rsquo;s negative-triangularity edge). Three stated assumptions
+            map it onto the engine: n<sub>sep</sub> = 0.6 n̄<sub>e</sub>; neon needs about 3.5&times; less
+            than nitrogen (their fig. 1d at the calibration lifetime); and a divertor neon enrichment of
+            about 3 over the core fraction the engine carries. Intrinsic radiators count as an equivalent
+            0.2% core neon, c<sub>int</sub>, the threshold of an unseeded DIII-D-like H-mode at
             f<sub>GW</sub> = 0.7:
           </p>
           <Eq>
@@ -562,8 +573,9 @@ export default function Bibliography() {
             At fixed power the density dependence keeps the (f<sub>GW</sub>/f₀)⁶ shape of the earlier
             model; detachment now also gets harder with separatrix power and easier with plasma current
             and shaping, and seeding can bring it on at any density. c<sub>z</sub> accumulates from the
-            neon puff in the transport model with a 0.5 s confinement time; above the device&rsquo;s
-            impurity collapse threshold the core radiation fraction climbs toward collapse.
+            neon puff in the transport model with a 0.5 s confinement time; 70% of its radiation is
+            booked in the divertor and 30% in the core, and above the device&rsquo;s impurity collapse
+            threshold the core radiation fraction climbs toward collapse.
           </p>
         </Section>
 

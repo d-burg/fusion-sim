@@ -9,8 +9,8 @@ import type { PulseProgram, WaveformPoint } from './wasm'
 
 /* ─── Events ─────────────────────────────────────────────── */
 
-/** EPICS/ISA-101 style severities. `info` is uncoloured (nominal sequence),
- *  `ok` a favourable transition, `minor`/`major` alarms, `invalid` a
+/** EPICS/ISA-101 style severities. `info` is uncolored (nominal sequence),
+ *  `ok` a favorable transition, `minor`/`major` alarms, `invalid` a
  *  readout that has stopped meaning anything. */
 export type Severity = 'info' | 'ok' | 'minor' | 'major' | 'invalid'
 
@@ -95,7 +95,7 @@ const pradFrac = (s: Snapshot) => (s.p_input > 1 ? s.p_rad / s.p_input : 0)
 const pct = (x: number) => (x * 100).toFixed(0)
 
 /** Threshold alarms with hysteresis so a noisy signal cannot chatter. The
- *  "on" numbers match the colour thresholds used on the status panel; the
+ *  "on" numbers match the color thresholds used on the status panel; the
  *  βN band is wide enough that a Type I ELM crash (5–13 % of W) does not
  *  toggle it. */
 const ALARMS: AlarmDef[] = [
@@ -445,7 +445,7 @@ export interface ReportRow {
   label: string
   programmed?: string
   achieved: string
-  /** Colour hint: a limit was approached (minor) or exceeded (major). */
+  /** Color hint: a limit was approached (minor) or exceeded (major). */
   status?: 'ok' | 'minor' | 'major'
 }
 
