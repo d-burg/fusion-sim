@@ -39,15 +39,15 @@ function run(seq: Snapshot[]): LogEvent[] {
 }
 const texts = (ev: LogEvent[]) => ev.map((e) => e.text)
 
-// ── Flux milestones: one line at 80 %, one at exhaustion, never repeated ──
+// ── Flux milestones: one line at 90 %, one at exhaustion, never repeated ──
 {
-  const seq = [0.5, 0.7, 0.81, 0.85, 0.95].map((f, i) => snap({ time: 2 + i, flux_consumed: 7.5 * f }))
+  const seq = [0.5, 0.7, 0.85, 0.91, 0.95].map((f, i) => snap({ time: 2 + i, flux_consumed: 7.5 * f }))
   seq.push(snap({ time: 7, flux_consumed: 7.5, flux_exhausted: true, oh_saturated: true, ip: 1.15 }))
   seq.push(snap({ time: 7.5, flux_consumed: 7.5, flux_exhausted: true, oh_saturated: true, ip: 1.0 }))
   const ev = run(seq)
-  const warn = ev.filter((e) => e.text.startsWith('Solenoid flux 8'))
-  assert(warn.length === 1 && warn[0].severity === 'minor', `one 80 % line, got ${JSON.stringify(texts(ev))}`)
-  assert(warn[0].text.includes('81 % used') && warn[0].text.includes('6.1 of 7.5 V·s'), warn[0].text)
+  const warn = ev.filter((e) => e.text.startsWith('Solenoid flux 9'))
+  assert(warn.length === 1 && warn[0].severity === 'minor', `one 90 % line, got ${JSON.stringify(texts(ev))}`)
+  assert(warn[0].text.includes('91 % used') && warn[0].text.includes('6.8 of 7.5 V·s'), warn[0].text)
   const gone = ev.filter((e) => e.text.startsWith('Solenoid flux exhausted'))
   assert(gone.length === 1 && gone[0].severity === 'major' && gone[0].t === 7, `one exhaustion line, got ${JSON.stringify(texts(ev))}`)
   assert(!!gone[0].detail && gone[0].detail.includes('resistive time'), 'exhaustion detail')
@@ -69,7 +69,7 @@ const texts = (ev: LogEvent[]) => ev.map((e) => e.text)
   assert(raised[0].text.startsWith('Ip 1.10 MA against 1.20 MA programmed'), raised[0].text)
   // 1.15 MA is a 4 % error (inside the 5 % raise, outside the 2 % clear);
   // 1.19 MA is back within 2 % and clears it.
-  const cleared = ev.filter((e) => e.text === 'Ip back on its programme')
+  const cleared = ev.filter((e) => e.text === 'Ip back on its program')
   assert(cleared.length === 1 && cleared[0].t === 1.5, `cleared once at 1.5 s, got ${JSON.stringify(ev.map((e) => [e.t, e.text]))}`)
   // With the flux gone the same alarm names the cause.
   ev = run([base, sat(1.05, 1.0, true), sat(1.1, 1.0, true), sat(1.2, 1.0, true)])
@@ -109,10 +109,19 @@ const texts = (ev: LogEvent[]) => ev.map((e) => e.text)
   const vRow = rows.find((r) => r.label === 'Flat-top V_loop')
   assert(!!vRow && vRow.achieved === '0.80 V', `flat-top V row: ${JSON.stringify(vRow)}`)
   const fRow = rows.find((r) => r.label === 'Solenoid flux')
-  assert(!!fRow && fRow.programmed === '7.5 V·s' && fRow.achieved === '7.5 V·s (100 %)' && fRow.status === 'major', `flux row: ${JSON.stringify(fRow)}`)
+  assert(!!fRow && fRow.programmed === '7.5 V·s' && fRow.achieved === '7.5 V·s (100 %), exhausted' && fRow.status === 'major', `flux row: ${JSON.stringify(fRow)}`)
   const rows2 = buildReport({ history: history.map((p) => ({ ...p, psi_oh: p.psi_oh * 0.6 })), programJson: program, disrupted: false, cause: '', disruptionTime: null, elmCount: 0, fluxBudget: 7.5 })
   const fRow2 = rows2.find((r) => r.label === 'Solenoid flux')
   assert(!!fRow2 && fRow2.achieved === '4.5 V·s (60 %)' && fRow2.status === 'ok', `flux row at 60 %: ${JSON.stringify(fRow2)}`)
+  // Exhausted at any point counts as exhausted, even if the trace peaked just under the budget.
+  const rows4 = buildReport({ history: history.map((p) => ({ ...p, psi_oh: Math.min(p.psi_oh, 7.49) })), programJson: program, disrupted: false, cause: '', disruptionTime: null, elmCount: 0, fluxBudget: 7.5, fluxExhausted: true })
+  const fRow4 = rows4.find((r) => r.label === 'Solenoid flux')
+  assert(!!fRow4 && fRow4.achieved === '7.5 V·s (100 %), exhausted' && fRow4.status === 'major', `exhausted row: ${JSON.stringify(fRow4)}`)
+  // The flat-top loop-voltage mean stops at the disruption, so the quench spike stays out of it.
+  const spiked = history.map((p) => (p.t >= 6 ? { ...p, v_loop: 200 } : p))
+  const rows5 = buildReport({ history: spiked, programJson: program, disrupted: true, cause: 'density_limit', disruptionTime: 6, elmCount: 0, fluxBudget: 7.5 })
+  const vRow5 = rows5.find((r) => r.label === 'Flat-top V_loop')
+  assert(!!vRow5 && vRow5.achieved === '0.80 V', `flat-top V row with a quench: ${JSON.stringify(vRow5)}`)
   // No budget known (older engine): no flux row, V row still present.
   const rows3 = buildReport({ history, programJson: program, disrupted: false, cause: '', disruptionTime: null, elmCount: 0 })
   assert(!rows3.some((r) => r.label === 'Solenoid flux'), 'no flux row without a budget')

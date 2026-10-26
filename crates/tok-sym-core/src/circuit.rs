@@ -15,12 +15,13 @@
 //!
 //! A plasma-current controller stands in for the machine's PCS: feed-forward
 //! of the resistive and inductive demand plus a PI correction on the error
-//! against the programmed waveform, clamped to the supply's loop-voltage
+//! against the programd waveform, clamped to the supply's loop-voltage
 //! limit. Everything the solenoid applies is charged to its flux swing,
 //! ∫V_loop dt, and when the swing is used up the solenoid can no longer push:
-//! V_loop is held at or below zero and the current decays on the L/R time
-//! until the programmed ramp-down brings the voltage negative and the flux
-//! is recovered. That is what ends an inductive flat-top on a real machine.
+//! V_loop is held at or below zero and the current decays on the
+//! (L_p − L_v)/R time, L_v being the vertical-field coils' share, until the
+//! programd ramp-down brings the voltage negative and the flux is
+//! recovered. That is what ends an inductive flat-top on a real machine.
 //!
 //! The volt-second bookkeeping follows the usual decomposition (Ejima et al.
 //! 1982): the swing feeds the inductive flux L_p I_p and the resistive flux
@@ -49,16 +50,20 @@ pub const TE_FLOOR_DRIVE: f64 = 0.1;
 /// plasma: tens of eV, where the resistive spike of a current quench lives.
 pub const TE_FLOOR_QUENCH: f64 = 0.01;
 
-/// External normalised inductance Λ_ext = ln(8R₀/(a√κ)) − 2 of a shaped
+/// External normalized inductance Λ_ext = ln(8R₀/(a√κ)) − 2 of a shaped
 /// torus (the large-aspect-ratio result with the elongated cross-section's
 /// effective radius a√κ).
 pub fn lambda_ext(device: &Device) -> f64 {
     (8.0 * device.r0 / (device.a * device.kappa.sqrt())).ln() - 2.0
 }
 
-/// Plasma self-inductance L_p = μ₀R₀(Λ_ext + l_i/2) in henry.
-pub fn plasma_inductance(device: &Device, li: f64) -> f64 {
-    MU0 * device.r0 * (lambda_ext(device) + 0.5 * li)
+/// Plasma self-inductance L_p = μ₀R₀(Λ_ext + l_i/2) in henry, with
+/// Λ_ext = ln(8R₀/(a√κ)) − 2 at the present elongation `kappa` (the round
+/// start-up plasma carries ~20 % more external inductance than the shaped
+/// flat-top one).
+pub fn plasma_inductance(device: &Device, kappa: f64, li: f64) -> f64 {
+    let k = kappa.max(1.0);
+    MU0 * device.r0 * ((8.0 * device.r0 / (device.a * k.sqrt())).ln() - 2.0 + 0.5 * li)
 }
 
 /// Effective trapped fraction of a circular flux surface at inverse aspect
@@ -140,8 +145,9 @@ pub fn plasma_resistance(
 /// not have to: ψ_v ≈ B_v πR₀² with the Shafranov vertical field
 /// B_v = μ₀I_p/(4πR₀)[ln(8R₀/a) + β_p + l_i/2 − 3/2] (Wesson, as restated in
 /// the PROCESS physics paper). It is the standard reason the solenoid's
-/// swing can be much smaller than L_p I_p: on ITER it covers ~70 Vs of the
-/// ~110 Vs external inductive flux at 15 MA.
+/// swing can be much smaller than L_p I_p: on ITER at 15 MA (β_p 0.7,
+/// l_i 0.85) B_v ≈ 0.74 T and ψ_v ≈ 84 Vs against ~110 Vs of external
+/// inductive flux.
 pub fn vertical_field_flux(device: &Device, ip_ma: f64, beta_p: f64, li: f64) -> f64 {
     if ip_ma <= 0.0 {
         return 0.0;
@@ -182,7 +188,7 @@ pub struct OhmicCircuit {
     /// Non-inductive current used in the last step (MA)
     pub i_ni: f64,
     /// The supply hit its voltage limit (or the exhausted-flux clamp) in the
-    /// last step, so the current is no longer tracking its programme.
+    /// last step, so the current is no longer tracking its program.
     pub saturated: bool,
     /// The flux swing is used up: the solenoid cannot drive positive volts.
     pub exhausted: bool,
@@ -215,22 +221,28 @@ impl OhmicCircuit {
     }
 
     /// Advance the circuit by `dt` with the controller tracking `ip_prog`
-    /// (MA, with programmed slope `dip_prog_dt` MA/s), given the plasma
+    /// (MA, with programd slope `dip_prog_dt` MA/s), given the plasma
     /// inductance `l` (H), resistance `r` (Ω), non-inductive current
     /// `i_ni` (MA) and the vertical-field flux `psi_v` (Wb) the equilibrium
     /// coils supply at the present current.
     pub fn step(&mut self, dt: f64, ip_prog: f64, dip_prog_dt: f64, l: f64, r: f64, i_ni: f64, psi_v: f64) {
+        // The inductance of the previous step: with l_i evolving, the circuit
+        // conserves d(L I)/dt, so a change in L moves flux at fixed current.
+        let l_old = if self.l_plasma > 0.0 { self.l_plasma } else { l };
         self.l_plasma = l;
         self.r_plasma = r;
         self.i_ni = i_ni;
+        let i_old = self.ip * 1e6; // A
 
         // Controller: feed-forward of what the circuit needs to follow the
-        // programme, plus PI action on the tracking error. Gains scale with
-        // L_p so the closed-loop time constant is the same on every machine.
+        // program (resistive drop, programd dI/dt, and the I dL/dt of a
+        // changing current profile), plus PI action on the tracking error.
+        // Gains scale with L_p so the closed-loop time constant is the same
+        // on every machine.
         let err = (ip_prog - self.ip) * 1e6; // A
         let kp = l / TAU_CONTROL; // V/A
         let ki = kp / TAU_INTEGRAL; // V/(A·s)
-        let v_ff = r * (self.ip - i_ni) * 1e6 + l * dip_prog_dt * 1e6;
+        let v_ff = r * (self.ip - i_ni) * 1e6 + l * dip_prog_dt * 1e6 + (l - l_old) * i_old / dt;
         let v_cmd = v_ff + kp * err + self.integral;
 
         // Supply limit: the loop-voltage rating.
@@ -238,37 +250,41 @@ impl OhmicCircuit {
 
         // Circuit equation, backward Euler so a cold (fast L/R) plasma is
         // stable at the simulation step:
-        //   (L + R dt) I_new = L I_old + dt (V + R I_ni)
-        let i_old = self.ip * 1e6;
-        let mut i_new = (l * i_old + dt * (v + r * i_ni * 1e6)) / (l + r * dt);
+        //   (L_new + R dt) I_new = L_old I_old + dt (V + R I_ni)
+        let solve = |v: f64| (l_old * i_old + dt * (v + r * i_ni * 1e6)) / (l + r * dt);
+        let mut i_new = solve(v);
 
         // Flux limit: once the swing is used up the solenoid holds its flux,
         // and the only loop voltage left is what the vertical-field coils
-        // induce as they follow the current down, V = L_v dI/dt with
-        // L_v = ψ_v/I_p. The current then decays on the (L_p − L_v)/R time,
-        // faster than the plain L/R time, which is the known penalty of an
-        // exhausted solenoid. A programme that asks for a steeper fall
-        // (ramp-down) is free to take it, recovering flux as it goes.
-        // `room` is the flux the solenoid can still push this step. ψ_v is
-        // evaluated at the step's starting current, so once exhausted the
-        // pin drifts by a fraction of a volt-second either way; a 2 % band
-        // keeps that from reading as fresh room (and a step of volts). A real
-        // ramp-down recovers far more than that and un-exhausts the solenoid.
+        // induce as they follow the current, V = L_v dI/dt with L_v = ψ_v/I_p:
+        //   (L_new − L_v + R dt) I_new = (L_old − L_v) I_old + dt R I_ni.
+        // The current then decays on the (L_p − L_v)/R time, faster than the
+        // plain L/R time, which is the known penalty of an exhausted
+        // solenoid. The exhausted state latches until the program asks for
+        // a steeper fall than the held solenoid gives (a ramp-down), which
+        // recovers flux; while held, the solenoid flux is pinned at the
+        // budget by construction, so the vertical-field share's drift with
+        // β_p and l_i can neither free up room nor fire the supply again.
+        let l_v = if i_old > 1e3 { (psi_v / i_old).clamp(0.0, 0.8 * l) } else { 0.0 };
+        let i_held = ((l_old - l_v) * i_old + dt * r * i_ni * 1e6) / (l - l_v + r * dt);
+        let v_held = l_v * (i_held - i_old) / dt;
+        // `room` is the flux the solenoid can still push this step.
         let room = self.flux_budget + psi_v - self.flux_loop;
-        self.exhausted = room <= 0.0 || (self.exhausted && room < 0.02 * self.flux_budget);
+        let at_limit = room <= 0.0 || self.exhausted;
+        self.exhausted = at_limit && v_cmd >= v_held;
         if self.exhausted {
-            let l_v = if i_old > 1e3 { (psi_v / i_old).clamp(0.0, 0.8 * l) } else { 0.0 };
-            let l_eff = l - l_v;
-            let i_held = (l_eff * i_old + dt * r * i_ni * 1e6) / (l_eff + r * dt);
-            let v_held = l_v * (i_held - i_old) / dt;
-            if v > v_held {
-                v = v_held;
-                i_new = i_held;
+            v = v_held;
+            i_new = i_held;
+            // Pin: the solenoid flux stays at the budget, the loop integral
+            // carries only the vertical-field share ψ_v ≈ L_v I.
+            self.flux_loop = self.flux_budget + l_v * i_new;
+        } else {
+            if !at_limit && v * dt > room {
+                // Land exactly on the budget rather than overshooting it by a step.
+                v = room / dt;
+                i_new = solve(v);
             }
-        } else if v * dt > room {
-            // Land exactly on the budget rather than overshooting it by a step.
-            v = room / dt;
-            i_new = (l * i_old + dt * (v + r * i_ni * 1e6)) / (l + r * dt);
+            self.flux_loop = (self.flux_loop + v * dt).max(0.0);
         }
         self.saturated = (v - v_cmd).abs() > 1e-9;
         // Anti-windup: integrate only while the output is free, or while the
@@ -279,7 +295,6 @@ impl OhmicCircuit {
 
         self.ip = (i_new * 1e-6).max(0.0);
         self.v_loop = v;
-        self.flux_loop = (self.flux_loop + v * dt).max(0.0);
         self.flux_consumed = (self.flux_loop - psi_v).max(0.0);
     }
 
@@ -313,12 +328,15 @@ mod tests {
     fn inductance_matches_hand_values() {
         // DIII-D: Λ_ext = ln(8·1.67/(0.56·√1.7)) − 2 ≈ 0.91, L_p ≈ μ₀·1.67·(0.91 + 0.5·1.0)
         let d = devices::diiid();
-        let l = plasma_inductance(&d, 1.0);
+        let l = plasma_inductance(&d, d.kappa, 1.0);
         assert!((lambda_ext(&d) - 0.91).abs() < 0.02, "Λ_ext {}", lambda_ext(&d));
         assert!((l - 2.96e-6).abs() < 0.1e-6, "L_p {l}");
+        // Round start-up plasma: ~20 % more external inductance.
+        let round = plasma_inductance(&d, 1.0, 1.0);
+        assert!(round > 1.1 * l && round < 1.3 * l, "round L_p {round} vs shaped {l}");
         // ITER: ~10 µH at l_i = 0.85
         let i = devices::iter();
-        let li = plasma_inductance(&i, 0.85);
+        let li = plasma_inductance(&i, i.kappa, 0.85);
         assert!(li > 9.5e-6 && li < 11.5e-6, "ITER L_p {li}");
     }
 
@@ -376,11 +394,13 @@ mod tests {
 
     #[test]
     fn vertical_field_carries_most_of_the_external_flux() {
-        // ITER at 15 MA: B_v ≈ 0.6 T, ψ_v ≈ 70 Vs against L_ext·I_p ≈ 110 Vs.
+        // ITER at 15 MA, β_p 0.7, l_i 0.85: bracket = ln(28.2) + 0.7 + 0.425
+        // − 1.5 = 2.97, B_v = 1e-7·15e6/6·2.97 = 0.74 T, ψ_v = B_v·π·36 = 84 Vs,
+        // against L_ext·I_p ≈ 110 Vs.
         let d = devices::iter();
         let psi_v = vertical_field_flux(&d, 15.0, 0.7, 0.85);
         let l_ext_ip = MU0 * d.r0 * lambda_ext(&d) * 15e6;
-        assert!(psi_v > 60.0 && psi_v < 85.0, "ψ_v {psi_v}");
+        assert!((psi_v - 84.0).abs() < 2.0, "ψ_v {psi_v}");
         assert!(psi_v < l_ext_ip, "ψ_v {psi_v} must stay below L_ext I_p {l_ext_ip}");
         assert_eq!(vertical_field_flux(&d, 0.0, 0.7, 0.85), 0.0);
     }
@@ -388,7 +408,7 @@ mod tests {
     #[test]
     fn controller_tracks_a_ramp_and_charges_the_flux() {
         let d = devices::diiid();
-        let l = plasma_inductance(&d, 1.0);
+        let l = plasma_inductance(&d, d.kappa, 1.0);
         let r = 2.0e-7;
         let mut c = OhmicCircuit::new(100.0, 20.0);
         let dt = 0.005;
@@ -411,7 +431,7 @@ mod tests {
     #[test]
     fn saturation_slows_the_ramp_and_exhaustion_stops_the_drive() {
         let d = devices::diiid();
-        let l = plasma_inductance(&d, 1.0);
+        let l = plasma_inductance(&d, d.kappa, 1.0);
         let r = 2.0e-7;
         // 2 V cannot ramp at 10 MA/s through 3 µH.
         let mut c = OhmicCircuit::new(100.0, 2.0);
@@ -452,8 +472,8 @@ mod tests {
         }
         assert!(held.exhausted && free.exhausted);
         assert!(held.v_loop < 0.0, "held V {}", held.v_loop);
-        // ψ_v is evaluated at the step's starting current, so the pin drifts
-        // by ~L_v·ΔI per step; 0.5 % over 200 steps is the bookkeeping limit.
+        // Pinned by construction up to one step's L_v·ΔI (≈ 0.005 Wb here:
+        // the current falls 3.3 kA per step through L_v = 1.5 µH).
         assert!((held.flux_consumed - 2.0).abs() < 0.01, "pinned Ψ {}", held.flux_consumed);
         assert!(held.ip < free.ip, "held {} should decay faster than free {}", held.ip, free.ip);
         let tau_eff = (l - l_v) / r_fast;
@@ -462,9 +482,64 @@ mod tests {
     }
 
     #[test]
+    fn exhausted_solenoid_stays_held_through_vertical_field_drift() {
+        // The vertical-field share drifts with β_p and l_i while the plasma
+        // sits exhausted. That must never read as fresh room: no positive
+        // volts until the program itself asks for a ramp-down.
+        let d = devices::diiid();
+        let l = plasma_inductance(&d, d.kappa, 1.0);
+        let r = 5.0e-7;
+        let mut c = OhmicCircuit::new(5.0, 10.0);
+        c.ip = 1.2;
+        c.flux_loop = 5.0 + 1.5; // consumed = loop − ψ_v(1.5) = budget
+        let mut positive = 0;
+        for k in 0..2000 {
+            // ψ_v wanders ±10 % about L_v·I with a slow wobble.
+            let l_v = 1.25e-6 * (1.0 + 0.1 * (k as f64 / 150.0).sin());
+            c.step(0.005, 1.2, 0.0, l, r, 0.0, l_v * c.ip * 1e6);
+            assert!(c.exhausted, "step {k}: un-latched with Ip {}", c.ip);
+            if c.v_loop > 1e-9 {
+                positive += 1;
+            }
+        }
+        assert_eq!(positive, 0, "positive loop voltage while exhausted");
+        assert!(c.ip < 0.5, "the held current should have decayed: {}", c.ip);
+        // A ramp-down command releases the latch and recovers flux.
+        for _ in 0..200 {
+            c.step(0.005, 0.0, -2.0, l, r, 0.0, 1.25e-6 * c.ip * 1e6);
+        }
+        assert!(!c.exhausted);
+        assert!(c.flux_consumed < 5.0);
+    }
+
+    #[test]
+    fn falling_internal_inductance_releases_flux() {
+        // d(L I)/dt: with the current held on its program, a drop in l_i
+        // (L_p falls) must show up as a negative loop voltage, i.e. flux
+        // handed back, equal to I·ΔL.
+        let d = devices::diiid();
+        let r = 0.0;
+        // A generous supply so the whole I·ΔL can be handed back in one step.
+        let mut c = OhmicCircuit::new(100.0, 100.0);
+        c.ip = 1.2;
+        c.flux_loop = 10.0;
+        c.l_plasma = plasma_inductance(&d, d.kappa, 1.2);
+        let l_lo = plasma_inductance(&d, d.kappa, 0.9);
+        let before = c.flux_loop;
+        // One step at the lower inductance, then settle at it.
+        for _ in 0..400 {
+            c.step(0.005, 1.2, 0.0, l_lo, r, 0.0, 0.0);
+        }
+        let released = before - c.flux_loop;
+        let expect = 1.2e6 * (plasma_inductance(&d, d.kappa, 1.2) - l_lo);
+        assert!((c.ip - 1.2).abs() < 1e-3, "Ip {}", c.ip);
+        assert!((released - expect).abs() < 0.05 * expect, "released {released} Wb vs I·ΔL {expect}");
+    }
+
+    #[test]
     fn non_inductive_current_reduces_the_loop_voltage() {
         let d = devices::iter();
-        let l = plasma_inductance(&d, 0.85);
+        let l = plasma_inductance(&d, d.kappa, 0.85);
         let r = 3.0e-9;
         let mut full = OhmicCircuit::new(1000.0, 20.0);
         let mut half = OhmicCircuit::new(1000.0, 20.0);

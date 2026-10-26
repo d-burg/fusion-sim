@@ -106,6 +106,8 @@ const pct = (x: number) => (x * 100).toFixed(0)
 const ipError = (s: Snapshot) => Math.abs(s.ip - s.prog_ip) / Math.max(s.prog_ip_peak ?? 0, 0.1)
 /** Solenoid flux used as a fraction of the swing (0 when the engine has no budget). */
 export const fluxFraction = (s: Snapshot) => ((s.flux_budget ?? 0) > 0 ? (s.flux_consumed ?? 0) / (s.flux_budget as number) : 0)
+/** Fraction of the swing at which the log and the readout start warning. */
+export const FLUX_WARN = 0.9
 
 /** Threshold alarms with hysteresis so a noisy signal cannot chatter. The
  *  "on" numbers match the color thresholds used on the status panel; the
@@ -160,7 +162,7 @@ const ALARMS: AlarmDef[] = [
     key: 'ip_tracking', severity: 'minor',
     on: (s) => !!s.oh_saturated && ipError(s) > 0.05, off: (s) => ipError(s) < 0.02,
     raise: (s) => `Ip ${s.ip.toFixed(2)} MA against ${s.prog_ip.toFixed(2)} MA programmed: ${s.flux_exhausted ? 'solenoid flux exhausted' : 'Ohmic supply at its voltage limit'}`,
-    clear: 'Ip back on its programme',
+    clear: 'Ip back on its program',
   },
   {
     key: 'hazard_minor', severity: 'minor',
@@ -339,12 +341,13 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
   }
 
   // ── Solenoid flux ──
-  // One line at 80 % of the swing and one when it is gone; the current is
-  // no longer driven after that, whatever the programme asks for.
+  // One line at 90 % of the swing and one when it is gone; the current is
+  // no longer driven after that, whatever the program asks for. (The
+  // standard DIII-D and CENTAUR pulses are sized to use 85–90 %.)
   if (!next.disrupted && (next.flux_budget ?? 0) > 0) {
     const frac = fluxFraction(next)
     const budget = next.flux_budget as number
-    if (!ctx.fluxWarned && frac >= 0.8) {
+    if (!ctx.fluxWarned && frac >= FLUX_WARN) {
       ctx.fluxWarned = true
       push('minor', `Solenoid flux ${pct(frac)} % used, Ψ ${(next.flux_consumed ?? 0).toFixed(1)} of ${budget.toFixed(1)} V·s`)
     }
@@ -532,11 +535,14 @@ export interface ReportInput {
   elmCount: number
   /** Solenoid flux swing (V·s), for the flux row. */
   fluxBudget?: number
+  /** Whether the swing ran out at any point (the engine releases the
+   *  exhausted state again in ramp-down, so the last snapshot cannot say). */
+  fluxExhausted?: boolean
 }
 
 /** Achieved-versus-programmed summary of a finished pulse. */
 export function buildReport(input: ReportInput): ReportRow[] {
-  const { history, programJson, disrupted, cause, disruptionTime, elmCount, fluxBudget } = input
+  const { history, programJson, disrupted, cause, disruptionTime, elmCount, fluxBudget, fluxExhausted } = input
   if (history.length === 0) return []
   let program: PulseProgram | null = null
   try {
@@ -552,7 +558,7 @@ export function buildReport(input: ReportInput): ReportRow[] {
   // Time-weighted statistics over the recorded trace.
   const dtOf = (i: number) => (i > 0 ? history[i].t - history[i - 1].t : 0)
   let flatIpSum = 0, flatT = 0
-  let flatVSum = 0
+  let flatVSum = 0, flatVT = 0
   let psiMax = 0
   let tH = 0
   let wMax = 0, betaMax = 0, fgwMax = 0, q95Min = Infinity, pFusMax = 0, qMax = 0
@@ -561,8 +567,13 @@ export function buildReport(input: ReportInput): ReportRow[] {
     const dt = dtOf(i)
     if (ipPeakProg > 0 && interp(ipProg, p.t) >= 0.98 * ipPeakProg) {
       flatIpSum += p.ip * dt
-      flatVSum += (p.v_loop ?? 0) * dt
       flatT += dt
+      // The loop-voltage mean stops at the disruption: a current quench
+      // reads hundreds of volts and would swamp a sub-volt flat-top.
+      if (disruptionTime === null || p.t < disruptionTime) {
+        flatVSum += (p.v_loop ?? 0) * dt
+        flatVT += dt
+      }
     }
     psiMax = Math.max(psiMax, p.psi_oh ?? 0)
     if (p.in_hmode) tH += dt
@@ -595,16 +606,17 @@ export function buildReport(input: ReportInput): ReportRow[] {
     achieved: `${ipFlat.toFixed(2)} MA`,
     status: ipPeakProg > 0 && Math.abs(ipFlat - ipPeakProg) > 0.05 * ipPeakProg ? 'minor' : 'ok',
   })
-  if (flatT > 0) {
-    rows.push({ label: 'Flat-top V_loop', achieved: `${(flatVSum / flatT).toFixed(2)} V` })
+  if (flatVT > 0) {
+    rows.push({ label: 'Flat-top V_loop', achieved: `${(flatVSum / flatVT).toFixed(2)} V` })
   }
   if (fluxBudget && fluxBudget > 0) {
-    const frac = psiMax / fluxBudget
+    const gone = !!fluxExhausted || psiMax >= fluxBudget
+    const frac = gone ? 1 : psiMax / fluxBudget
     rows.push({
       label: 'Solenoid flux',
       programmed: `${fluxBudget.toFixed(1)} V·s`,
-      achieved: `${psiMax.toFixed(1)} V·s (${pct(Math.min(frac, 1))} %)`,
-      status: frac >= 1 ? 'major' : frac > 0.8 ? 'minor' : 'ok',
+      achieved: `${(gone ? fluxBudget : psiMax).toFixed(1)} V·s (${pct(frac)} %)${gone ? ', exhausted' : ''}`,
+      status: gone ? 'major' : frac > FLUX_WARN ? 'minor' : 'ok',
     })
   }
   rows.push({ label: 'Peak W_th', achieved: `${wMax.toFixed(2)} MJ` })

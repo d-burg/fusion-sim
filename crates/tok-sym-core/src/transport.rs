@@ -90,6 +90,12 @@ pub struct TransportModel {
     /// falls back to the model's own volume-averaged Spitzer estimate.
     #[serde(skip)]
     ohmic_drive: Option<(f64, f64)>,
+    /// Programmed current (MA) when the circuit drives the actual one: the
+    /// ramp-down heuristics below (confinement fade, β_N cap) are about the
+    /// programmed termination, not about a current that sags because the
+    /// solenoid ran out of flux or a quench is under way.
+    #[serde(skip)]
+    ip_programmed: Option<f64>,
 }
 
 impl Default for TransportModel {
@@ -131,6 +137,7 @@ impl Default for TransportModel {
             z_eff: 1.5,
             fuel_fraction: 1.0,
             ohmic_drive: None,
+            ip_programmed: None,
         }
     }
 }
@@ -166,9 +173,11 @@ pub struct ProgramValues {
 
 impl TransportModel {
     /// Hand the Ohmic circuit's resistance (Ω) and non-inductive current
-    /// (MA) to the next step's power balance.
-    pub fn set_ohmic_drive(&mut self, r_plasma: f64, i_ni: f64) {
+    /// (MA) to the next step's power balance, and the programmed current
+    /// (MA) its ramp-down heuristics should read.
+    pub fn set_ohmic_drive(&mut self, r_plasma: f64, i_ni: f64, ip_programmed: f64) {
         self.ohmic_drive = Some((r_plasma, i_ni));
+        self.ip_programmed = Some(ip_programmed);
     }
 
     /// Simple xorshift RNG returning a value in [0, 1).
@@ -507,19 +516,22 @@ impl TransportModel {
             self.tau_e *= 1.05;
         }
 
-        // Track peak Ip for rampdown detection
-        if ip > self.ip_peak {
-            self.ip_peak = ip;
+        // Track peak Ip for rampdown detection. With a driven current this
+        // reads the programme, so a current sagging on an exhausted solenoid
+        // or in a quench is not mistaken for the programmed termination.
+        let ip_ref = self.ip_programmed.unwrap_or(ip);
+        if ip_ref > self.ip_peak {
+            self.ip_peak = ip_ref;
         }
         // Rampdown confinement degradation: as Ip drops below its peak,
         // edge transport barrier weakens and confinement degrades toward
         // L-mode. This prevents β_N and Q from spiking during rampdown
         // because W_th decays faster as confinement drops.
         let mut h_eff = self.h_factor;
-        if self.ip_peak > 0.5 && ip < 0.90 * self.ip_peak {
+        if self.ip_peak > 0.5 && ip_ref < 0.90 * self.ip_peak {
             // Linear degradation from current h_factor toward 0.4 (below L-mode)
             // as Ip drops from 90% to 30% of peak
-            let ramp_frac = ((ip / self.ip_peak) - 0.30).max(0.0) / 0.60;
+            let ramp_frac = ((ip_ref / self.ip_peak) - 0.30).max(0.0) / 0.60;
             h_eff = 0.4 + (self.h_factor - 0.4) * ramp_frac;
         }
 
@@ -708,7 +720,7 @@ impl TransportModel {
         };
         // Fade β_N during rampdown: suppress the 1/Ip divergence smoothly
         let ip_fade = if self.ip_peak > 0.5 {
-            ((ip / self.ip_peak - 0.10) / 0.70).clamp(0.0, 1.0)
+            ((ip_ref / self.ip_peak - 0.10) / 0.70).clamp(0.0, 1.0)
         } else {
             1.0
         };
@@ -717,7 +729,7 @@ impl TransportModel {
         let max_rise = self.beta_n + 0.01;
         let new_beta_n = clamped.min(max_rise).max(0.0);
         // Track peak only during flat-top (Ip near peak)
-        if new_beta_n > self.beta_n_peak && ip > self.ip_peak * 0.90 {
+        if new_beta_n > self.beta_n_peak && ip_ref > self.ip_peak * 0.90 {
             self.beta_n_peak = new_beta_n;
         }
         // Cap at peak to prevent rampdown overshoot

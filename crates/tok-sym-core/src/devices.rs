@@ -814,8 +814,11 @@ pub fn jet() -> Device {
         confinement_factor: 1.35,
         // ~34 V·s is the figure quoted for JET's poloidal-field system at
         // start-up (Europhysics News 1983) — NOT verified against a primary
-        // source; treat as an estimate. 12 V supply limit assumed.
-        flux_swing_vs: 34.0,
+        // source; treat as an estimate. That is the whole PF set; the
+        // circuit credits the vertical-field coils' share separately
+        // (ψ_v ≈ 9 Wb at 3.5 MA), so the solenoid's own swing is ~25 V·s.
+        // 12 V supply limit assumed.
+        flux_swing_vs: 25.0,
         v_loop_max: 12.0,
     }
 }
@@ -901,9 +904,11 @@ pub fn centaur() -> Device {
         p_lh_factor: 3.0,
         confinement_factor: 1.0,
         // SPARC's CS + PF set gives 42 Wb for 8.7 MA at R₀ = 1.85 m (Creely
-        // et al. 2020 §4.1); CENTAUR carries 9.6 MA at 2.0 m, so its budget
-        // is scaled by R₀·I_p: 42 × (2.0·9.6)/(1.85·8.7) ≈ 50 Wb. 12 V assumed.
-        flux_swing_vs: 50.0,
+        // et al. 2020 §4.1); CENTAUR carries 9.6 MA at 2.0 m, so the set
+        // scales by R₀·I_p to 42 × (2.0·9.6)/(1.85·8.7) ≈ 50 Wb. The circuit
+        // credits the vertical-field coils' share separately (ψ_v ≈ 16 Wb at
+        // 9.6 MA), so the solenoid's own swing is 50 − 16 ≈ 34 Wb. 12 V assumed.
+        flux_swing_vs: 34.0,
         v_loop_max: 12.0,
     }
 }

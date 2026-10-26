@@ -50,6 +50,8 @@ pub type WaveformPoint = (f64, f64);
 /// Fraction of the post-formation elongation range over which the boundary
 /// triangularity fades from its formation value (`DELTA_XPOINT_MIN`) to the
 /// programmed one.
+const DELTA_FADE_SPAN: f64 = 0.3;
+
 /// Neutral-beam current-drive figure of merit γ = n̄₂₀R₀I_cd/P_cd
 /// (10²⁰ A W⁻¹ m⁻²) at a 10 keV volume-averaged temperature. The ITER
 /// design row of the PROCESS physics paper (Kovari et al., Table 5: 1 MA
@@ -59,7 +61,6 @@ const GAMMA_NBCD_10KEV: f64 = 0.2;
 /// to the beam value; the ITER design figure was not verified (assumption).
 const GAMMA_ECCD_10KEV: f64 = 0.2;
 
-const DELTA_FADE_SPAN: f64 = 0.3;
 
 /// Smallest boundary triangularity a diverted solve is given. The X-point
 /// boundary conditions put the X-point at x = 1 − 1.01·δ·ε, so as δ → 0 it
@@ -163,7 +164,7 @@ impl PulseProgram {
 
     /// Create a standard H-mode pulse program for a given device.
     /// Parameters based on real operating scenarios:
-    ///   DIII-D: 1.2 MA, 5 MW NBI, 10s
+    ///   DIII-D: 1.2 MA, 5 MW NBI, 7s (what its 7.5 V·s Ohmic swing pays for)
     ///   ITER:  15 MA, 33 MW NBI + 20 MW ECH, 100s
     ///   JET:   2.5 MA, 25 MW NBI + 4 MW ICRH, 20s
     pub fn standard_hmode(device: &Device) -> Self {
@@ -197,8 +198,8 @@ impl PulseProgram {
             // (the machine itself takes ~80 s each way); the burn phase is
             // the ~55 s between.
             "iter"    => (0.05, 0.25, 0.84, 0.92),
-            // CENTAUR: 0.6 MA/s through 3 µH during the first second, within
-            // the supply; the rest of the ramp at ~1.9 MA/s.
+            // CENTAUR: 2.9 MA/s through 3 µH during the first second sits
+            // just under the 12 V supply; the rest of the ramp at ~2.2 MA/s.
             "centaur" => (0.05, 0.20, 0.70, 0.85), // ~4s up, 10s flat, ~4s down
             // DIII-D: ramp 0.5/1.5 s, flat-top to 4.9 s, down from 5.95 s.
             _         => (0.071, 0.214, 0.70, 0.85),
@@ -314,8 +315,9 @@ impl PulseProgram {
             // ITER: 6 MA at ≤ 0.5 MA/s, what ~12 V drives through ~10 µH.
             "iter"    => (50.0, 4.0, 12.0, 40.0, 47.0),
             // DIII-D: an L-mode plasma at 1.2 MA burns ~1.3 V·s per second
-            // of flat-top, so 7.5 V·s pays for ~2 s after a 4.3 V·s ramp.
-            "diiid"   => (5.5,  0.5, 1.5, 3.5,  4.5),
+            // of flat-top, so 7.5 V·s pays for under 2 s after a 4.3 V·s ramp
+            // (this uses ~87 % of the swing).
+            "diiid"   => (5.25, 0.5, 1.5, 3.25, 4.25),
             _         => (8.0,  0.5, 1.5, 6.0,  7.0),
         };
         let ne_target = device.greenwald_density(ip_max) * 0.4;
@@ -823,7 +825,7 @@ impl Simulation {
         self.i_bootstrap = i_bs;
         self.i_cd = i_cd;
         let i_ni = (i_bs + i_cd).min(self.actual_ip.max(0.0));
-        let l_p = circuit::plasma_inductance(&self.device, self.smoothed_li);
+        let l_p = circuit::plasma_inductance(&self.device, prog.kappa, self.smoothed_li);
         let r_p = circuit::plasma_resistance(
             &self.device,
             |rho| self.profiles.te(rho),
@@ -833,13 +835,13 @@ impl Simulation {
             circuit::TE_FLOOR_DRIVE,
         );
         if !self.disruption.disrupted {
-            let ip_next = PulseProgram::interpolate(&self.program.ip, self.time + dt);
-            let dip_dt = (ip_next - prog.ip) / dt;
+            let ip_prev = PulseProgram::interpolate(&self.program.ip, self.time - dt);
+            let dip_dt = (prog.ip - ip_prev) / dt;
             let psi_v = circuit::vertical_field_flux(&self.device, self.actual_ip, self.beta_p, self.smoothed_li);
             self.circuit.step(dt, prog.ip, dip_dt, l_p, r_p, i_ni, psi_v);
             self.actual_ip = self.circuit.ip;
         }
-        self.transport.set_ohmic_drive(r_p, i_ni);
+        self.transport.set_ohmic_drive(r_p, i_ni, prog.ip);
 
         // ── Transport step ──
         let prog_driven = ProgramValues { ip: self.actual_ip, ..prog.clone() };
@@ -2047,21 +2049,28 @@ mod tests {
         let at = &snaps[first];
         assert!(at.time < 20.0, "exhausted at {} s", at.time);
         assert!((at.flux_consumed - 30.0).abs() < 0.5, "Ψ {} at exhaustion", at.flux_consumed);
-        // Two seconds on, before the sagging current and the density
-        // programmed for 15 MA bring on a Greenwald disruption.
-        let later = &snaps[(first + 400).min(snaps.len() - 1)];
+        // A second on (the sagging current soon meets the density and β
+        // limits programmed for 15 MA and disrupts).
+        let later = &snaps[(first + 200).min(snaps.len() - 1)];
         assert!(!later.disrupted, "disrupted already at {} s", later.time);
-        assert!(later.ip < 0.9 * later.prog_ip, "Ip {} should sag below programme {}", later.ip, later.prog_ip);
+        assert!(later.ip < 0.95 * later.prog_ip, "Ip {} should sag below program {}", later.ip, later.prog_ip);
         assert!(later.oh_saturated);
-        assert!(snaps[first..].iter().take(400).all(|s| s.v_loop <= 1e-9), "no positive volts after exhaustion");
+        // No positive volts from the exhausted solenoid for the rest of the
+        // pulse (until the program ramps down or the plasma disrupts).
+        let peak = snaps[first].prog_ip_peak;
+        let bad = snaps[first..].iter()
+            .take_while(|s| !s.disrupted && s.prog_ip >= 0.9 * peak)
+            .filter(|s| s.v_loop > 1e-9)
+            .count();
+        assert_eq!(bad, 0, "positive loop voltage after exhaustion");
     }
 
     #[test]
     fn test_diiid_budget_ends_the_flat_top() {
-        // The 7.5 s DIII-D H-mode preset uses most of the Ohmic coil's
+        // The 7 s DIII-D H-mode preset uses most of the Ohmic coil's
         // 7.5 V·s but not all of it. Stretched to the planner's 10 s limit
         // (every waveform's time axis scaled, as the planner does) the swing
-        // runs out on flat-top and the current falls away from its programme.
+        // runs out while the plasma still carries its current.
         let device = devices::diiid();
         let program = PulseProgram::standard_hmode(&device);
         let snaps = run_pulse(device.clone(), program.clone(), 7);
@@ -2103,29 +2112,47 @@ mod tests {
     }
 
     #[test]
-    fn test_non_inductive_current_lowers_the_loop_voltage() {
-        // ITER flat-top: bootstrap plus beam/EC drive carry a few MA, so the
-        // loop voltage is below R_p·I_p by that fraction. Compare the circuit
-        // against its own resistance.
+    fn test_flat_top_loop_voltage_accounts_for_non_inductive_current() {
+        // ITER flat-top: bootstrap plus beam/EC drive carry a few MA, and the
+        // loop voltage is R_p (I_p − I_ni) plus the I·dL/dt of the slowly
+        // relaxing current profile, with R_p the same resistance the Ohmic
+        // heating P_OH = R_p I_p (I_p − I_ni) was computed from.
         let device = devices::iter();
         let program = PulseProgram::standard_hmode(&device);
-        let snaps = run_pulse(device, program, 7);
-        let s = snaps.iter().find(|s| s.time >= 60.0).unwrap();
+        let snaps = run_pulse(device.clone(), program, 7);
+        let k = snaps.iter().position(|s| s.time >= 60.0).expect("ITER preset should still be running at 60 s");
+        let (prev, s) = (&snaps[k - 1], &snaps[k]);
+        assert!(!s.disrupted);
         let i_ni = s.i_bootstrap + s.i_cd;
         assert!(s.i_bootstrap > 1.0 && s.i_bootstrap < 4.0, "ITER bootstrap {} MA", s.i_bootstrap);
         assert!(s.i_cd > 0.3 && s.i_cd < 3.0, "ITER driven current {} MA", s.i_cd);
         assert!(i_ni < 0.5 * s.ip);
-        // P_ohmic = R_p·I_p·(I_p − I_ni) and V_loop = R_p·(I_p − I_ni) on flat-top.
-        let r_from_power = s.p_ohmic / (s.ip * (s.ip - i_ni)); // MW/MA² = Ω
-        let v_expected = r_from_power * (s.ip - i_ni);
-        assert!((s.v_loop - v_expected).abs() < 0.05 * v_expected.max(0.05), "V_loop {} vs R(I−I_ni) {}", s.v_loop, v_expected);
+        // Resistive drop R_p (I_p − I_ni) = P_OH / I_p (MW/MA = V).
+        let v_res = s.p_ohmic / s.ip;
+        let dt = s.time - prev.time;
+        let kappa = PulseProgram::interpolate(&snaps_program_kappa(&device), s.time);
+        let dl = circuit::plasma_inductance(&device, kappa, s.li) - circuit::plasma_inductance(&device, kappa, prev.li);
+        let v_ind = s.ip * 1e6 * dl / dt;
+        let v_expected = v_res + v_ind;
+        assert!((s.v_loop - v_expected).abs() < 0.03 + 0.05 * v_expected.abs(),
+            "V_loop {} vs R(I−I_ni) + I dL/dt = {} (resistive {}, inductive {})",
+            s.v_loop, v_expected, v_res, v_ind);
+        // The non-inductive share is worth tens of millivolts on ITER:
+        // R_p I_ni = P_OH I_ni / (I_p (I_p − I_ni)).
+        let v_saved = s.p_ohmic * i_ni / (s.ip * (s.ip - i_ni));
+        assert!(v_saved > 0.02, "I_ni should lower V_loop by > 20 mV, got {}", v_saved);
+    }
+
+    /// The κ waveform of the standard H-mode program, for the test above.
+    fn snaps_program_kappa(device: &Device) -> Vec<(f64, f64)> {
+        PulseProgram::standard_hmode(device).kappa
     }
 
     #[test]
     fn test_seeded_species_radiate_dilute_and_raise_zeff() {
         // The same DIII-D H-mode pulse seeded from 2.5 s with 0.3e20 atoms/s
-        // of nitrogen, neon or argon. At 4.5 s (late flat-top of the 7 s
-        // pulse) each species has built a similar core fraction; argon
+        // of nitrogen, neon or argon. Compared at 4.5 s (late flat-top of
+        // the 7 s pulse): each species has built a similar core fraction; argon
         // radiates far more in the core than neon, and neon more than
         // nitrogen; Z_eff and the dilution rise with Z.
         let mut device = devices::diiid();

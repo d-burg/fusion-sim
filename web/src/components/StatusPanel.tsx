@@ -6,7 +6,7 @@ import InfoPopup from './InfoPopup'
 import { plasmaParamsInfo, stabilityInfo, powerBalanceInfo, divertorInfo, neutronDiagnosticInfo } from './infoContent'
 import { getDevice } from '../lib/wasm'
 import { computeFusion, computeDivertorHeatFlux, DivertorThermalModel, formatNeutronRate, formatQ, neutronSignalLevel, type FusionState, type DivertorState } from '../lib/fusionPhysics'
-import { reconstructionValid } from '../lib/pulseLog'
+import { FLUX_WARN, reconstructionValid } from '../lib/pulseLog'
 
 interface Props {
   snapshot: Snapshot | null
@@ -249,7 +249,7 @@ export default function StatusPanel({
 
           <Param label={<>Z<sub>eff</sub></>} value={s.z_eff ?? 0} unit="" invalid={invalid} warn={(s.z_eff ?? 0) > 2.5} danger={(s.z_eff ?? 0) > 3.5} />
           <Param label={<>c<sub>z</sub></>} value={100 * ((s.imp_n ?? 0) + (s.imp_ne ?? 0) + (s.imp_ar ?? 0))} unit="%" invalid={invalid} />
-          <Param label={<>Ψ<sub>OH</sub></>} value={100 * fluxFrac} unit="%" precision={0} warn={fluxFrac > 0.8} danger={fluxFrac >= 1} />
+          <Param label={<>Ψ<sub>OH</sub></>} value={100 * fluxFrac} unit="%" precision={0} warn={fluxFrac > FLUX_WARN} danger={!!s.flux_exhausted || fluxFrac >= 1} />
         </div>
       </div>
 

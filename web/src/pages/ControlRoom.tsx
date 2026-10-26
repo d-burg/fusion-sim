@@ -94,8 +94,9 @@ export default function ControlRoom() {
       disruptionTime: state.disruptionTime,
       elmCount: state.elmCount,
       fluxBudget: state.snapshot?.flux_budget,
+      fluxExhausted: state.fluxExhausted,
     })
-  }, [finished, history, programJson, state.snapshot, state.disruptionTime, state.elmCount])
+  }, [finished, history, programJson, state.snapshot, state.disruptionTime, state.elmCount, state.fluxExhausted])
 
   // Load a programme edited on the pulse page. runProgram builds the sim but
   // leaves it stopped, so the control room waits on Start as it always does.
