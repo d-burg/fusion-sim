@@ -41,6 +41,8 @@ const ALL_TRACES: TraceConfig[] = [
   { key: 'p_fus',            base: 'P',     sub: 'fus',     unit: 'MW',       color: '#009E73' },
   { key: 'p_loss',           base: 'P',     sub: 'loss',    unit: 'MW',       color: '#E69F00' },
   { key: 'v_loop',           base: 'V',     sub: 'loop',    unit: 'V',        color: '#92C5DE' },
+  { key: 'psi_oh',           base: 'Ψ',     sub: 'OH',      unit: 'V·s',      color: '#F0E442', yMin: 0 },
+  { key: 'i_ni',             base: 'I',     sub: 'ni',      unit: 'MA',       color: '#56B4E9', yMin: 0 },
   { key: 'impurity_fraction',base: 'f',     sub: 'imp',     unit: '%',        color: '#BBBBBB' },
   { key: 'disruption_risk',  base: 'D',     sub: 'risk',    unit: '',         color: '#c8553d' },
 ]
@@ -392,6 +394,8 @@ export default function UnifiedTracePanel({
         p_rad: '#ff6633',        // orange-red
         p_loss: '#ffcc33',       // yellow
         v_loop: '#33ff33',       // green
+        psi_oh: '#ffff33',       // yellow
+        i_ni: '#33ccff',         // blue
         impurity_fraction: '#33ff33', // green
         disruption_risk: '#ff3333',   // red
       }

@@ -90,6 +90,7 @@ impl DiagnosticSignals {
         _in_hmode: bool,
         elm_type: u8,
         locked_mode_amp: f64,
+        v_loop: f64,
         noise: &mut NoiseGen,
     ) -> Self {
         // Noise levels typical of real diagnostics
@@ -123,13 +124,9 @@ impl DiagnosticSignals {
         // Only significant for D-T or high-Ti D-D
         let neutron = ne_bar * ne_bar * te0 * te0 * 0.01 + noise.gaussian(0.001);
 
-        // Loop voltage: V_loop = R * Ip + L * dIp/dt
-        // Simplified: in steady state, V_loop ∝ η * Ip ∝ Ip / Te^1.5
-        let v_loop = if te0 > 0.05 {
-            0.5 * ip / te0.powf(1.5) + noise.gaussian(0.01)
-        } else {
-            1.0
-        };
+        // Loop voltage: the circuit's surface loop voltage as a flux loop
+        // would read it, with 1 % relative and 5 mV absolute noise.
+        let v_loop = noise.add_noise(v_loop, 0.01) + noise.gaussian(0.005);
 
         DiagnosticSignals {
             ip: ip_meas,
@@ -171,7 +168,7 @@ mod tests {
     fn test_diagnostic_signals() {
         let mut noise = NoiseGen::new(42);
         let diag = DiagnosticSignals::from_state(
-            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 0, 0.0, &mut noise,
+            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 0, 0.0, 0.3, &mut noise,
         );
         assert!(diag.ip > 0.0);
         assert!(diag.ne_bar > 0.0);
@@ -183,10 +180,10 @@ mod tests {
     fn test_elm_type1_spike() {
         let mut noise = NoiseGen::new(42);
         let diag_no_elm = DiagnosticSignals::from_state(
-            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 0, 0.0, &mut noise,
+            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 0, 0.0, 0.3, &mut noise,
         );
         let diag_elm = DiagnosticSignals::from_state(
-            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 1, 0.0, &mut noise,
+            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 1, 0.0, 0.3, &mut noise,
         );
         // D-alpha should spike during Type I ELM
         assert!(
@@ -199,13 +196,13 @@ mod tests {
     fn test_elm_type2_spike() {
         let mut noise = NoiseGen::new(42);
         let diag_no_elm = DiagnosticSignals::from_state(
-            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 0, 0.0, &mut noise,
+            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 0, 0.0, 0.3, &mut noise,
         );
         let diag_elm2 = DiagnosticSignals::from_state(
-            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 2, 0.0, &mut noise,
+            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 2, 0.0, 0.3, &mut noise,
         );
         let diag_elm1 = DiagnosticSignals::from_state(
-            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 1, 0.0, &mut noise,
+            1.5, 0.5, 3.0, 1.0, 0.3, 5.0, 1.8, 3.5, 0.6, true, 1, 0.0, 0.3, &mut noise,
         );
         // Type II spike should be above baseline but smaller than Type I
         assert!(

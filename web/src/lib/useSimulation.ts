@@ -46,6 +46,8 @@ export interface SimState {
   previousPulse: PreviousPulse | null  // last pulse's traces, for the reference overlay
   elmCount: number
   disruptionTime: number | null
+  /** The solenoid's flux swing ran out at some point in this pulse. */
+  fluxExhausted: boolean
 }
 
 export interface SimControls {
@@ -123,6 +125,7 @@ export function useSimulation(
     previousPulse: null,
     elmCount: 0,
     disruptionTime: null,
+    fluxExhausted: false,
   })
 
   // Create a new sim handle from a preset
@@ -177,6 +180,7 @@ export function useSimulation(
       previousPulse: previousPulseRef.current,
       elmCount: 0,
       disruptionTime: null,
+      fluxExhausted: false,
     })
   }, [])
 
@@ -222,6 +226,7 @@ export function useSimulation(
       previousPulse: previousPulseRef.current,
       elmCount: 0,
       disruptionTime: null,
+      fluxExhausted: false,
     })
   }, [])
 
@@ -295,6 +300,8 @@ export function useSimulation(
         li: s.li,
         q95: s.q95,
         v_loop: s.diagnostics.v_loop,
+        psi_oh: s.flux_consumed ?? 0,
+        i_ni: (s.i_bootstrap ?? 0) + (s.i_cd ?? 0),
         h_factor: s.h_factor,
         f_greenwald: s.f_greenwald,
         ne_ped: s.ne_ped,
@@ -424,6 +431,7 @@ export function useSimulation(
           previousPulse: previousPulseRef.current,
           elmCount: logCtxRef.current?.elmCount ?? 0,
           disruptionTime: logCtxRef.current?.disruptionTime ?? null,
+          fluxExhausted: logCtxRef.current?.fluxExhausted ?? false,
         }
       })
     }
@@ -489,6 +497,7 @@ export function useSimulation(
       previousPulse: previousPulseRef.current,
       elmCount: 0,
       disruptionTime: null,
+      fluxExhausted: false,
     }))
   }, [])
 

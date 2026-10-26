@@ -45,6 +45,9 @@ export interface Device {
   surface_area: number
   mass_number: number
   z_eff: number
+  /** Solenoid flux swing (V·s) and Ohmic supply loop-voltage limit (V). */
+  flux_swing_vs?: number
+  v_loop_max?: number
   wall_outline: [number, number][]
   config: string
 }
