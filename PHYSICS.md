@@ -258,16 +258,28 @@ own core fraction c_z accumulating from its gas line (10²⁰ atoms/s, 30 %
 reaching the core per unit n_e V, 0.5 s confinement time). Their atomic
 physics comes from OpenADAS adf11 data (tools/adas_cooling/): the coronal
 ionization balance at n_e = 1e20 m⁻³ gives the mean charge <Z>(T_e) and
-<Z²>(T_e), and the line and recombination power coefficients give the
-cooling curve L_z(T_e) in W m³. The engine uses them at the core
-temperature for
+<Z²>(T_e), and the line, recombination and bremsstrahlung power
+coefficients give the cooling curve L_z(T_e) in W m³. The engine
+averages them over an assumed temperature profile,
+T(ρ) = T_e0 [0.85 (1 − ρ²)^1.5 + 0.15 (1 − ρ⁸)] + 5 eV with n(ρ) ∝ 1 − 0.4 ρ²
+(radiation weighted by n² dV, charge states by n dV), because the cooler
+mantle radiates several times more than the axis for the low-Z species.
+They give
 
-- core radiation, P_rad,z = c_z n_e² L_z(T_core) V: nitrogen and neon
-  radiate little at keV temperatures (divertor radiators), argon keeps a
-  10⁻³² W m³ tail into the keV range (a mantle radiator);
+- core radiation, P_rad,z = c_z n_e² <L_z> V: nitrogen and neon radiate
+  little at keV temperatures (divertor radiators), argon keeps a few
+  10⁻³³ W m³ into the keV range (a mantle radiator). The seeded species'
+  own bremsstrahlung is inside L_z, so the separate bremsstrahlung term
+  uses the intrinsic Z_eff only;
 - the effective charge, Z_eff = Z_eff,intrinsic + Σ c_z (<Z²> − <Z>),
-  which raises bremsstrahlung and resistivity;
-- fuel dilution, n_fuel/n_e = 1 − Σ c_z <Z>, which lowers the fusion rate.
+  which raises the resistivity and is shown on the status panel;
+- fuel dilution, n_fuel/n_e = 1 − Σ c_z <Z>, which lowers the fusion rate
+  in the engine and in the displayed fusion power.
+
+The ELM-regime gates (QCE access, type II, type I degradation) were
+calibrated on neon and read the seeded content in neon-equivalent units
+with the same weights as the detachment model; the radiative collapse
+threshold reads the total fraction.
 
 What the seeded species radiate in the divertor and scrape-off layer is not
 in the core power balance; it is the dissipation the detachment model
@@ -287,10 +299,11 @@ nitrogen's N II green-teal, neon's orange-red, argon's Ar II blue-violet.
 
 
 Intrinsic radiators (fuel Balmer and Lyman light, wall impurities) are
-represented as an equivalent core neon fraction c_int, defined as the
-threshold of an unseeded DIII-D-like H-mode (1.5 MA, a = 0.56 m,
-κ_sep = 1.7, P_sep = 4.4 MW) at f_GW = 0.7, about 0.2 %, so that pulse is
-half detached there, where the earlier density-only sigmoid put it. Then
+represented as an equivalent core fraction c_int in nitrogen units,
+defined as the threshold of an unseeded DIII-D-like H-mode (1.5 MA,
+a = 0.56 m, κ_sep = 1.7, P_sep = 4.4 MW) at f_GW = 0.7, about 0.7 %
+nitrogen-equivalent, so that pulse is half detached there, where the
+earlier density-only sigmoid put it. Then
 
     D = (c_int + c_z) / c_z,det
     f_detach = min(1 − 1 / (1 + D³), 0.97)
@@ -298,25 +311,35 @@ half detached there, where the earlier density-only sigmoid put it. Then
 Because c_z,det falls as f_GW², the density dependence at fixed power is
 the same (f_GW/f_0)^6 shape as the earlier model. What is new: detachment
 gets harder with separatrix power and easier with plasma current (poloidal
-field) and shaping, as the scaling says; seeding (c_z from the neon puff in
-the transport model, 0.5 s confinement) can bring it on at any density;
+field) and shaping, as the scaling says; seeding (c_z from the gas lines in the
+transport model, 0.5 s confinement, in nitrogen-equivalent units) can
+bring it on at any density;
 and the large machines are no longer detached for free at high density.
-Through the engine at 60 % of each H-mode preset: an unseeded DIII-D
-flat-top (P_sep 3.9 MW, f_GW 0.55) is 15 % detached (19 % before) and
-0.3e20/s of neon takes it to 82 % while it stays in H-mode with a core
-radiated fraction of 0.25; an unseeded ITER flat-top (P_sep 36 MW,
-f_GW 0.8) is 25 % detached (69 % before) with the target at about
-16 MW/m², and needs about 0.3 % core neon, well below its 1.5 % collapse
-threshold; CENTAUR (P_sep 28 MW) is 22 % detached unseeded (39 % before)
-and 92 % with 0.9e20/s of neon.
+Through the engine at 60 % of each H-mode preset, seeding from 30 % of
+the pulse: an unseeded DIII-D flat-top (P_sep 3.9 MW, f_GW 0.55) is 15 %
+detached (19 % before); 0.3e20 atoms/s of nitrogen takes it to 39 % at
+Z_eff 1.63 with the core radiation unchanged, the same rate of neon to
+76 % at Z_eff 1.76, and the same rate of argon to 96 % but at Z_eff 2.16
+with a core radiated fraction of 0.45 that collapses the pulse in its
+ramp-down (0.1e20/s of argon is the useful level). Two per cent of
+nitrogen never collapses the core but dilutes the fuel to 86 %; two per
+cent of neon or one per cent of argon end in radiative collapse. An
+unseeded ITER flat-top (P_sep 36 MW, f_GW 0.8) is 25 % detached (69 %
+before) and 10e20/s of neon takes it to 72 % at Z_eff 1.82, while 5e20/s
+of argon collapses it; 1e20/s of neon on CENTAUR takes it from 22 % to
+60 % and costs 7 MW of fusion power through dilution.
 
-The planner's gas channels (D₂ puff, neon seeding) scale their range with
-plasma volume so the same fraction is reachable on every machine; the
-numbers are in 10²⁰ particles per second.
+The planner's gas channels (D₂ puff and the nitrogen, neon and argon
+seeding lines) scale their range with plasma volume so the same fraction
+is reachable on every machine; the seeding rates are in 10²⁰ atoms per
+second (a nitrogen molecule counts as two).
 
 Known limitation: the divertor part of the seeded radiation is not fed
-back into the core power balance or the bolometer, and the species
-weights come from one figure of one paper at one impurity lifetime.
+back into the core power balance or the bolometer; the species weights
+come from one figure of one paper at one impurity lifetime, and the
+sound-speed factor ((1+Z̄)/Ā)^½ of GRS eq. 10, under 3 % between species
+at these fractions, is ignored; the radiation profile average uses an
+assumed profile shape rather than the engine's own profiles.
 
 Maximum detachment reduces the target heat flux by 97 %. The port view
 draws the radiation front moving up the divertor leg with f_detach, and the

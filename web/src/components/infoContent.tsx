@@ -239,7 +239,7 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
       <b>Radiated power (P<sub>rad</sub>)</b> &mdash; power lost by
       electromagnetic radiation: bremsstrahlung, intrinsic impurity
       radiation from wall materials (carbon, tungsten), and intentional
-      impurity seeding (neon). Measured by bolometer arrays. Typical
+      impurity seeding (nitrogen, neon or argon). Measured by bolometer arrays. Typical
       H-mode radiative fractions are 15&ndash;30%.
       High P<sub>rad</sub>/P<sub>in</sub> ratios can lead to radiative
       collapse.
@@ -482,7 +482,8 @@ export const divertorInfo = (
       with no size dependence: harder with power, easier with plasma current,
       shaping and density. The model uses that form, calibrated on their
       ASDEX Upgrade case, with the fuel and wall impurities counted as an
-      equivalent 0.2% core neon and the seeded neon added to it. Unseeded,
+      equivalent 0.7% nitrogen and the seeded species added to it in
+      nitrogen-equivalent units. Unseeded,
       a DIII-D-size divertor is half detached at f<sub>GW</sub> = 0.7, and
       the large machines are no longer detached for free at high density.
       Three seeding species are available, by machine: nitrogen radiates

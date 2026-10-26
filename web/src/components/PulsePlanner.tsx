@@ -132,7 +132,9 @@ export default function PulsePlanner({
     p_ech: '#8b5cf6',
     ne: '#a78bfa',
     d2_puff: '#60a5fa',
-    neon_puff: '#86efac',
+    n2_puff: '#2dd4bf',
+    neon_puff: '#fb923c',
+    argon_puff: '#818cf8',
     kappa: '#f59e0b',
     delta: '#ef4444',
   }

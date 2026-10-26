@@ -75,11 +75,11 @@ const REFERENCES: Ref[] = [
   },
   {
     id: 'openadas',
-    authors: 'H. P. Summers et al.',
-    title: 'OpenADAS: the Atomic Data and Analysis Structure (adf11 ionisation, recombination and radiated-power coefficients)',
-    journal: 'open.adas.ac.uk',
-    year: 2024,
-    doi: '',
+    authors: 'H. P. Summers, W. J. Dickson, M. G. O\'Mullane, N. R. Badnell, A. D. Whiteford, D. H. Brooks, J. Lang, S. D. Loch and D. C. Griffin',
+    title: 'Ionization state, excited populations and emission of impurities in dynamic finite density plasmas: I. The generalized collisional-radiative model for light elements (the ADAS data used here are the adf11 ionization, recombination and radiated-power coefficients from open.adas.ac.uk)',
+    journal: 'Plasma Phys. Control. Fusion 48, 263',
+    year: 2006,
+    doi: '10.1088/0741-3335/48/2/007',
   },
   {
     id: 'kuang2020',

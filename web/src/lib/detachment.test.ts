@@ -90,6 +90,11 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
   const legacy = { ...snap(diiid, { ip: 1.5, p_loss: 5.0, f_greenwald: 0.6 }), impurity_fraction: 0.003 } as Partial<Snapshot>
   delete legacy.imp_n; delete legacy.imp_ne; delete legacy.imp_ar
   assert(near(seededNitrogenEquivalent(legacy as Snapshot), 0.003 * SEED_EFFICIENCY.ne, 1e-12), 'legacy fraction counts as neon')
+  // The weights are the GRS fig. 1d readings (ordinate ratios 1.9 and 2.4, squared); pin them.
+  assert(SEED_EFFICIENCY.n === 1 && SEED_EFFICIENCY.ne === 3.5 && SEED_EFFICIENCY.ar === 6, 'species weights')
+  // Regression: 0.3 % neon at the DIII-D reference state gave f_det 0.752 in #13 (same model, neon units).
+  const refNe = detachmentFraction(snap(diiid, { ip: 1.5, p_loss: 5.0, p_rad: 0.6, f_greenwald: 0.6, imp_ne: 0.003, p_lh: 0 }), diiid)
+  assert(near(refNe, 0.752, 0.01), `0.3 % neon at the reference state: ${refNe.toFixed(3)} (expected 0.752)`)
 }
 
 // ── 4. ITER-like flat-top, self-consistent density (f_GW 0.85 → n̄ ≈ 1.4):
@@ -101,7 +106,8 @@ function snap(dev: Device, o: Partial<Snapshot> & { ip: number; f_greenwald: num
   s.p_lh = 0.35 * (s.p_lh ?? 0)   // the engine applies the device factor
   assert(0.8 * (s.p_lh ?? 0) < 90, 'floor inactive at an ITER flat-top')
   const c_det = detachmentThreshold(s, iter)
-  assert(c_det > 0.005 && c_det < 0.04, `ITER nitrogen-equivalent threshold should be of order a percent, got ${(c_det * 100).toFixed(2)} %`)
+  // the neon-unit band (0.2–1.2 %) from #13, times the neon weight 3.5
+  assert(c_det > 0.007 && c_det < 0.042, `ITER nitrogen-equivalent threshold should be of order a percent, got ${(c_det * 100).toFixed(2)} %`)
   assert(detachmentFraction(s, iter) < 0.3, 'unseeded ITER flat-top should be attached')
   assert(detachmentFraction({ ...s, imp_n: 1.5 * c_det } as Snapshot, iter) > 0.7, 'ITER detaches once c_z exceeds the threshold')
 }

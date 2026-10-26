@@ -146,7 +146,9 @@ export function computeFusion(snapshot: Snapshot, device: Device): FusionState {
   const N = ne_prof.length             // 51
   const drho = 1.0 / (N - 1)          // 0.02
 
-  const f_fuel = Math.max(1.0 - snapshot.impurity_fraction, 0.5)
+  // Fuel dilution by the seeded species, from the engine (1 − Σ c_z <Z>);
+  // older snapshots carry only the total fraction.
+  const f_fuel = Math.max(snapshot.fuel_fraction ?? (1.0 - snapshot.impurity_fraction), 0.5)
   const V_total = device.volume        // m³
 
   // Build volume weights: dV_i ∝ ρ_i · dρ (cylindrical-like shells)

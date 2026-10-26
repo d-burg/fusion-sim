@@ -82,6 +82,8 @@ pub struct TransportModel {
     pub imp_ar: f64,
     /// Effective charge including the seeded species (device intrinsic + seeded)
     pub z_eff: f64,
+    /// Fuel ion fraction n_fuel/n_e after dilution by the seeded species
+    pub fuel_fraction: f64,
 }
 
 impl Default for TransportModel {
@@ -121,6 +123,7 @@ impl Default for TransportModel {
             imp_ne: 0.0,
             imp_ar: 0.0,
             z_eff: 1.5,
+            fuel_fraction: 1.0,
         }
     }
 }
@@ -196,6 +199,12 @@ impl TransportModel {
             self.p_ohmic = 0.0;
             self.p_rad = 0.0;
             self.in_hmode = false;
+            self.imp_n = 0.0;
+            self.imp_ne = 0.0;
+            self.imp_ar = 0.0;
+            self.impurity_fraction = 0.0;
+            self.z_eff = z_eff_intrinsic;
+            self.fuel_fraction = 1.0;
             return;
         }
 
@@ -238,24 +247,33 @@ impl TransportModel {
         }
         self.impurity_fraction = self.imp_n + self.imp_ne + self.imp_ar;
 
-        // Charge states at the core temperature set the effective charge and
-        // the fuel dilution: Z_eff = Z_eff,intrinsic + Σ c_z (<Z²> − <Z>),
-        // n_fuel/n_e = 1 − Σ c_z <Z>.
-        let te_core_ev = (self.te0 * 0.7 * 1000.0).max(1.0);
+        // Charge states averaged over the temperature profile set the
+        // effective charge and the fuel dilution:
+        // Z_eff = Z_eff,intrinsic + Σ c_z (<Z²> − <Z>), n_fuel/n_e = 1 − Σ c_z <Z>.
+        // The same pass gives each species' profile-averaged cooling rate
+        // for the radiation below.
         let mut dz_eff = 0.0;
         let mut dilution = 0.0;
-        for (frac, sp) in [
+        let mut lz_avg = [0.0; 3];
+        for (i, (frac, sp)) in [
             (self.imp_n, crate::cooling::Species::Nitrogen),
             (self.imp_ne, crate::cooling::Species::Neon),
             (self.imp_ar, crate::cooling::Species::Argon),
-        ] {
-            let (_, zbar, z2bar) = crate::cooling::lookup(sp, te_core_ev);
+        ].into_iter().enumerate() {
+            let (lz, zbar, z2bar) = crate::cooling::profile_average(sp, self.te0);
+            lz_avg[i] = lz;
             dz_eff += frac * (z2bar - zbar);
             dilution += frac * zbar;
         }
         self.z_eff = z_eff_intrinsic + dz_eff;
         let z_eff = self.z_eff;
-        let f_fuel_seeded = (1.0 - dilution).max(0.5);
+        self.fuel_fraction = (1.0 - dilution).max(0.5);
+        let f_fuel_seeded = self.fuel_fraction;
+        // The ELM-regime gates (QCE, type II, type I degradation) were
+        // calibrated on neon; other species enter them in neon-equivalent
+        // units with the same weights the detachment model uses (N 1,
+        // Ne 3.5, Ar 6 relative to nitrogen).
+        let imp_gate = self.imp_ne + self.imp_n / 3.5 + self.imp_ar * (6.0 / 3.5);
 
         // ── q95 ──
         // Cylindrical safety factor with elongation + triangularity correction.
@@ -335,7 +353,9 @@ impl TransportModel {
         // Use volume-averaged density (ne_vol = 0.85 * ne_bar) since bremsstrahlung
         // is a volume integral, not a line integral.
         let ne_m3 = self.ne_bar * 0.85 * 1e20; // volume-averaged ne in m⁻³
-        let p_brem = 5.35e-37 * ne_m3 * ne_m3 * z_eff * te_avg.sqrt() * volume * 1e-6; // MW
+        // Intrinsic Z_eff only: the seeded species' bremsstrahlung is inside
+        // their ADAS cooling rates below (prb includes it).
+        let p_brem = 5.35e-37 * ne_m3 * ne_m3 * z_eff_intrinsic * te_avg.sqrt() * volume * 1e-6; // MW
         // Intrinsic impurity radiation from wall material (carbon, tungsten).
         // In real tokamaks, edge/SOL impurities produce significant line
         // radiation even without intentional seeding, typically 15-30% of
@@ -352,20 +372,16 @@ impl TransportModel {
         // Line radiation (residual, on top of intrinsic)
         let p_line = p_brem * 0.15 * (z_eff_intrinsic - 1.0).max(0.0);
         // Seeded-impurity radiation inside the separatrix, species by species,
-        // from the coronal ADAS cooling curves at the core temperature
-        // (cooling.rs). Nitrogen and neon radiate little at keV temperatures
-        // and are divertor radiators; argon keeps a 10^-32 W m³ tail into the
-        // keV range and is a mantle radiator. What the seeded species radiate
-        // in the divertor and scrape-off layer is not part of the core power
-        // balance: it is the dissipation the divertor detachment model
-        // represents, calibrated on its own (fusionPhysics.ts).
+        // from the coronal ADAS cooling curves averaged over the temperature
+        // profile (cooling.rs; the rates include line, recombination and the
+        // impurities' own bremsstrahlung). Nitrogen and neon radiate little
+        // at keV temperatures and are divertor radiators; argon keeps a few
+        // 10^-33 W m³ into the keV range and is a mantle radiator. What the
+        // seeded species radiate in the divertor and scrape-off layer is not
+        // part of the core power balance: it is the dissipation the divertor
+        // detachment model represents, calibrated on its own (fusionPhysics.ts).
         let mut p_seeded = 0.0;
-        for (frac, sp) in [
-            (self.imp_n, crate::cooling::Species::Nitrogen),
-            (self.imp_ne, crate::cooling::Species::Neon),
-            (self.imp_ar, crate::cooling::Species::Argon),
-        ] {
-            let (lz, _, _) = crate::cooling::lookup(sp, te_core_ev);
+        for (frac, lz) in [(self.imp_n, lz_avg[0]), (self.imp_ne, lz_avg[1]), (self.imp_ar, lz_avg[2])] {
             p_seeded += frac * ne_m3 * ne_m3 * lz * volume * 1e-6; // MW
         }
         // Radiative collapse: the radiating mantle moves inward once the total
@@ -538,15 +554,15 @@ impl TransportModel {
         // Determine ELM regime based on impurity level, q95, and shaping
         let imp = &device.impurity_elm;
         self.elm_suppressed = self.in_hmode
-            && self.impurity_fraction >= imp.impurity_qce_threshold
+            && imp_gate >= imp.impurity_qce_threshold
             && prog.delta >= imp.delta_grassy_min;
         let elm_regime: u8 = if !self.in_hmode {
             0 // No ELMs outside H-mode
-        } else if self.impurity_fraction >= imp.impurity_qce_threshold
+        } else if imp_gate >= imp.impurity_qce_threshold
             && prog.delta >= imp.delta_grassy_min
         {
             0 // Suppressed → QCE (requires sufficient impurity + strong shaping)
-        } else if self.impurity_fraction >= imp.impurity_type2_threshold
+        } else if imp_gate >= imp.impurity_type2_threshold
             && self.q95 >= imp.q95_grassy_range.0
             && self.q95 <= imp.q95_grassy_range.1
             && prog.delta >= imp.delta_grassy_min
@@ -562,8 +578,8 @@ impl TransportModel {
 
             // Impurity degradation factor: reduces Type I frequency as impurity
             // approaches the Type II transition threshold (pedestal cooling effect)
-            let impurity_degradation = if self.impurity_fraction > imp.impurity_type1_onset {
-                let frac = ((self.impurity_fraction - imp.impurity_type1_onset)
+            let impurity_degradation = if imp_gate > imp.impurity_type1_onset {
+                let frac = ((imp_gate - imp.impurity_type1_onset)
                     / (imp.impurity_type2_threshold - imp.impurity_type1_onset))
                     .clamp(0.0, 1.0);
                 1.0 - 0.7 * frac // frequency drops to 30% before Type II transition

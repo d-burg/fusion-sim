@@ -243,7 +243,7 @@ export function deriveEvents(prev: Snapshot | null, next: Snapshot, ctx: LogCont
     const now = level >= SEED_ON
     if (now && !was) {
       const target = rampTarget(ctx.program?.[g.key], next.time, level)
-      push('info', `${g.name} on${target > level * 1.2 ? `, ramping to ${target.toFixed(2)}` : `, ${level.toFixed(2)}`} ×10²⁰/s`)
+      push('info', `${g.name} on${target > level * 1.2 ? `, ramping to ${target.toFixed(2)}` : `, ${level.toFixed(2)}`} ×10²⁰ atoms/s`)
     } else if (was && !now && !next.disrupted) push('info', `${g.name} off`)
   }
 
@@ -396,7 +396,7 @@ export function explainDisruption(cause: DisruptionCause, s: Snapshot): Disrupti
       return {
         label: `radiative collapse, P_rad/P_in ${pradFrac(s).toFixed(2)}`,
         detail: 'Radiation took most of the heating power; the edge cooled and the current profile contracted.',
-        action: 'Reduce the impurity (neon) puff or add heating power.',
+        action: 'Reduce the impurity seeding (nitrogen, neon or argon) or add heating power.',
       }
     case 'locked_mode':
       return {

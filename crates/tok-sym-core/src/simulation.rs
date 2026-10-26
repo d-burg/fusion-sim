@@ -478,6 +478,8 @@ pub struct SimulationSnapshot {
     pub imp_ar: f64,
     /// Effective charge including the seeded species
     pub z_eff: f64,
+    /// Fuel ion fraction n_fuel/n_e after dilution by the seeded species
+    pub fuel_fraction: f64,
 
     // Disruption
     /// Hazard rate: probability per second of a disruption starting.
@@ -1466,6 +1468,7 @@ impl Simulation {
             imp_ne: self.transport.imp_ne,
             imp_ar: self.transport.imp_ar,
             z_eff: self.transport.z_eff,
+            fuel_fraction: self.transport.fuel_fraction,
             te_profile: self.profiles.te_profile_array(),
             ne_profile: self.profiles.ne_profile_array(),
             disruption_risk: self.disruption.risk,

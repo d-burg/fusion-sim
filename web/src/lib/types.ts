@@ -87,6 +87,8 @@ export interface Snapshot {
   imp_ar?: number
   /** Effective charge including the seeded species */
   z_eff?: number
+  /** Fuel ion fraction n_fuel/n_e after dilution by the seeded species */
+  fuel_fraction?: number
 
   // Profiles (51-point arrays, rho = 0.00 to 1.00)
   te_profile: number[]
