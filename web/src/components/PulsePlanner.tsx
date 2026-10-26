@@ -15,6 +15,7 @@ import {
   type MagneticConfig,
   type OverrideValue,
   type ScalarParam,
+  paramRange,
 } from '../lib/program'
 
 /* ─── Types ─────────────────────────────────────────────── */
@@ -243,6 +244,7 @@ export default function PulsePlanner({
           const value = getEffectiveValue(param)
           const waveform = getEffectiveWaveform(param)
           const color = paramColors[param.key] ?? '#94a3b8'
+          const range = paramRange(param, device?.volume)
 
           return (
             <div key={param.key}>
@@ -261,9 +263,9 @@ export default function PulsePlanner({
               <div className="flex items-center gap-2 mt-1">
                 <input
                   type="range"
-                  min={param.min}
-                  max={param.max}
-                  step={param.step}
+                  min={range.min}
+                  max={range.max}
+                  step={range.step}
                   value={value}
                   onChange={(e) =>
                     onOverridesChange({
@@ -275,9 +277,9 @@ export default function PulsePlanner({
                 />
                 <input
                   type="number"
-                  min={param.min}
-                  max={param.max}
-                  step={param.step}
+                  min={range.min}
+                  max={range.max}
+                  step={range.step}
                   value={value.toFixed(param.precision)}
                   onChange={(e) =>
                     onOverridesChange({
@@ -335,8 +337,8 @@ export default function PulsePlanner({
             label={param.label}
             unit={param.unit}
             color={paramColors[param.key] ?? '#94a3b8'}
-            min={param.min}
-            max={param.max}
+            min={paramRange(param, device?.volume).min}
+            max={paramRange(param, device?.volume).max}
             onSave={(wf) => {
               onOverridesChange({ ...overrides, [param.key]: wf })
               setDrawingParam(null)

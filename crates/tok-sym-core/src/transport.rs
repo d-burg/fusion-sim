@@ -26,6 +26,10 @@ pub struct TransportModel {
     pub p_ohmic: f64,
     /// Total radiated power (MW)
     pub p_rad: f64,
+    /// The Lz-model estimate of seeded-impurity radiation booked outside the
+    /// core (MW). Diagnostic only: the divertor detachment model, not this
+    /// number, decides what reaches the target.
+    pub p_rad_div: f64,
     /// Total input power (MW)
     pub p_input: f64,
     /// Total loss power (MW)
@@ -86,6 +90,7 @@ impl Default for TransportModel {
             tau_e: 0.01,
             p_ohmic: 0.0,
             p_rad: 0.0,
+            p_rad_div: 0.0,
             p_input: 0.0,
             p_loss: 0.0,
             p_alpha: 0.0,
@@ -179,6 +184,7 @@ impl TransportModel {
             self.p_loss = 0.0;
             self.p_ohmic = 0.0;
             self.p_rad = 0.0;
+            self.p_rad_div = 0.0;
             self.in_hmode = false;
             return;
         }
@@ -329,7 +335,16 @@ impl TransportModel {
             1.0
         };
         let p_impurity = self.impurity_fraction * ne_m3 * ne_m3 * lz_impurity * collapse_factor * volume * 1e-6; // MW
-        self.p_rad = p_brem + p_intrinsic + p_line + p_impurity;
+        // Seeded impurities are injected to radiate in the divertor and the
+        // scrape-off layer: that is the point of seeding, and it is where the
+        // cold, dense plasma makes neon and nitrogen radiate most. Only the
+        // part radiated inside the separatrix costs the core power balance
+        // (and counts toward the L-H threshold and the radiation-fraction
+        // hazard); the rest is dissipated on the way to the target, which the
+        // divertor detachment model represents.
+        const SEEDED_DIVERTOR_FRACTION: f64 = 0.7;
+        self.p_rad_div = p_impurity * SEEDED_DIVERTOR_FRACTION;
+        self.p_rad = p_brem + p_intrinsic + p_line + p_impurity * (1.0 - SEEDED_DIVERTOR_FRACTION);
         self.p_rad = self.p_rad.max(0.0);
 
         // ── L-H transition threshold ──
