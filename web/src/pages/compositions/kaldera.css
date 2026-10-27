@@ -1,0 +1,149 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,200;125,300&family=Michroma&display=swap');
+
+/* kaldera: a blue-black atmosphere; white on it; the red warmth is the only colour.
+   The shared chrome mounted here (planner drawer, settings) reads these tokens. */
+html[data-theme="kaldera"] {
+  --c-base: #0a0d14; --c-surface: #0f131c; --c-raised: #161b26;
+  --c-line: #26303f; --c-line-strong: #3b475a;
+  --c-ink: #f2f4f7; --c-ink-dim: #b9c0cb; --c-ink-faint: #8c95a3;
+  --c-accent: #ffffff; --c-accent-hi: #ffffff;
+  --c-ok: #c9d4df; --c-warn: #e8c9a0; --c-bad: #ff5a46; --c-bad-ink: #ff8a78;
+  --c-invalid: #c9a9d6;
+}
+html[data-theme="kaldera"] body { background: #0a0d14; }
+
+[data-layout="kaldera"] {
+  --kd-caps: 'Michroma', 'Syncopate', sans-serif;
+  --kd-wide: 'Archivo', 'Michroma', sans-serif;
+  --kd-x: 64px;
+  position: fixed;
+  inset: 0;
+  background: #0a0d14;
+  color: #fff;
+  font-family: var(--kd-caps);
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-size: 9px;
+  display: grid;
+  grid-template-rows: 64px 1fr 136px 76px 28px;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+[data-layout="kaldera"] * { box-sizing: border-box; }
+[data-layout="kaldera"] button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+[data-layout="kaldera"] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
+
+/* the atmosphere: a soft blue-gray haze behind the plasma and the render's red warmth at the right */
+[data-layout="kaldera"] .kd-atmos {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 34% 46% at 46% 42%, rgba(150, 170, 200, 0.16), rgba(150, 170, 200, 0) 100%),
+    radial-gradient(ellipse 22% 36% at 82% 36%, rgba(255, 84, 60, 0.13), rgba(255, 84, 60, 0) 100%),
+    radial-gradient(ellipse 60% 50% at 20% 110%, rgba(110, 130, 160, 0.10), rgba(110, 130, 160, 0) 100%),
+    linear-gradient(180deg, #0c1018 0%, #0a0d14 55%, #070a10 100%);
+}
+[data-layout="kaldera"] > *:not(.kd-atmos) { position: relative; z-index: 1; }
+
+/* ── nav row ──────────────────────────────────────────────────────── */
+[data-layout="kaldera"] .kd-nav {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  padding: 0 var(--kd-x); height: 64px;
+}
+[data-layout="kaldera"] .kd-nav-l { justify-self: start; display: flex; align-items: center; gap: 30px; }
+[data-layout="kaldera"] .kd-nav-c { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+[data-layout="kaldera"] .kd-nav-r { justify-self: end; display: flex; align-items: center; gap: 26px; }
+[data-layout="kaldera"] .kd-brand { color: rgba(255,255,255,0.92); }
+[data-layout="kaldera"] .kd-cap { color: rgba(255,255,255,0.7); font-size: 8px; }
+[data-layout="kaldera"] .kd-group { display: inline-flex; align-items: center; gap: 12px; }
+[data-layout="kaldera"] .kd-group-tight { gap: 6px; }
+[data-layout="kaldera"] .kd-group-item { display: inline-flex; align-items: center; gap: 12px; }
+[data-layout="kaldera"] .kd-dot { color: rgba(255,255,255,0.5); }
+[data-layout="kaldera"] .kd-link { color: rgba(255,255,255,0.78); padding: 2px 3px; line-height: 1; white-space: nowrap; }
+[data-layout="kaldera"] .kd-link:hover { color: #fff; }
+[data-layout="kaldera"] .kd-link[data-on="true"] { background: #fff; color: #0a0d14; }
+[data-layout="kaldera"] .kd-settings { display: inline-flex; align-items: center; }
+[data-layout="kaldera"] .kd-settings .settings-btn { border-radius: 0; color: rgba(255,255,255,0.78); padding: 0; }
+[data-layout="kaldera"] .kd-settings .settings-btn:hover { color: #fff; }
+[data-layout="kaldera"] .kd-settings .settings-btn svg { width: 13px; height: 13px; }
+[data-layout="kaldera"] .kd-settings .settings-panel { border-radius: 0; letter-spacing: 0.08em; text-transform: none; font-family: 'Archivo', sans-serif; font-stretch: 100%; font-size: 12px; }
+
+/* ── main: readouts | hero | render ───────────────────────────────── */
+[data-layout="kaldera"] .kd-main {
+  position: relative; min-height: 0;
+  display: grid; grid-template-columns: 280px 1fr 400px; column-gap: 24px;
+  padding: 8px var(--kd-x) 0;
+}
+[data-layout="kaldera"] .kd-col-l { display: flex; flex-direction: column; gap: 34px; padding-top: 34px; }
+[data-layout="kaldera"] .kd-col-r { display: flex; flex-direction: column; gap: 30px; }
+[data-layout="kaldera"] .kd-hero { position: relative; min-width: 0; min-height: 0; margin-left: 70px; }
+[data-layout="kaldera"] .kd-hero canvas { position: absolute; inset: 0; }
+
+/* the one rendered image, at the site's render ratio */
+[data-layout="kaldera"] .kd-port { width: 400px; height: 380px; position: relative; overflow: hidden; }
+[data-layout="kaldera"] .kd-port > * { width: 100% !important; height: 100% !important; }
+[data-layout="kaldera"] .kd-port canvas { width: 100% !important; height: 100% !important; display: block; }
+
+/* readouts: VALUE over caption */
+[data-layout="kaldera"] .kd-ro { display: flex; flex-direction: column; gap: 7px; }
+[data-layout="kaldera"] .kd-ro-v {
+  font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 26px; line-height: 1;
+  letter-spacing: 0.06em; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+[data-layout="kaldera"] .kd-ro-u { font-size: 12px; letter-spacing: 0.16em; font-weight: 300; color: rgba(255,255,255,0.85); }
+[data-layout="kaldera"] .kd-ro-c { font-size: 9px; color: rgba(255,255,255,0.7); }
+[data-layout="kaldera"] .kd-ro-grid { display: grid; grid-template-columns: 1fr 1fr; row-gap: 30px; column-gap: 24px; padding-left: 2px; }
+
+/* chapter title, bottom-left of the main area */
+[data-layout="kaldera"] .kd-title { position: absolute; left: var(--kd-x); bottom: 10px; display: flex; flex-direction: column; gap: 10px; }
+[data-layout="kaldera"] .kd-title-cap { font-size: 8px; color: rgba(255,255,255,0.6); }
+[data-layout="kaldera"] .kd-h1 {
+  margin: 0; font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 36px; line-height: 1;
+  letter-spacing: 0.10em; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+[data-layout="kaldera"] .kd-h1-dot { color: rgba(255,255,255,0.55); font-size: 0.6em; vertical-align: 0.2em; }
+[data-layout="kaldera"] .kd-state { font-size: 9px; color: rgba(255,255,255,0.78); }
+[data-layout="kaldera"] .kd-state[data-state="DISRUPTED"] { color: #ff6a56; }
+
+/* ── traces: no box, no axes ──────────────────────────────────────── */
+[data-layout="kaldera"] .kd-traces { position: relative; margin: 0 var(--kd-x); min-height: 0; }
+[data-layout="kaldera"] .kd-traces canvas { position: absolute; inset: 0; }
+
+/* ── timeline ─────────────────────────────────────────────────────── */
+[data-layout="kaldera"] .kd-timeline { position: relative; margin: 0 var(--kd-x); height: 76px; }
+[data-layout="kaldera"] .kd-timeline[data-scrub="true"] { cursor: ew-resize; }
+[data-layout="kaldera"] .kd-line { position: absolute; left: 0; right: 0; top: 24px; height: 1px; background: rgba(255,255,255,0.35); }
+[data-layout="kaldera"] .kd-cursor { position: absolute; top: 0; width: 1px; height: 24px; background: rgba(255,255,255,0.55); transform: translateX(-0.5px); }
+[data-layout="kaldera"] .kd-station { position: absolute; top: 24px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 9px; }
+[data-layout="kaldera"] .kd-station-tick { width: 3px; height: 3px; background: rgba(255,255,255,0.55); margin-top: -1px; }
+[data-layout="kaldera"] .kd-station-label { font-size: 8px; color: rgba(255,255,255,0.55); white-space: nowrap; }
+[data-layout="kaldera"] .kd-station[data-passed="true"] .kd-station-tick { background: #fff; }
+[data-layout="kaldera"] .kd-station[data-passed="true"] .kd-station-label { color: rgba(255,255,255,0.9); }
+[data-layout="kaldera"] .kd-station[data-anchor="start"] { transform: translateX(-1px); align-items: flex-start; }
+[data-layout="kaldera"] .kd-station[data-anchor="end"] { transform: translateX(calc(-100% + 2px)); align-items: flex-end; }
+
+[data-layout="kaldera"] .kd-playhead {
+  position: absolute; top: 24px; width: 46px; height: 46px; transform: translate(-50%, -50%);
+  border: 1px solid rgba(255,255,255,0.75); border-radius: 50%; background: rgba(10,13,20,0.75);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+[data-layout="kaldera"] .kd-playhead:hover { border-color: #fff; }
+[data-layout="kaldera"] .kd-timeline[data-scrub="true"] .kd-playhead { cursor: ew-resize; }
+[data-layout="kaldera"] .kd-glyph { display: block; }
+[data-layout="kaldera"] .kd-playhead[data-glyph="start"] .kd-glyph { width: 0; height: 0; border-left: 9px solid #fff; border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin-left: 2px; }
+[data-layout="kaldera"] .kd-playhead[data-glyph="pause"] .kd-glyph { width: 8px; height: 10px; border-left: 2px solid #fff; border-right: 2px solid #fff; }
+[data-layout="kaldera"] .kd-playhead[data-glyph="reset"] .kd-glyph { width: 8px; height: 8px; background: #fff; }
+[data-layout="kaldera"] .kd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[data-layout="kaldera"] .kd-playhead-time { position: absolute; top: 54px; transform: translateX(-50%); font-size: 8px; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ── foot: the last event, as one line ────────────────────────────── */
+[data-layout="kaldera"] .kd-foot { display: flex; justify-content: space-between; align-items: center; padding: 0 var(--kd-x); font-size: 8px; color: rgba(255,255,255,0.6); }
+[data-layout="kaldera"] .kd-event { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+[data-layout="kaldera"] .kd-event[data-sev="major"] { color: #ff8a78; }
+[data-layout="kaldera"] .kd-event[data-sev="minor"] { color: rgba(255,255,255,0.85); }
+[data-layout="kaldera"] .kd-foot-r { color: rgba(255,255,255,0.45); }
+
+/* ── shared chrome mounted here: keep it square ───────────────────── */
+[data-layout="kaldera"] .fixed.inset-y-0 { border-radius: 0; }

@@ -20,11 +20,13 @@ import type { ControlRoomContext } from './compositions/types'
 import CompositionDiiid from './compositions/diiid'
 import CompositionApollo from './compositions/apollo'
 import CompositionJet from './compositions/jet'
+import CompositionKaldera from './compositions/kaldera'
 
 const COMPOSITIONS: Record<string, ComponentType<{ ctx: ControlRoomContext }>> = {
   diiid: CompositionDiiid,
   apollo: CompositionApollo,
   jet: CompositionJet,
+  kaldera: CompositionKaldera,
 }
 
 const DEVICE_LIMITERS: Record<string, [number, number][]> = {

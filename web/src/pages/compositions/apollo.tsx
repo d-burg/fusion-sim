@@ -3,14 +3,19 @@ import type { ControlRoomContext } from './types'
 import type { Snapshot } from '../../lib/types'
 import EquilibriumCanvas from '../../components/EquilibriumCanvas'
 import PortView from '../../components/portview'
-import DotText from './apollo/dotmatrix'
+import SevenSeg from './diiid/SevenSeg'
 import BoardPlot, { type Series } from './apollo/BoardPlot'
 import LampKey, { type Lamp } from './apollo/LampKey'
 import { clock, interpWaveform, parseProgram, pulsePhase, type Waveform } from './apollo/phase'
 import './apollo.css'
 
+/** Console arrangement: 'A' three modules side by side; 'B' an annunciator
+ *  strip of lamps across the top with the CRT and the controls beneath. */
+const CONSOLE: 'A' | 'B' = 'A'
+
 const WHITE = '#f2f2ee'
 const CYAN = '#5fd7ff'
+const LCD = '#f4f4f0'
 
 const f2 = (v: number) => (isFinite(v) ? v.toFixed(2) : '—')
 const f1 = (v: number) => (isFinite(v) ? v.toFixed(1) : '—')
@@ -23,34 +28,27 @@ function sumWaveforms(ws: (Waveform | undefined)[]): Waveform | undefined {
   return ts.map((t) => [t, live.reduce((acc, w) => acc + (interpWaveform(w, t) ?? 0), 0)])
 }
 
-// ── mission clock ───────────────────────────────────────────────────
-function Clock({ n, label, value, sub, pitch = 4 }: { n: string; label: string; value: string; sub?: [string, number][]; pitch?: number }) {
+// ── mission clock: seven-segment digits, or a word, under a tracked legend ──
+function Clock({ n, label, digits, word, sub, color = LCD }: {
+  n: string; label: string; digits?: string; word?: string; sub?: string[]; color?: string
+}) {
   return (
     <div className="ap-clock">
       <span className="ap-num">{n}</span>
-      <DotText text={label} pitch={2} color="#cfd0c8" off="" className="ap-clock-label" />
-      <DotText text={value} pitch={pitch} />
-      <div className="ap-clock-sub" style={{ width: 47 * pitch }}>
-        {sub?.map(([s, x]) => (
-          <DotText key={s} text={s} pitch={2} color="#cfd0c8" off="" className="ap-clock-subword" style={{ left: x * pitch }} />
-        ))}
+      <span className="ap-legend">{label}</span>
+      {digits !== undefined
+        ? <SevenSeg text={digits} color={color} size={34} ghost={0.08} />
+        : <span className="ap-word" style={{ color }}>{word}</span>}
+      <div className="ap-clock-sub">
+        {sub?.map((s) => <span key={s} className="ap-legend">{s}</span>)}
       </div>
-    </div>
-  )
-}
-
-// ── CRT text tile ───────────────────────────────────────────────────
-function Crt({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`ap-crt${className ? ` ${className}` : ''}`}>
-      <div className="ap-crt-screen">{children}</div>
     </div>
   )
 }
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const { displaySnapshot: s, history, running, finished, scrubTime, time, duration, programJson } = ctx
-  const [logView, setLogView] = useState<'log' | 'rpt'>('log')
+  const [showReport, setShowReport] = useState(false)
 
   // The big board and the shared canvases take the MOCR field: black.
   // The settings provider re-asserts its own theme on mount and on change,
@@ -68,8 +66,8 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     }
   }, [])
 
-  // The report replaces the log once it exists; a new pulse goes back to the log.
-  useEffect(() => { setLogView(ctx.report ? 'rpt' : 'log') }, [ctx.report])
+  // The report takes the log screen once it exists; a new pulse goes back to the log.
+  useEffect(() => { setShowReport(!!ctx.report) }, [ctx.report])
 
   const device = ctx.devices.find((d) => d.id === ctx.activeDevice)
   const prog = useMemo(() => parseProgram(programJson), [programJson])
@@ -117,10 +115,9 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const deviceName = device?.name ?? ctx.activeDevice
   const presetLabel = (ctx.presets.find((p) => p.id === ctx.activePreset)?.label ?? ctx.activePreset)
     .replace(/density limit/i, 'DENS LIM')
-  // Centres of the MM, SS and MMM groups of "MM:SS.MMM", in dot columns.
-  const clockSub: [string, number][] = [['MIN', 5.5], ['SEC', 20.5], ['MS', 38.5]]
+  const phaseColor = phase === 'DISRUPT' ? '#ff5a4a' : LCD
 
-  // ── status lamps ──
+  // ── status lamps: real state only; anything a telemetry row already says is left out ──
   const ipOn = !!s && s.ip > 0.05
   const fgw = s?.f_greenwald ?? 0
   const q95 = s?.q95 ?? 99
@@ -131,14 +128,10 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const hazard = s?.disruption_risk ?? 0
   const paused = !running && !finished && time > 0
   const lamps: [string, Lamp][] = [
-    ['RUN', running ? 'green' : 'off'],
     ['H-MODE', s?.in_hmode ? 'green' : 'off'],
-    ['L-MODE', ipOn && !s?.in_hmode ? 'white' : 'off'],
     ['ELM', s?.elm_active ? 'amber' : s?.elm_suppressed && s?.in_hmode ? 'white' : 'off'],
     ['DIVERT', ipOn && s && !s.is_limited ? 'green' : 'off'],
-    ['LIMITER', ipOn && s?.is_limited ? 'white' : 'off'],
-    ['NEUTRON', (s?.diagnostics.neutron_rate ?? 0) > 1e12 ? 'green' : 'off'],
-    ['ALPHA', (s?.p_alpha ?? 0) > 0.05 ? 'green' : 'off'],
+    ['HAZARD', hazard > 0.05 ? 'red' : hazard > 0.01 ? 'amber' : 'off'],
     ['DENSITY', ipOn && fgw >= 1 ? 'red' : ipOn && fgw >= 0.8 ? 'amber' : 'off'],
     ['Q95', ipOn && q95 < 2.5 ? 'red' : ipOn && q95 < 3 ? 'amber' : 'off'],
     ['BETA', riskBeta > 0.5 ? 'red' : riskBeta > 0.15 ? 'amber' : 'off'],
@@ -146,65 +139,103 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     ['OH SAT', s?.oh_saturated ? 'amber' : 'off'],
     ['FLUX', s?.flux_exhausted ? 'red' : fluxFrac > 0.85 ? 'amber' : 'off'],
     ['LOCKED', riskLocked > 0.5 ? 'red' : riskLocked > 0.15 ? 'amber' : 'off'],
-    ['DISRUPT', s?.disrupted ? 'red' : hazard > 0.01 ? 'amber' : 'off'],
+    ['DISRUPT', s?.disrupted ? 'red' : 'off'],
   ]
 
-  // ── telemetry columns ──
-  const tele = (snap: Snapshot | null): [string, string, string][][] => {
+  // ── telemetry: 24 rows on a strict 3 x 8 grid of label / value / unit ──
+  const tele = (snap: Snapshot | null): [string, string, string][] => {
     const v = (x: number | undefined, d = 2) => (snap && x !== undefined && isFinite(x) ? x.toFixed(d) : '-.--')
     const neut = snap?.diagnostics.neutron_rate ?? 0
     return [
-      [
-        ['IP', v(snap?.ip), 'MA'],
-        ['BT', v(snap?.bt), 'T'],
-        ['NE', v(snap?.ne_bar), 'E20'],
-        ['TE0', v(snap?.te0), 'KEV'],
-        ['WTH', v(snap?.w_th), 'MJ'],
-        ['TAUE', v(snap?.tau_e, 3), 'S'],
-        ['BETAN', v(snap?.beta_n), ''],
-        ['Q95', v(snap?.q95), ''],
-        ['LI', v(snap?.li), ''],
-        ['H98', v(snap?.h_factor), ''],
-        ['FGW', v(snap?.f_greenwald), ''],
-        ['ZEFF', v(snap?.z_eff), ''],
-      ],
-      [
-        ['PIN', v(snap?.p_input, 1), 'MW'],
-        ['POH', v(snap?.p_ohmic, 1), 'MW'],
-        ['PRAD', v(snap?.p_rad, 1), 'MW'],
-        ['PLOSS', v(snap?.p_loss, 1), 'MW'],
-        ['PALPHA', v(snap?.p_alpha, 2), 'MW'],
-        ['VLOOP', v(snap?.v_loop), 'V'],
-        ['PSI', v(snap?.flux_consumed, 1), 'VS'],
-        ['PSIMAX', v(snap?.flux_budget, 1), 'VS'],
-        ['IBS', v(snap?.i_bootstrap), 'MA'],
-        ['ICD', v(snap?.i_cd), 'MA'],
-        ['NEUT', snap ? neut.toExponential(1).replace('e+', 'E').replace('e', 'E') : '-.--', '/S'],
-        ['HAZ', v(hazard * 100, 2), '%/S'],
-      ],
+      ['IP', v(snap?.ip), 'MA'], ['PIN', v(snap?.p_input, 1), 'MW'], ['VLOOP', v(snap?.v_loop), 'V'],
+      ['BT', v(snap?.bt), 'T'], ['POH', v(snap?.p_ohmic, 1), 'MW'], ['PSI', v(snap?.flux_consumed, 1), 'VS'],
+      ['NE', v(snap?.ne_bar), 'E20'], ['PRAD', v(snap?.p_rad, 1), 'MW'], ['PSIMAX', v(snap?.flux_budget, 1), 'VS'],
+      ['TE0', v(snap?.te0), 'KEV'], ['PLOSS', v(snap?.p_loss, 1), 'MW'], ['IBS', v(snap?.i_bootstrap), 'MA'],
+      ['WTH', v(snap?.w_th), 'MJ'], ['PALPHA', v(snap?.p_alpha, 2), 'MW'], ['ICD', v(snap?.i_cd), 'MA'],
+      ['TAUE', v(snap?.tau_e, 3), 'S'], ['BETAN', v(snap?.beta_n), ''], ['LI', v(snap?.li), ''],
+      ['Q95', v(snap?.q95), ''], ['FGW', v(snap?.f_greenwald), ''], ['H98', v(snap?.h_factor), ''],
+      ['ZEFF', v(snap?.z_eff), ''], ['NEUT', snap ? neut.toExponential(1).replace('e+', 'E').replace('e', 'E') : '-.--', '/S'], ['HAZ', v(hazard * 100, 2), '%/S'],
     ]
   }
-  const columns = tele(s)
+  const rows = tele(s)
 
   const sevColor: Record<string, string> = {
-    info: '#a8d8ff', ok: '#8ef08e', minor: '#ffc04a', major: '#ff6a5a', invalid: '#e39cff',
+    info: '#f2f2ee', ok: '#8ef08e', minor: '#ffc04a', major: '#ff6a5a', invalid: '#e39cff',
   }
-  const logLines = ctx.events.slice(-11)
+  const logLines = ctx.events.slice(-5)
 
   const canReset = !(running && ctx.hasCustomProgram)
+
+  // ── console modules (shared by both arrangements) ──
+  const statusKeys = lamps.map(([cap, lamp]) => <LampKey key={cap} caption={cap} lamp={lamp} />)
+
+  const teleModule = (
+    <div className="ap-mod ap-mod-tele">
+      <div className="ap-mod-head"><span className="ap-plate">15</span><span className="ap-engr">TELEMETRY</span></div>
+      <div className="ap-crt">
+        <div className="ap-crt-screen ap-tele-grid">
+          {rows.map(([k, v, u]) => (
+            <div key={k} className="ap-tele-row">
+              <span>{k}</span><span className="ap-v">{v}</span><span className="ap-u">{u}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
+  const ctlModule = (
+    <div className="ap-mod ap-mod-ctl">
+      <div className="ap-mod-head"><span className="ap-plate">16</span><span className="ap-engr">CONTROL</span></div>
+      <div className="ap-ctl-rows">
+        <div className="ap-ctl-row ap-ctl-row-6">
+          <span className="ap-engr">RUN</span>
+          <LampKey caption="START" lamp={running ? 'green' : 'off'} onClick={ctx.controls.start} disabled={running} />
+          <LampKey caption="PAUSE" lamp={paused ? 'amber' : 'off'} onClick={ctx.controls.pause} disabled={!running} />
+          <LampKey caption="RESET" lamp="off" onClick={ctx.controls.reset} disabled={!canReset} />
+          <LampKey caption="LIVE" lamp={scrubTime !== null ? 'white' : 'off'} onClick={() => ctx.controls.setScrubTime(null)} disabled={scrubTime === null} />
+          <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} />
+          <LampKey caption="RPT" lamp={showReport ? 'white' : 'off'} onClick={() => setShowReport((v) => !v)} disabled={!ctx.report} />
+        </div>
+        <div className="ap-ctl-row ap-ctl-row-6">
+          <span className="ap-engr">SPEED</span>
+          {[2, 1, 0.75, 0.5].map((sp) => (
+            <LampKey key={sp} caption={`${sp}X`} lamp={ctx.activeSpeed === sp ? 'white' : 'off'} onClick={() => ctx.onSpeedChange(sp)} />
+          ))}
+          <span className="ap-engr ap-engr-r">SET</span>
+          <span className="ap-slot">{ctx.settingsNode}</span>
+        </div>
+        <div className="ap-ctl-row ap-ctl-row-6">
+          <span className="ap-engr">DEVICE</span>
+          {ctx.devices.map((d) => (
+            <LampKey key={d.id} caption={d.name.toUpperCase()} lamp={ctx.activeDevice === d.id ? 'white' : 'off'} onClick={() => ctx.onDeviceChange(d.id)} />
+          ))}
+        </div>
+        <div className="ap-ctl-row ap-ctl-row-6">
+          <span className="ap-engr">SCEN</span>
+          {ctx.presets.map((p) => (
+            <LampKey key={p.id} caption={p.label.toUpperCase().replace(' ', '\n')} lamp={ctx.activePreset === p.id ? 'white' : 'off'} onClick={() => ctx.onPresetChange(p.id)} />
+          ))}
+          {ctx.showsFuelToggle && (['DD', 'DT'] as const).map((f) => (
+            <LampKey key={f} caption={f} lamp={ctx.fuelType === f ? 'white' : 'off'} onClick={() => ctx.onFuelChange(f)} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div data-layout="apollo" className="ap-root">
       {/* ── 01–05 mission clocks ── */}
       <header className="ap-clocks">
-        <Clock n="01" label="PULSE" value={pulse} />
-        <Clock n="02" label="PET" value={clock(time)} sub={clockSub} />
-        <Clock n="03" label="REM" value={clock(duration - time)} sub={clockSub} />
-        <Clock n="04" label="PHASE" value={phase} />
-        <Clock n="05" label="PROG" value={`${deviceName} ${presetLabel}`} />
+        <Clock n="01" label="PULSE" digits={pulse} />
+        <Clock n="02" label="PET" digits={clock(time)} sub={['MIN', 'SEC', 'MS']} />
+        <Clock n="03" label="REM" digits={clock(duration - time)} sub={['MIN', 'SEC', 'MS']} />
+        <Clock n="04" label="PHASE" word={phase} color={phaseColor} />
+        <Clock n="05" label="PROG" word={`${deviceName} ${presetLabel}`} />
       </header>
 
-      {/* ── 06–12 big board ── */}
+      {/* ── 06–13 big board ── */}
       <section className="ap-board">
         <div className="ap-tile ap-map">
           <EquilibriumCanvas snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
@@ -230,118 +261,64 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
             />
           ))}
         </div>
-        <div className="ap-tile ap-port">
-          <PortView
-            snapshot={ctx.plasmaSnapshot}
-            limiterPoints={ctx.limiterPoints}
-            deviceId={ctx.activeDevice}
-            wallJson={ctx.wallJson}
-            deviceR0={device?.r0}
-            deviceA={device?.a}
-          />
-          <div className="ap-plot-num">12</div>
-        </div>
-      </section>
-
-      {/* ── 13–16 console ── */}
-      <section className="ap-console">
-        <div className="ap-mod ap-mod-status">
-          <div className="ap-mod-head"><span className="ap-plate">13</span><span className="ap-engr">STATUS</span></div>
-          <div className="ap-keys ap-keys-status">
-            {lamps.map(([cap, lamp]) => <LampKey key={cap} caption={cap} lamp={lamp} />)}
+        <div className="ap-right">
+          <div className="ap-tile ap-port">
+            <PortView
+              snapshot={ctx.plasmaSnapshot}
+              limiterPoints={ctx.limiterPoints}
+              deviceId={ctx.activeDevice}
+              wallJson={ctx.wallJson}
+              deviceR0={device?.r0}
+              deviceA={device?.a}
+            />
+            <div className="ap-plot-num">12</div>
           </div>
-        </div>
-
-        <div className="ap-mod ap-mod-tele">
-          <div className="ap-mod-head"><span className="ap-plate">14</span><span className="ap-engr">TELEMETRY</span></div>
-          <Crt>
-            <div className="ap-crt-cols">
-              {columns.map((col, ci) => (
-                <table key={ci}>
-                  <tbody>
-                    {col.map(([k, v, u]) => (
-                      <tr key={k}><td>{k}</td><td className="ap-v">{v}</td><td className="ap-u">{u}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              ))}
-            </div>
-          </Crt>
-        </div>
-
-        <div className="ap-mod ap-mod-log">
-          <div className="ap-mod-head">
-            <span className="ap-plate">15</span><span className="ap-engr">LOG</span>
-            <span className="ap-head-keys">
-              <LampKey caption="LOG" lamp={logView === 'log' ? 'white' : 'off'} onClick={() => setLogView('log')} />
-              <LampKey caption="RPT" lamp={logView === 'rpt' ? 'white' : 'off'} onClick={() => setLogView('rpt')} disabled={!ctx.report} />
-            </span>
-          </div>
-          <Crt className="ap-crt-log">
-            {logView === 'rpt' && ctx.report ? (
-              <table>
-                <tbody>
-                  {ctx.report.map((r, i) => (
-                    <tr key={i} style={{ color: r.status === 'major' ? sevColor.major : r.status === 'minor' ? sevColor.minor : undefined }}>
-                      <td>{r.label}</td><td className="ap-v">{r.programmed ?? ''}</td><td className="ap-v">{r.achieved}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <table>
-                <tbody>
-                  {logLines.length === 0 && <tr><td className="ap-v">0.00</td><td>READY</td></tr>}
-                  {logLines.map((e) => (
-                    <tr key={e.id} style={{ color: sevColor[e.severity] }}>
-                      <td className="ap-v">{e.t.toFixed(2)}</td><td>{e.text}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Crt>
-        </div>
-
-        <div className="ap-mod ap-mod-ctl">
-          <div className="ap-mod-head"><span className="ap-plate">16</span><span className="ap-engr">CONTROL</span></div>
-          <div className="ap-ctl-rows">
-            <div className="ap-ctl-row">
-              <span className="ap-engr">RUN</span>
-              <LampKey caption="START" lamp={running ? 'green' : 'off'} onClick={ctx.controls.start} disabled={running} />
-              <LampKey caption="PAUSE" lamp={paused ? 'amber' : 'off'} onClick={ctx.controls.pause} disabled={!running} />
-              <LampKey caption="RESET" lamp="off" onClick={ctx.controls.reset} disabled={!canReset} />
-              <LampKey caption="LIVE" lamp={scrubTime !== null ? 'white' : 'off'} onClick={() => ctx.controls.setScrubTime(null)} disabled={scrubTime === null} />
-              <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'amber' : 'off'} onClick={ctx.togglePlanner} />
-            </div>
-            <div className="ap-ctl-row">
-              <span className="ap-engr">SPEED</span>
-              {[2, 1, 0.75, 0.5].map((sp) => (
-                <LampKey key={sp} caption={`${sp}X`} lamp={ctx.activeSpeed === sp ? 'white' : 'off'} onClick={() => ctx.onSpeedChange(sp)} />
-              ))}
-            </div>
-            <div className="ap-ctl-row">
-              <span className="ap-engr">DEVICE</span>
-              {ctx.devices.map((d) => (
-                <LampKey key={d.id} caption={d.name.toUpperCase()} lamp={ctx.activeDevice === d.id ? 'green' : 'off'} onClick={() => ctx.onDeviceChange(d.id)} />
-              ))}
-            </div>
-            <div className="ap-ctl-row">
-              <span className="ap-engr">SCEN</span>
-              {ctx.presets.map((p) => (
-                <LampKey key={p.id} caption={p.label.toUpperCase().replace(' ', '\n')} lamp={ctx.activePreset === p.id ? 'green' : 'off'} onClick={() => ctx.onPresetChange(p.id)} />
-              ))}
-              {ctx.showsFuelToggle && (['DD', 'DT'] as const).map((f) => (
-                <LampKey key={f} caption={f} lamp={ctx.fuelType === f ? 'white' : 'off'} onClick={() => ctx.onFuelChange(f)} />
-              ))}
-            </div>
-            <div className="ap-ctl-row ap-ctl-row-set">
-              <span className="ap-engr">SET</span>
-              <span className="ap-slot">{ctx.settingsNode}</span>
+          <div className="ap-tile ap-log">
+            <div className="ap-plot-title">{showReport && ctx.report ? 'REPORT' : 'LOG'}</div>
+            <div className="ap-plot-num">13</div>
+            <div className="ap-log-lines">
+              {showReport && ctx.report ? (
+                ctx.report.slice(0, 5).map((r, i) => (
+                  <div key={i} className="ap-log-line" style={{ color: r.status === 'major' ? sevColor.major : r.status === 'minor' ? sevColor.minor : undefined }}>
+                    <span className="ap-log-t">{r.label}</span><span className="ap-v">{r.programmed ?? ''}</span><span className="ap-v">{r.achieved}</span>
+                  </div>
+                ))
+              ) : logLines.length === 0 ? (
+                <div className="ap-log-line"><span className="ap-log-t">0.00</span><span>READY</span></div>
+              ) : (
+                logLines.map((e) => (
+                  <div key={e.id} className="ap-log-line" style={{ color: sevColor[e.severity] }}>
+                    <span className="ap-log-t">{e.t.toFixed(2)}</span><span>{e.text}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
       </section>
+
+      {/* ── 14–16 console ── */}
+      {CONSOLE === 'A' ? (
+        <section className="ap-console ap-console-a">
+          <div className="ap-mod ap-mod-status">
+            <div className="ap-mod-head"><span className="ap-plate">14</span><span className="ap-engr">STATUS</span></div>
+            <div className="ap-keys ap-keys-status">{statusKeys}</div>
+          </div>
+          {teleModule}
+          {ctlModule}
+        </section>
+      ) : (
+        <section className="ap-console ap-console-b">
+          <div className="ap-annun">
+            <div className="ap-mod-head"><span className="ap-plate">14</span><span className="ap-engr">STATUS</span></div>
+            <div className="ap-keys ap-keys-strip">{statusKeys}</div>
+          </div>
+          <div className="ap-console-b-lower">
+            {teleModule}
+            {ctlModule}
+          </div>
+        </section>
+      )}
 
       {ctx.plannerNode}
       {ctx.tutorialNode}

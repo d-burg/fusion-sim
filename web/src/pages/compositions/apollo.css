@@ -2,11 +2,12 @@
 
 /* ═══════════════════════════════════════════════════════════════════
    APOLLO — Mission Operations Control Room, seen from a controller's seat.
-   Top: dot-matrix mission clocks, white on black. Middle: the big board,
-   white and cyan lines on black with a fine grid. Bottom: sage-green
-   consoles with square lamp keys, engraved labels and blue CRTs.
-   Type: dot-matrix (drawn), Helvetica/Arial for engraving and axis
-   figures, VT323 for the CRT columns.
+   Top: an LCD instrument band — seven-segment digits and tracked legends,
+   white on black. Middle: the big board, white and cyan lines on black with
+   a fine grid. Bottom: sage-green consoles with square lamp keys and one
+   CRT, in two visual languages: dark glass set into sage, and engraving.
+   Type: seven-segment (SVG), Helvetica/Arial for legends, engraving and
+   axis figures, VT323 for the CRT columns and the board log.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* The shared canvases read these: the board field is black. */
@@ -22,8 +23,8 @@ html[data-theme="apollo"] {
   --ap-sage: #a9b4a2;
   --ap-sage-dark: #6f7a69;
   --ap-engr: #1f241d;
-  --ap-cap: #2e332d;
-  --ap-cap-edge: #4a5146;
+  --ap-glass: #2e332d;
+  --ap-glass-edge: #4a5146;
   --ap-amber: #f5a623;
   --ap-white: #efeee6;
   --ap-green: #7fcf5f;
@@ -61,20 +62,26 @@ html[data-theme="apollo"] {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
   overflow: hidden;
 }
 [data-layout="apollo"] .ap-num {
   position: absolute; top: 3px; left: 5px;
   font-size: 9px; color: #9a9a94; letter-spacing: 0.04em;
 }
-[data-layout="apollo"] .ap-clock-sub { position: relative; width: 188px; height: 14px; }
-[data-layout="apollo"] .ap-clock-subword { position: absolute; top: 0; transform: translateX(-50%); }
+[data-layout="apollo"] .ap-legend {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.22em; color: #b9bab2; text-transform: uppercase;
+}
+[data-layout="apollo"] .ap-word {
+  font-size: 24px; font-weight: 400; letter-spacing: 0.2em; line-height: 34px; color: #f4f4f0;
+  text-transform: uppercase; white-space: nowrap;
+}
+[data-layout="apollo"] .ap-clock-sub { display: flex; gap: 34px; height: 11px; }
 
-/* ── 06–12 big board ──────────────────────────────────────────── */
+/* ── 06–13 big board ──────────────────────────────────────────── */
 [data-layout="apollo"] .ap-board {
   display: grid;
-  grid-template-columns: 330px 1fr 380px;
+  grid-template-columns: 300px 1fr 411px;
   gap: 3px;
   padding: 3px;
   background: #262626;
@@ -89,6 +96,11 @@ html[data-theme="apollo"] {
   background: #262626;
   min-height: 0;
 }
+/* The port view keeps the proportion it has on the site (about 1.05 : 1);
+   the log takes what is left under it. */
+[data-layout="apollo"] .ap-right {
+  display: grid; grid-template-rows: 393px 1fr; gap: 3px; min-height: 0;
+}
 [data-layout="apollo"] .ap-plot { position: relative; background: #000; overflow: hidden; min-height: 0; }
 [data-layout="apollo"] .ap-plot-scrub { cursor: crosshair; }
 [data-layout="apollo"] .ap-plot canvas { position: absolute; inset: 0; display: block; }
@@ -97,6 +109,7 @@ html[data-theme="apollo"] {
   font-size: 10px; color: #f2f2ee; letter-spacing: 0.04em;
   pointer-events: none;
 }
+[data-layout="apollo"] .ap-log .ap-plot-title { left: 8px; }
 [data-layout="apollo"] .ap-unit { color: #bfe8ff; margin-left: 4px; }
 [data-layout="apollo"] .ap-plot-num {
   position: absolute; top: 3px; right: 8px;
@@ -111,16 +124,26 @@ html[data-theme="apollo"] {
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
+[data-layout="apollo"] .ap-log-lines {
+  position: absolute; left: 8px; right: 8px; top: 17px; bottom: 4px;
+  font-family: 'VT323', 'Courier New', monospace; font-size: 16px; line-height: 17px;
+  text-transform: uppercase; color: #f2f2ee; overflow: hidden;
+}
+[data-layout="apollo"] .ap-log-line { display: flex; gap: 10px; white-space: nowrap; overflow: hidden; }
+[data-layout="apollo"] .ap-log-line .ap-log-t { flex: none; width: 10ch; }
+[data-layout="apollo"] .ap-log-line .ap-v { flex: none; width: 9ch; text-align: right; }
 
-/* ── 13–16 console ────────────────────────────────────────────── */
+/* ── 14–16 console ────────────────────────────────────────────── */
 [data-layout="apollo"] .ap-console {
-  display: grid;
-  grid-template-columns: 300px 330px 330px 1fr;
   background: var(--ap-sage);
   border-top: 4px solid #8d978a;
   color: var(--ap-engr);
   min-height: 0;
 }
+[data-layout="apollo"] .ap-console-a { display: grid; grid-template-columns: 350px 1fr 530px; }
+[data-layout="apollo"] .ap-console-b { display: grid; grid-template-rows: 72px 1fr; }
+[data-layout="apollo"] .ap-console-b-lower { display: grid; grid-template-columns: 1fr 560px; min-height: 0; border-top: 2px solid var(--ap-sage-dark); }
+[data-layout="apollo"] .ap-annun { display: flex; flex-direction: column; padding: 6px 8px; min-height: 0; }
 [data-layout="apollo"] .ap-mod {
   display: flex; flex-direction: column;
   padding: 6px 8px 8px;
@@ -128,7 +151,7 @@ html[data-theme="apollo"] {
   min-height: 0;
 }
 [data-layout="apollo"] .ap-mod:last-child { border-right: 0; }
-[data-layout="apollo"] .ap-mod-head { display: flex; align-items: center; height: 18px; margin-bottom: 5px; flex: none; }
+[data-layout="apollo"] .ap-mod-head { display: flex; align-items: center; height: 16px; margin-bottom: 6px; flex: none; }
 [data-layout="apollo"] .ap-engr {
   font-weight: 700; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ap-engr);
 }
@@ -137,19 +160,21 @@ html[data-theme="apollo"] {
   font-weight: 700; font-size: 9px; letter-spacing: 0.06em;
   padding: 1px 4px; margin-right: 6px;
 }
-[data-layout="apollo"] .ap-head-keys { margin-left: auto; display: flex; gap: 3px; height: 18px; }
-[data-layout="apollo"] .ap-head-keys .ap-key { width: 36px; font-size: 8px; }
 
-/* lamp keys */
+/* lamp keys: dark glass set into the sage; status keys light in colour */
 [data-layout="apollo"] .ap-keys-status {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap: 4px;
+  display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap: 6px;
+}
+[data-layout="apollo"] .ap-keys-strip {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px;
 }
 [data-layout="apollo"] .ap-key {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: 0; min-width: 0; margin: 0; padding: 0 2px;
-  background: var(--ap-cap);
-  border: 1px solid var(--ap-cap-edge);
+  background: var(--ap-glass);
+  border: 1px solid var(--ap-glass-edge);
   box-shadow: inset 0 0 0 1px #1c201b;
   color: #8c9486;
   font-family: Helvetica, Arial, sans-serif;
@@ -158,20 +183,29 @@ html[data-theme="apollo"] {
   border-radius: 0;
   user-select: none;
 }
-[data-layout="apollo"] .ap-key-btn { cursor: pointer; }
-[data-layout="apollo"] .ap-key-btn:active { transform: translateY(1px); }
-[data-layout="apollo"] .ap-key-btn:disabled { cursor: default; }
-[data-layout="apollo"] .ap-key-btn:disabled.ap-key-off { color: #5c6457; }
 [data-layout="apollo"] .ap-key-amber { background: var(--ap-amber); color: #1a1200; box-shadow: inset 0 0 0 1px #8a5b00; }
 [data-layout="apollo"] .ap-key-white { background: var(--ap-white); color: #111; box-shadow: inset 0 0 0 1px #9b9a90; }
 [data-layout="apollo"] .ap-key-green { background: var(--ap-green); color: #0c1a08; box-shadow: inset 0 0 0 1px #3f7d2c; }
 [data-layout="apollo"] .ap-key-red { background: var(--ap-red); color: #fff; box-shadow: inset 0 0 0 1px #8a1d12; }
 
-/* CRTs */
+/* control keys: quieter — engraved sage caps, lit white when selected */
+[data-layout="apollo"] .ap-key-btn { cursor: pointer; }
+[data-layout="apollo"] .ap-key-btn:active { transform: translateY(1px); }
+[data-layout="apollo"] .ap-key-btn:disabled { cursor: default; }
+[data-layout="apollo"] .ap-ctl-rows .ap-key-off {
+  background: #bcc6b4; border-color: #7d877a; box-shadow: inset 0 0 0 1px #d6ddd0; color: var(--ap-engr);
+}
+[data-layout="apollo"] .ap-ctl-rows .ap-key-btn.ap-key-off:hover { background: #cdd5c6; }
+[data-layout="apollo"] .ap-ctl-rows .ap-key-btn:disabled.ap-key-off { color: #7a8476; background: #b3bdab; }
+[data-layout="apollo"] .ap-ctl-rows .ap-key-white { background: #f4f3ec; border-color: #7d877a; box-shadow: inset 0 0 0 1px #fff; }
+
+/* CRT: the same dark glass as the lamp keys */
 [data-layout="apollo"] .ap-crt {
   flex: 1; min-height: 0;
-  background: #30352f;
-  padding: 5px;
+  background: var(--ap-glass);
+  border: 1px solid var(--ap-glass-edge);
+  box-shadow: inset 0 0 0 1px #1c201b;
+  padding: 6px;
   display: flex;
 }
 [data-layout="apollo"] .ap-crt-screen {
@@ -179,33 +213,36 @@ html[data-theme="apollo"] {
   background: #060a10;
   color: var(--ap-crt);
   font-family: 'VT323', 'Courier New', monospace;
-  font-size: 17px; line-height: 1.02;
-  padding: 5px 8px;
+  font-size: 17px; line-height: 1;
+  padding: 8px 10px;
   text-transform: uppercase;
 }
-[data-layout="apollo"] .ap-crt-cols { display: flex; gap: 14px; }
-[data-layout="apollo"] .ap-crt table { border-collapse: collapse; width: 100%; }
-[data-layout="apollo"] .ap-crt td { padding: 0 6px 0 0; white-space: nowrap; vertical-align: top; }
-[data-layout="apollo"] .ap-crt td:last-child { padding-right: 0; }
-[data-layout="apollo"] .ap-crt td.ap-v { text-align: right; font-variant-numeric: tabular-nums; }
-[data-layout="apollo"] .ap-crt td.ap-u { color: #6fa3c9; }
-[data-layout="apollo"] .ap-crt-log td:last-child { white-space: normal; overflow: hidden; text-overflow: ellipsis; }
+[data-layout="apollo"] .ap-tele-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 1fr;
+  column-gap: 18px;
+  align-items: center;
+}
+[data-layout="apollo"] .ap-tele-row { display: grid; grid-template-columns: 7ch 8ch 5ch; white-space: nowrap; }
+[data-layout="apollo"] .ap-tele-row .ap-v { text-align: right; font-variant-numeric: tabular-nums; }
+[data-layout="apollo"] .ap-tele-row .ap-u { color: #6fa3c9; padding-left: 1ch; }
 
 /* control rows */
-[data-layout="apollo"] .ap-ctl-rows { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+[data-layout="apollo"] .ap-ctl-rows { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 [data-layout="apollo"] .ap-ctl-row {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 48px repeat(5, 1fr); gap: 4px; align-items: stretch;
+  display: grid; gap: 6px; align-items: stretch;
 }
+[data-layout="apollo"] .ap-ctl-row-6 { grid-template-columns: 46px repeat(6, 1fr); }
 [data-layout="apollo"] .ap-ctl-row > .ap-engr { align-self: center; }
+[data-layout="apollo"] .ap-ctl-row > .ap-engr-r { text-align: right; padding-right: 2px; }
 [data-layout="apollo"] .ap-slot {
-  grid-column: 2 / span 1;
   display: flex; align-items: center; justify-content: center;
-  background: var(--ap-cap); border: 1px solid var(--ap-cap-edge);
-  box-shadow: inset 0 0 0 1px #1c201b;
+  background: #bcc6b4; border: 1px solid #7d877a; box-shadow: inset 0 0 0 1px #d6ddd0;
   position: relative;
 }
-[data-layout="apollo"] .ap-slot .settings-btn { color: #c9cfc2; border-radius: 0; }
-[data-layout="apollo"] .ap-slot .settings-btn:hover { color: #fff; }
+[data-layout="apollo"] .ap-slot .settings-btn { color: var(--ap-engr); border-radius: 0; }
+[data-layout="apollo"] .ap-slot .settings-btn:hover { color: #000; }
 /* The console sits at the foot of the screen: the settings panel opens upward. */
-[data-layout="apollo"] .ap-slot .settings-panel { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; margin-top: 0; border-radius: 0; }
+[data-layout="apollo"] .ap-slot .settings-panel { top: auto; bottom: calc(100% + 6px); left: auto; right: 0; margin-top: 0; border-radius: 0; }
