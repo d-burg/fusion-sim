@@ -163,7 +163,7 @@ export default function StatusPanel({
               <button
                 onClick={() => canShowProfiles && setShowProfiles(!showProfiles)}
                 disabled={!canShowProfiles}
-                className={`px-2.5 py-1 rounded text-sm font-medium border transition-colors ${
+                className={`px-2.5 py-0.5 rounded text-sm font-medium border transition-colors ${
                   !canShowProfiles
                     ? 'bg-gray-800/50 border-transparent text-gray-600 cursor-not-allowed'
                     : showProfiles
@@ -230,25 +230,24 @@ export default function StatusPanel({
             <InfoPopup title="Stability Limits" position="left">{stabilityInfo}</InfoPopup>
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-x-3 gap-y-0.5">
+        <div className="grid grid-cols-4 gap-x-3 gap-y-0.5">
           <Param label={<>I<sub>p</sub></>} value={s.ip} unit="MA" />
           <Param label={<>T<sub>e0</sub></>} value={s.te0} unit="keV" />
+          <Param label={<>Z<sub>eff</sub></>} value={s.z_eff ?? 0} unit="" invalid={invalid} warn={(s.z_eff ?? 0) > 2.5} danger={(s.z_eff ?? 0) > 3.5} />
           <Param label={<>q<sub>95</sub></>} value={s.q95} unit="" warn={s.q95 < 2.5} danger={s.q95 < 2.0} invalid={invalid} />
 
           <Param label={<>B<sub>t</sub></>} value={s.bt} unit="T" />
           <Param label={<><span style={{ textDecoration: 'overline' }}>n</span><sub>e</sub></>} value={s.ne_bar} unit="10²⁰" />
+          <Param label={<>c<sub>z</sub></>} value={100 * ((s.imp_n ?? 0) + (s.imp_ne ?? 0) + (s.imp_ar ?? 0))} unit="%" invalid={invalid} />
           <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} invalid={invalid} />
 
           <Param label={<>W<sub>th</sub></>} value={s.w_th} unit="MJ" />
           <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" invalid={invalid} />
+          <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" />
           <Param label={<>f<sub>GW</sub></>} value={s.f_greenwald} unit="" warn={s.f_greenwald > 0.8} danger={s.f_greenwald > 0.9} invalid={invalid} />
 
           <Param label={<>H<sub>98</sub></>} value={s.h_factor} unit="" invalid={invalid} />
           <Param label={<>l<sub>i</sub></>} value={s.li} unit="" invalid={invalid} />
-          <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" />
-
-          <Param label={<>Z<sub>eff</sub></>} value={s.z_eff ?? 0} unit="" invalid={invalid} warn={(s.z_eff ?? 0) > 2.5} danger={(s.z_eff ?? 0) > 3.5} />
-          <Param label={<>c<sub>z</sub></>} value={100 * ((s.imp_n ?? 0) + (s.imp_ne ?? 0) + (s.imp_ar ?? 0))} unit="%" invalid={invalid} />
           <Param label={<>Ψ<sub>OH</sub></>} value={100 * fluxFrac} unit="%" precision={0} warn={fluxFrac > FLUX_WARN} danger={!!s.flux_exhausted || fluxFrac >= 1} />
         </div>
       </div>
@@ -390,14 +389,14 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
     : '\u2007\u2007\u2007— MW'
 
   return (
-    <div className={`rounded border px-2.5 py-1.5 text-center min-w-[84px] shrink-0 ${borderColor}`}>
-      <div className="text-xs text-gray-500 leading-tight">Q<sub>plasma</sub></div>
-      <div className={`text-lg font-mono font-semibold tabular-nums leading-tight ${qColor}`}>
+    <div className={`rounded border px-2.5 py-1 flex items-baseline gap-2 shrink-0 self-start whitespace-nowrap ${borderColor}`}>
+      <span className="text-xs text-gray-500">Q<sub>plasma</sub></span>
+      <span className={`text-lg font-mono font-semibold tabular-nums leading-tight min-w-[3em] text-right ${qColor}`}>
         {formatQ(q)}
-      </div>
-      <div className="text-xs text-gray-500 leading-none mt-0.5 whitespace-nowrap">
-        <span>P<sub>fus</sub></span> <span className="font-mono tabular-nums">{pFusStr}</span>
-      </div>
+      </span>
+      <span className="text-xs text-gray-500 ml-1">
+        P<sub>fus</sub> <span className="font-mono tabular-nums">{pFusStr}</span>
+      </span>
     </div>
   )
 }
@@ -461,30 +460,29 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
         </span>
       </div>
 
-      {/* Signal bar */}
-      <div className="flex gap-0.5 mb-1">
-        {Array.from({ length: numBars }, (_, i) => {
-          const barActive = i < activeBars
-          const barColor = i < 3 ? 'var(--c-ok)' : i < 6 ? 'var(--c-warn)' : 'var(--c-bad)'
-          return (
-            <div
-              key={i}
-              className="flex-1 h-2.5 rounded-sm transition-all duration-300"
-              style={{
-                backgroundColor: barActive ? barColor : 'var(--c-line)',
-                opacity: barActive ? 1 : 0.6,
-              }}
-            />
-          )
-        })}
-      </div>
-
-      {/* Values — fixed-layout flex to prevent side-to-side jitter */}
-      <div className="flex items-center justify-between">
-        <span className={`text-xs ${isActive ? 'text-gray-200' : 'text-gray-500'}`}>
+      {/* Signal bar with the readouts beside it, like the divertor rows */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 gap-0.5 min-w-0">
+          {Array.from({ length: numBars }, (_, i) => {
+            const barActive = i < activeBars
+            const barColor = i < 3 ? 'var(--c-ok)' : i < 6 ? 'var(--c-warn)' : 'var(--c-bad)'
+            return (
+              <div
+                key={i}
+                className="flex-1 h-2.5 rounded-sm transition-all duration-300"
+                style={{
+                  backgroundColor: barActive ? barColor : 'var(--c-line)',
+                  opacity: barActive ? 1 : 0.6,
+                }}
+              />
+            )
+          })}
+        </div>
+        {/* Fixed-width readouts so the bar does not jitter as digits change */}
+        <span className={`text-xs w-24 text-right shrink-0 whitespace-nowrap ${isActive ? 'text-gray-200' : 'text-gray-500'}`}>
           <span className="font-mono tabular-nums">{rate > 0 ? formatNeutronRate(rate) : '—'}</span> n/s
         </span>
-        <span className="text-xs text-gray-500 font-mono tabular-nums">
+        <span className="text-xs text-gray-500 font-mono tabular-nums w-16 text-right shrink-0">
           {powerStr}
         </span>
       </div>
@@ -541,6 +539,14 @@ function DivertorLoading({ divertor, invalid = false, divertorActive = false }: 
         <span className="text-xs text-gray-600" style={invalidStyle} title={invalidTitle}>
           λ<sub>q</sub>=<span className="font-mono tabular-nums">{invalid ? '—' : lambda.toFixed(1)}</span> mm
         </span>
+        {/* Recrystallization warning sits in the header row (nothing to its
+            right depends on its width), so no vertical space is reserved. */}
+        {isW && (
+          <span className="flex items-center gap-1 ml-2" style={{ visibility: isWarning ? 'visible' : 'hidden' }}>
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--c-bad)' }} />
+            <span className="text-xs text-red-400">W recrystallization risk</span>
+          </span>
+        )}
         <span className="text-xs text-gray-600 ml-auto" style={invalidStyle} title={invalidTitle}>
           f<sub>det</sub>=<span className="font-mono tabular-nums">{invalid ? '—' : fDet.toFixed(2)}</span>
         </span>
@@ -595,17 +601,6 @@ function DivertorLoading({ divertor, invalid = false, divertorActive = false }: 
         </div>
       )}
 
-      {/* Warning indicator for tungsten recrystallization — always reserve
-          the vertical space so the panel doesn't shift when it appears/disappears. */}
-      {isW && (
-        <div className="flex items-center gap-1 mt-0.5" style={{ minHeight: 14, visibility: isWarning ? 'visible' : 'hidden' }}>
-          <span
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: 'var(--c-bad)' }}
-          />
-          <span className="text-xs text-red-400">W recrystallization risk</span>
-        </div>
-      )}
     </div>
   )
 }
