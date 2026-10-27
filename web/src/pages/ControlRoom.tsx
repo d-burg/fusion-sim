@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useSimulation } from '../lib/useSimulation'
 import { getDevices, type PresetId } from '../lib/wasm'
@@ -16,6 +16,16 @@ import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
 import { CENTAUR_LIMITER } from '../lib/centaur-geometry'
+import type { ControlRoomContext } from './compositions/types'
+import CompositionDiiid from './compositions/diiid'
+import CompositionApollo from './compositions/apollo'
+import CompositionJet from './compositions/jet'
+
+const COMPOSITIONS: Record<string, ComponentType<{ ctx: ControlRoomContext }>> = {
+  diiid: CompositionDiiid,
+  apollo: CompositionApollo,
+  jet: CompositionJet,
+}
 
 const DEVICE_LIMITERS: Record<string, [number, number][]> = {
   diiid: DIIID_LIMITER,
@@ -44,6 +54,9 @@ export default function ControlRoom() {
   const [searchParams] = useSearchParams()
   const routePreset = (searchParams.get('preset') || 'hmode') as PresetId
   const showTutorial = searchParams.get('tutorial') === 'true'
+  // Lookbook composition prototypes: /run/:device?layout=diiid|apollo|jet
+  const layoutParam = searchParams.get('layout')
+  const LayoutComponent = layoutParam ? COMPOSITIONS[layoutParam] : undefined
 
   // A programme edited on the pulse page arrives as router state.
   const location = useLocation()
@@ -191,6 +204,38 @@ export default function ControlRoom() {
     setPlannerOverrides({})
     setPlannerDuration(null)
     setConfigOverride(null)
+  }
+
+  const plannerNode = showPlanner ? (
+    <PulsePlanner
+      deviceId={activeDevice}
+      onRun={handleRunProgram}
+      onClose={() => setShowPlanner(false)}
+      overrides={plannerOverrides}
+      onOverridesChange={setPlannerOverrides}
+      durationOverride={plannerDuration}
+      onDurationChange={setPlannerDuration}
+      basePreset={plannerPreset}
+      onPresetChange={handlePlannerPresetChange}
+      configOverride={configOverride}
+      onConfigChange={setConfigOverride}
+    />
+  ) : null
+
+  if (LayoutComponent) {
+    const ctx: ControlRoomContext = {
+      state, controls, displaySnapshot, history, running, finished, scrubTime, wallJson, programJson,
+      events, pulseNumber, previousPulse, report, plasmaSnapshot, limiterPoints, usesIch,
+      time, duration, progress,
+      activeDevice, devices, onDeviceChange: handleDeviceChange,
+      activePreset, presets: getPresets(activeDevice), onPresetChange: handlePresetChange,
+      fuelType, showsFuelToggle: activeDevice === 'jet' || activeDevice === 'iter', onFuelChange: handleFuelChange,
+      activeSpeed, onSpeedChange: handleSpeedChange, hasCustomProgram,
+      showPlanner, togglePlanner: () => setShowPlanner((v) => !v), plannerNode,
+      settingsNode: <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} />,
+      tutorialNode: tutorialActive ? <TutorialOverlay onComplete={() => setTutorialActive(false)} /> : null,
+    }
+    return <LayoutComponent ctx={ctx} />
   }
 
   return (
