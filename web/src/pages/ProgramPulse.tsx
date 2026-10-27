@@ -19,6 +19,7 @@ import {
   channelAvailable,
 } from '../lib/program'
 import WaveformDrawer from '../components/WaveformDrawer'
+import { useSettings, LOOKS } from '../lib/settingsContext'
 
 // ── Preset metadata ──────────────────────────────────────────────
 const ALL_PRESETS: { id: PresetId; name: string; desc: string; color: string }[] = [
@@ -395,6 +396,7 @@ export default function ProgramPulse() {
   // rebuilt from the preset every render, so nothing is ever edited in place.
   const [overrides, setOverrides] = useState<Record<string, OverrideValue>>({})
   const [durationOverride, setDurationOverride] = useState<number | null>(null)
+  const { look, setLook } = useSettings()
   const [configOverride, setConfigOverride] = useState<MagneticConfig | null>(null)
   const [editing, setEditing] = useState<ScalarParam | null>(null)
 
@@ -539,6 +541,29 @@ export default function ProgramPulse() {
             </div>
           </div>
         )}
+
+        {/* Control-room look: which composition /run renders; remembered in settings */}
+        <div className="mb-5">
+          <div className="panel-title pb-2 mb-px">Control room look</div>
+          <div className="grid gap-px bg-[var(--c-line)] border-y border-gray-800">
+            {LOOKS.map((l) => {
+              const isSelected = look === l.id
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => setLook(l.id)}
+                  className={`relative px-3 py-1.5 text-sm text-left transition-colors cursor-pointer flex items-baseline justify-between gap-2
+                    ${isSelected ? 'bg-[var(--c-raised)] text-white' : 'bg-gray-900 text-gray-400 hover:bg-[var(--c-raised)]'}`}
+                >
+                  {isSelected && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-cyan-500" />}
+                  <span>{l.label}</span>
+                  <span className="text-xs text-gray-500 truncate">{l.blurb}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
           {/* Duration + reset */}
           {program && (

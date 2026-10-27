@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, type Theme, type Units } from '../lib/settingsContext'
+import { useSettings, LOOKS, type Theme, type Units } from '../lib/settingsContext'
 
 export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutorial?: () => void } = {}) {
-  const { theme, units, setTheme, setUnits } = useSettings()
+  const { theme, units, look, setTheme, setUnits, setLook } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -65,6 +65,23 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
           {/* Header */}
           <div className="settings-heading text-sm font-medium text-gray-300">
             Settings
+          </div>
+
+          {/* Control-room look */}
+          <div>
+            <div className="text-sm text-gray-400 mb-1.5">Control room look</div>
+            <div className="grid grid-cols-2 gap-px bg-gray-700 border border-gray-700 rounded overflow-hidden">
+              {LOOKS.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => setLook(l.id)}
+                  className={`px-2 py-1 text-sm font-medium transition-colors cursor-pointer
+                    ${look === l.id ? 'theme-toggle-active' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Theme toggle */}

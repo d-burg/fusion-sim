@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useSimulation } from '../lib/useSimulation'
 import { getDevices, type PresetId } from '../lib/wasm'
 import type { MagneticConfig, OverrideValue, ProgramHandoff } from '../lib/program'
+import { useSettings } from '../lib/settingsContext'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
 import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
@@ -56,9 +57,13 @@ export default function ControlRoom() {
   const [searchParams] = useSearchParams()
   const routePreset = (searchParams.get('preset') || 'hmode') as PresetId
   const showTutorial = searchParams.get('tutorial') === 'true'
-  // Lookbook composition prototypes: /run/:device?layout=diiid|apollo|jet
+  // The control room renders one of the compositions. The look chosen in
+  // settings (program page or the settings menu) is the default; ?layout=
+  // overrides it, and ?layout=classic shows the pre-composition page.
+  const { look } = useSettings()
   const layoutParam = searchParams.get('layout')
-  const LayoutComponent = layoutParam ? COMPOSITIONS[layoutParam] : undefined
+  const resolvedLayout = layoutParam ?? look
+  const LayoutComponent = resolvedLayout === 'classic' ? undefined : (COMPOSITIONS[resolvedLayout] ?? COMPOSITIONS.kaldera)
 
   // A programme edited on the pulse page arrives as router state.
   const location = useLocation()
