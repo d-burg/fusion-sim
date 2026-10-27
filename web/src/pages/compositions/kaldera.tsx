@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ControlRoomContext } from './types'
 import type { Snapshot, TracePoint } from '../../lib/types'
 import PortView from '../../components/portview'
@@ -9,7 +9,7 @@ import { flatTopWindow, parseProgram, pulsePhase, type Waveform } from './kalder
 import { reconstructionValid } from '../../lib/pulseLog'
 import { equilibriumInfo, plasmaParamsInfo, powerBalanceInfo, stabilityInfo, traceDescriptions } from '../../components/infoContent'
 import InfoHint from './kaldera/InfoHint'
-import Diagnostics from './kaldera/Diagnostics'
+import Diagnostics, { type Tone } from './kaldera/Diagnostics'
 import './kaldera.css'
 
 const f2 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(2) : '—')
@@ -32,14 +32,47 @@ function sumWaveforms(ws: (Waveform | undefined)[]): Waveform | undefined {
   return ts.map((t) => [t, live.reduce((acc, w) => acc + at(w, t), 0)])
 }
 
+interface ReadoutProps {
+  value: string
+  unit?: string
+  caption: ReactNode
+  hint?: { title: string; content: ReactNode }
+  /** Warning / danger band of the value (the caption never tints). */
+  tone?: Tone
+  /** Hover link to a strip: lit when the strip is hot, lights the strip when hovered. */
+  link?: string
+  hot?: boolean
+  onHot?: (id: string | null) => void
+}
+
 /** VALUE over a tiny caption, with air around it; the caption may carry a hint. */
-function Readout({ value, unit, caption, hint }: { value: string; unit?: string; caption: ReactNode; hint?: { title: string; content: ReactNode } }) {
+function Readout({ value, unit, caption, hint, tone, link, hot, onHot }: ReadoutProps) {
   return (
-    <div className="kd-ro">
-      <div className="kd-ro-v">{value}{unit && value !== '—' ? <span className="kd-ro-u"> {unit}</span> : null}</div>
+    <div
+      className="kd-ro"
+      data-hot={!!link && !!hot}
+      onMouseEnter={link && onHot ? () => onHot(link) : undefined}
+      onMouseLeave={link && onHot ? () => onHot(null) : undefined}
+    >
+      <div className="kd-ro-v" data-tone={tone}>{value}{unit && value !== '—' ? <span className="kd-ro-u"> {unit}</span> : null}</div>
       <div className="kd-ro-c">{hint ? <InfoHint title={hint.title} content={hint.content}>{caption}</InfoHint> : caption}</div>
     </div>
   )
+}
+
+/** EMA with a ~300 ms time constant at 60 fps, so a band tint does not flicker on ELMs. */
+function useEma(raw: number | undefined, alpha = 0.05): number | undefined {
+  const ref = useRef<number | null>(null)
+  if (raw === undefined || !isFinite(raw)) { ref.current = null; return undefined }
+  ref.current = ref.current === null ? raw : ref.current + alpha * (raw - ref.current)
+  return ref.current
+}
+
+/** Band of a smoothed value: amber past `warn`, red past `bad`; `below` flips the sense (q95). */
+function band(v: number | undefined, warn: number, bad: number, below = false): Tone {
+  if (v === undefined) return undefined
+  if (below) return v < bad ? 'bad' : v < warn ? 'warn' : undefined
+  return v > bad ? 'bad' : v > warn ? 'warn' : undefined
 }
 
 /** Greek glyphs escape the page-wide uppercase transform (β would become B). */
@@ -88,6 +121,12 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   let elming = false
   for (let i = history.length - 1; i >= 0 && history[i].t > time - 0.3; i--) if (history[i].elm_active) { elming = true; break }
   const valid = reconstructionValid(s)
+  const [hot, setHot] = useState<string | null>(null)
+  const ro = (link: string) => ({ link, hot: hot === link, onHot: setHot })
+  // threshold bands on smoothed values, only while the reconstruction is valid
+  const betaS = useEma(valid ? s?.beta_n : undefined)
+  const q95S = useEma(valid ? s?.q95 : undefined)
+  const fgwS = useEma(valid ? s?.f_greenwald : undefined)
   const stateWord = s?.disrupted ? 'DISRUPTED' : elming ? 'ELMING' : s?.in_hmode ? 'H-MODE' : valid ? 'L-MODE' : finished && scrubTime === null ? 'COMPLETE' : 'STANDBY'
   // Reconstructed quantities mean nothing without a plasma: blank them rather than show the engine's fill values.
   const rv = (v: number | undefined) => (valid ? v : undefined)
@@ -101,11 +140,11 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
   const pick = (k: keyof TracePoint): Pts => history.map((p) => [p.t, Number(p[k])] as [number, number])
   const strips: Strip[] = useMemo(() => [
-    { label: 'IP', hint: traceDescriptions.ip, unit: 'MA', pts: pick('ip'), ref: program.ip },
-    { label: 'N̄E', hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
-    { label: 'W TH', hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
-    { label: 'P IN', hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
-    { label: 'D α', node: <>D <G>α</G></>, hint: traceDescriptions.d_alpha, pts: pick('d_alpha'), elm: history.map((p) => !!p.elm_active) },
+    { id: 'ip', label: 'IP', hint: traceDescriptions.ip, unit: 'MA', pts: pick('ip'), ref: program.ip },
+    { id: 'ne', label: 'N̄E', hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
+    { id: 'wth', label: 'W TH', hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
+    { id: 'pin', label: 'P IN', hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
+    { id: 'da', label: 'D α', node: <>D <G>α</G></>, hint: traceDescriptions.d_alpha, pts: pick('d_alpha'), elm: history.map((p) => !!p.elm_active) },
   // history is mutated in place by the simulation hook; key on its length and last time
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [history, history.length, history.length ? history[history.length - 1].t : 0, program, pinRef, valid])
@@ -152,17 +191,19 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       </nav>
 
       <main className="kd-main">
+        <div className="kd-rule kd-rule-1" aria-hidden="true" />
+        <div className="kd-rule kd-rule-2" aria-hidden="true" />
         <div className="kd-col-l">
-          <div className="kd-head"><InfoHint title="Plasma parameters" content={plasmaParamsInfo}>PLASMA</InfoHint></div>
+          <div className="kd-head"><span className="kd-num">01</span> . <InfoHint title="Plasma parameters" content={plasmaParamsInfo}>PLASMA</InfoHint></div>
           <div className="kd-scalars">
-            <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} />
-            <Readout value={f2(s?.ne_bar)} unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} />
-            <Readout value={f2(s?.w_th)} unit="MJ" caption={<>W<sub>TH</sub></>} />
-            <Readout value={f2(rv(s?.beta_n))} caption={<><G>β</G><sub>N</sub></>} hint={STAB} />
-            <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} hint={STAB} />
-            <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} hint={STAB} />
-            <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} />
-            <Readout value={f1(s?.p_rad)} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} />
+            <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} {...ro('ip')} />
+            <Readout value={f2(s?.ne_bar)} unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} {...ro('ne')} />
+            <Readout value={f2(s?.w_th)} unit="MJ" caption={<>W<sub>TH</sub></>} {...ro('wth')} />
+            <Readout value={f2(rv(s?.beta_n))} caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={band(betaS, 2.5, 2.8)} />
+            <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} hint={STAB} tone={band(q95S, 2.5, 2.0, true)} />
+            <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} hint={STAB} tone={band(fgwS, 0.8, 0.9)} {...ro('ne')} />
+            <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} {...ro('pin')} />
+            <Readout value={f1(s?.p_rad)} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} {...ro('pin')} />
             <Readout value={f2(rv(s?.te0))} unit="KEV" caption={<>T<sub>E0</sub></>} />
             <Readout value={f2(rv(s?.tau_e))} unit="S" caption={<><G>τ</G><sub>E</sub></>} />
             <Readout value={f2(rv(s?.h_factor))} caption={<>H<sub>98</sub></>} />
@@ -171,20 +212,25 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           <Diagnostics snapshot={s} valid={valid} />
           <div className="kd-title">
             <div className="kd-title-cap">PULSE</div>
-            <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> {phase}</h1>
-            <div className="kd-state" data-state={stateWord}>{stateWord}</div>
+            <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> <span className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</span></h1>
+            <div className="kd-state" data-state={stateWord}>
+              {stateWord}
+              {s?.oh_saturated && <span className="kd-flag">OH SAT</span>}
+              {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
+            </div>
           </div>
         </div>
 
         <div className="kd-eq">
           <div className="kd-eq-cap">
-            <InfoHint title="Equilibrium" content={equilibriumInfo}>EQUILIBRIUM . R–Z</InfoHint>
+            <div className="kd-head"><span className="kd-num">02</span> . <InfoHint title="Equilibrium" content={equilibriumInfo}>EQUILIBRIUM . R–Z</InfoHint></div>
             <span className="kd-eq-sub">{configWord(s)}  .  B<sub>T</sub> {f2(s?.bt)} T</span>
           </div>
           <Hero snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
         </div>
 
         <div className="kd-col-r">
+          <div className="kd-head kd-port-cap"><span className="kd-num">03</span> . PORT VIEW</div>
           <div className="kd-port">
             <PortView
               snapshot={ctx.plasmaSnapshot}
@@ -205,6 +251,8 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         time={time}
         scrubTime={scrubTime}
         onScrub={finished ? ctx.controls.setScrubTime : undefined}
+        hot={hot}
+        onHot={setHot}
       />
 
       <Timeline

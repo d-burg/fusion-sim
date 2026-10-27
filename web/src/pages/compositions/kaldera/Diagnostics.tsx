@@ -39,15 +39,17 @@ function useSmooth(raw: number, floor: number): number {
   return ref.current
 }
 
+export type Tone = 'ok' | 'warn' | 'bad' | undefined
+
 /** One bar: a hairline track with a thin fill, the label at left and the values at right. */
-function Bar({ label, fill, warn, right }: { label: ReactNode; fill: number; warn?: boolean; right: ReactNode }) {
+function Bar({ label, fill, tone, right }: { label: ReactNode; fill: number; tone?: Tone; right: ReactNode }) {
   return (
-    <div className="kd-bar" data-warn={warn}>
+    <div className="kd-bar">
       <div className="kd-bar-row">
         <span className="kd-bar-l">{label}</span>
         <span className="kd-bar-r">{right}</span>
       </div>
-      <div className="kd-bar-track"><div className="kd-bar-fill" style={{ width: `${Math.max(0, Math.min(1, fill)) * 100}%` }} /></div>
+      <div className="kd-bar-track"><div className="kd-bar-fill" data-tone={tone} style={{ width: `${Math.max(0, Math.min(1, fill)) * 100}%` }} /></div>
     </div>
   )
 }
@@ -90,26 +92,29 @@ export default function Diagnostics({ snapshot, valid }: { snapshot: Snapshot | 
   const fDet = divertor?.f_detach ?? 0
   const tS = divertor?.t_surface ?? 0
   const isW = (divertor?.wall_material ?? 'W') === 'W'
-  const warn = isW && (q > W_RECRYST_QFLUX || tS > W_RECRYST_TEMP)
+  // white below 5 MW/m², amber 5–10, red above 10 or past the tungsten recrystallization temperature
+  const divTone: Tone = (isW && tS > W_RECRYST_TEMP) || q > W_RECRYST_QFLUX ? 'bad' : q > 5 ? 'warn' : undefined
   const diverted = valid && !!snapshot && !snapshot.is_limited
   const regime = !diverted ? '—' : fDet >= 0.6 ? 'DETACHED' : fDet >= 0.3 ? 'PARTIAL' : 'ATTACHED'
-  const divRight = <>{q.toFixed(1)} MW/M² . <span className="kd-g">λ</span>Q {valid ? lambda.toFixed(1) : '—'} MM . F DET {valid ? fDet.toFixed(2) : '—'} . {regime}</>
+  const regimeTone: Tone = regime === 'DETACHED' ? 'bad' : regime === 'PARTIAL' ? 'warn' : undefined
+  const divRight = <>{q.toFixed(1)} MW/M² . <span className="kd-g">λ</span>Q {valid ? lambda.toFixed(1) : '—'} MM . F DET {valid ? fDet.toFixed(2) : '—'} . <span data-tone={regimeTone}>{regime}</span></>
 
   const active = rate > 1e10
   const pFusStr = pFus > 0.001 ? (pFus < 1 ? `${(pFus * 1000).toFixed(0)} KW` : `${pFus.toFixed(1)} MW`) : '— MW'
-  const neuRight = `${sci(rate)} N/S . Q ${rate > 0 ? formatQ(qPlasma).toUpperCase() : '—'} . P FUS ${pFusStr} . ${active ? 'ACTIVE' : 'IDLE'}`
+  const neuRight = <>{sci(rate)} N/S . Q <span data-tone={qPlasma >= 1 ? 'ok' : undefined}>{rate > 0 ? formatQ(qPlasma).toUpperCase() : '—'}</span> . P FUS {pFusStr} . <span data-tone={active ? 'ok' : undefined}>{active ? 'ACTIVE' : 'IDLE'}</span></>
 
   return (
     <div className="kd-bars">
       <Bar
         label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>Q⊥ DIVERTOR</InfoHint>}
         fill={q / Math.max(Q_SCALE, q * 1.2)}
-        warn={warn}
+        tone={divTone}
         right={divRight}
       />
       <Bar
         label={<InfoHint title="Neutron diagnostic" content={neutronDiagnosticInfo}>NEUTRONS</InfoHint>}
         fill={neutronSignalLevel(rate)}
+        tone={active ? 'ok' : undefined}
         right={neuRight}
       />
     </div>

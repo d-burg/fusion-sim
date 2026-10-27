@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { Contour, Snapshot } from '../../../lib/types'
-import { applyCaps } from './Strips'
+import { applyCaps, hueRgb } from './Strips'
 
 interface Props {
   snapshot: Snapshot | null
@@ -116,8 +116,9 @@ export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {
     if (snapshot && snapshot.separatrix?.points.length > 2) {
       g.save(); wallPath(); g.clip()
       g.lineCap = 'round'; g.lineJoin = 'round'
-      g.strokeStyle = 'rgba(255,96,72,0.10)'; g.lineWidth = 9; tracePath(g, snapshot.separatrix, X, Y, jump)
-      g.strokeStyle = 'rgba(255,130,110,0.22)'; g.lineWidth = 3.5; tracePath(g, snapshot.separatrix, X, Y, jump)
+      const warm = hueRgb(box, '--kd-warm', '#f0a98a')
+      g.strokeStyle = `rgba(${warm},0.12)`; g.lineWidth = 9; tracePath(g, snapshot.separatrix, X, Y, jump)
+      g.strokeStyle = `rgba(${warm},0.28)`; g.lineWidth = 3.5; tracePath(g, snapshot.separatrix, X, Y, jump)
       g.strokeStyle = 'rgba(255,255,255,0.92)'; g.lineWidth = 1.2; tracePath(g, snapshot.separatrix, X, Y, jump)
       g.restore()
     }

@@ -5,6 +5,8 @@ import InfoHint from './InfoHint'
 export type Pts = [number, number][]
 
 export interface Strip {
+  /** Link id shared with the scalar readouts (hover lights both). */
+  id: string
   label: string
   /** Rendered form of the label when it needs markup (Greek glyphs). */
   node?: ReactNode
@@ -31,6 +33,18 @@ interface Props {
   time: number
   scrubTime: number | null
   onScrub?: (t: number | null) => void
+  /** The strip under the pointer (or linked from a readout), by id. */
+  hot: string | null
+  onHot: (id: string | null) => void
+}
+
+/** A hue from the root's CSS variables, as "r,g,b" for rgba() use. */
+export function hueRgb(el: Element, name: string, fallback: string): string {
+  const v = getComputedStyle(el).getPropertyValue(name).trim() || fallback
+  const m = v.match(/^#([0-9a-f]{6})$/i)
+  if (!m) return '255,255,255'
+  const n = parseInt(m[1], 16)
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`
 }
 
 /** Height of the shared time axis under the bottom strip. */
@@ -109,7 +123,7 @@ function valueAt(pts: Pts, t: number | null): number | null {
  * trace as a thin white line and the programme as its dotted companion. One
  * shared time axis under the bottom strip carries the only numerals.
  */
-export default function Strips({ strips, stations, duration, time, scrubTime, onScrub }: Props) {
+export default function Strips({ strips, stations, duration, time, scrubTime, onScrub, hot, onHot }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const [stripH, setStripH] = useState(0)
@@ -138,6 +152,7 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
 
     applyCaps(g, box, 8)
     g.lineWidth = 1
+    const warm = hueRgb(box, '--kd-warm', '#f0a98a')
 
     // one hairline frame around the stack and one separator between strips
     const stackH = Math.round(n * sh)
@@ -188,8 +203,9 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
         s.second.pts.forEach(([t, v], k) => (k ? g.lineTo(X(t), Y2(v)) : g.moveTo(X(t), Y2(v))))
         g.stroke()
       }
+      const isHot = hot === s.id
       if (s.pts.length > 1) {
-        g.strokeStyle = 'rgba(255,255,255,0.88)'
+        g.strokeStyle = isHot ? `rgba(${warm},1)` : 'rgba(255,255,255,0.88)'
         g.lineJoin = 'round'
         strokeSeries(g, s.pts, X, Y, s.elm && s.elm.length === s.pts.length ? s.elm : undefined)
       }
@@ -205,7 +221,7 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
       if (s.second && v2 !== null) txt += `   .   ${v2.toFixed(d)}`
       if (v !== null && s.unit) txt += ` ${s.unit}`
       g.textAlign = 'right'
-      g.fillStyle = 'rgba(255,255,255,0.92)'
+      g.fillStyle = isHot ? `rgba(${warm},1)` : 'rgba(255,255,255,0.92)'
       g.fillText(txt, W - 8, y0 + 5)
     })
 
@@ -227,7 +243,7 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
       g.strokeStyle = 'rgba(255,255,255,0.55)'
       g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke()
     }
-  }, [strips, stations, duration, time, scrubTime])
+  }, [strips, stations, duration, time, scrubTime, hot])
 
   useEffect(() => { draw() }, [draw])
   useEffect(() => {
@@ -237,6 +253,13 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
     ro.observe(box)
     return () => ro.disconnect()
   }, [draw])
+
+  const hotAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const sh = (r.height - AXIS_H) / Math.max(1, strips.length)
+    const i = Math.floor((e.clientY - r.top) / sh)
+    onHot(strips[i]?.id ?? null)
+  }
 
   const scrubAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!onScrub) return
@@ -249,7 +272,14 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
     <div ref={boxRef} className="kd-strips">
       <div className="kd-strip-labels" aria-hidden={false}>
         {strips.map((s, i) => (
-          <span key={s.label} className="kd-strip-label" style={{ top: Math.round(i * stripH) + 5 }}>
+          <span
+            key={s.label}
+            className="kd-strip-label"
+            data-hot={hot === s.id}
+            style={{ top: Math.round(i * stripH) + 5 }}
+            onMouseEnter={() => onHot(s.id)}
+            onMouseLeave={() => onHot(null)}
+          >
             {s.hint ? <InfoHint title={s.label} content={s.hint}>{s.node ?? s.label}</InfoHint> : (s.node ?? s.label)}
             {s.second && (
               <>
@@ -264,7 +294,8 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
         ref={canvasRef}
         style={{ display: 'block', cursor: onScrub ? 'ew-resize' : 'default' }}
         onPointerDown={(e) => { if (!onScrub) return; e.currentTarget.setPointerCapture(e.pointerId); scrubAt(e) }}
-        onPointerMove={(e) => { if (onScrub && e.buttons & 1) scrubAt(e) }}
+        onPointerMove={(e) => { hotAt(e); if (onScrub && e.buttons & 1) scrubAt(e) }}
+        onPointerLeave={() => onHot(null)}
         onDoubleClick={() => onScrub?.(null)}
       />
     </div>
