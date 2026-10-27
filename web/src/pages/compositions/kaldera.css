@@ -54,7 +54,6 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 [data-layout="kaldera"] button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 [data-layout="kaldera"] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
 
-[data-layout="kaldera"].kd-root > * { position: relative; z-index: 1; }
 
 /* ── nav row ──────────────────────────────────────────────────────── */
 [data-layout="kaldera"] .kd-nav {

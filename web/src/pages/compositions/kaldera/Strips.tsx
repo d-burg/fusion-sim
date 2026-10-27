@@ -291,7 +291,7 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
   }
 
   return (
-    <div ref={boxRef} className="kd-strips">
+    <div ref={boxRef} className="kd-strips" data-tutorial="traces">
       <div className="kd-strip-labels" aria-hidden={false}>
         {strips.map((s, i) => (
           <span

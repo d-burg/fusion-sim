@@ -234,6 +234,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         <div className="kd-rule kd-rule-1" aria-hidden="true" />
         <div className="kd-rule kd-rule-2" aria-hidden="true" />
         <div className="kd-col-l">
+          <div className="kd-status" data-tutorial="status">
           <div className="kd-head"><span className="kd-num">01</span> . <InfoHint title="Plasma parameters" content={plasmaParamsInfo}>PLASMA</InfoHint></div>
           <div className="kd-scalars">
             <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} {...ro('ip')} />
@@ -250,6 +251,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
             <Readout value={f2(s?.v_loop)} unit="V" caption={<>V<sub>LOOP</sub></>} />
           </div>
           <Diagnostics snapshot={s} valid={valid} />
+          </div>
           <div className="kd-title">
             <div className="kd-title-cap">PULSE</div>
             <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> <span className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</span></h1>
@@ -261,7 +263,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           </div>
         </div>
 
-        <div className="kd-eq">
+        <div className="kd-eq" data-tutorial="equilibrium">
           <div className="kd-eq-cap">
             <div className="kd-head"><span className="kd-num">02</span> . <InfoHint title="Equilibrium" content={equilibriumInfo}>EQUILIBRIUM . R–Z</InfoHint></div>
             <span className="kd-eq-sub">{configWord(s)}  .  B<sub>T</sub> {f2(s?.bt)} T</span>
@@ -271,7 +273,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
         <div className="kd-col-r">
           <div className="kd-head kd-port-cap"><span className="kd-num">03</span> . PORT VIEW</div>
-          <div className="kd-port">
+          <div className="kd-port" data-tutorial="portview">
             <PortView
               snapshot={ctx.plasmaSnapshot}
               limiterPoints={ctx.limiterPoints}

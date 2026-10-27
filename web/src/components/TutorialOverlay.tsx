@@ -1,29 +1,31 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react'
 
 /* ═══════════════════════════════════════════════════════════════════
-   TutorialOverlay — step-by-step guided tour of the Control Room
+   TutorialOverlay — step-by-step guided tour of the control room.
+
+   Steps anchor on `[data-tutorial="…"]` elements. A composition that lacks
+   an anchor simply has that step skipped; the welcome and final steps have
+   no anchor and are always shown. The card follows the Standard room's
+   grammar: a hairline-bordered panel on the flat field, tracked-caps title
+   with a step counter, body in a plain sans, text controls with a dotted
+   underline, the target outlined by a 1 px hairline in the warm hue over
+   a flat 55 % mask. It reads the room's CSS variables where they exist and
+   falls back to its own values elsewhere.
    ═══════════════════════════════════════════════════════════════════ */
 
 interface TutorialStep {
-  /** CSS selector for the panel to highlight (null = centered card) */
+  /** CSS selector for the element to outline (null = centered card, always shown) */
   target: string | null
   title: string
   content: React.ReactNode
-  /** Where to place the explanation card relative to the highlight */
-  placement: 'right' | 'left' | 'center' | 'bottom-right' | 'bottom-left'
+  /** Where the card sits relative to the outlined element */
+  placement: 'right' | 'left' | 'top' | 'bottom' | 'center'
 }
 
-/** Same glyph the control room's Edit button uses. */
-function EditIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931ZM19.5 7.125 16.875 4.5" />
-    </svg>
-  )
-}
+const H = ({ children }: { children: React.ReactNode }) => <p className="tour-h">{children}</p>
 
 const STEPS: TutorialStep[] = [
-  /* ─── 0: Welcome ─── */
+  /* ─── Welcome ─── */
   {
     target: null,
     title: 'Welcome to the fusion simulator',
@@ -36,7 +38,7 @@ const STEPS: TutorialStep[] = [
           magnetic fields to produce energy from nuclear fusion, the same
           process that powers the Sun.
         </p>
-        <p className="mt-2">
+        <p>
           A <b>tokamak</b> works by driving a large electrical current through
           a ring of ionized hydrogen gas (plasma) while surrounding it with
           external magnetic coils. The combination of the toroidal (donut-direction)
@@ -44,20 +46,20 @@ const STEPS: TutorialStep[] = [
           helical field lines that keep the 100-million-degree plasma suspended
           away from the walls.
         </p>
-        <p className="mt-2">
+        <p>
           Each simulation run is called a <b>pulse</b>. You
           will program the heating power, plasma current, density, and shaping,
           then watch the plasma respond in real time. Your job is to keep the
           plasma stable, avoid disruptions, and maximize fusion performance.
         </p>
-        <p className="mt-2 text-gray-500">
-          Let's walk through each panel so you know what you're looking at.
+        <p className="tour-dim">
+          Let's walk through the room so you know what you're looking at.
         </p>
       </>
     ),
   },
 
-  /* ─── 1: Equilibrium ─── */
+  /* ─── Equilibrium ─── */
   {
     target: '[data-tutorial="equilibrium"]',
     title: 'Equilibrium cross-section',
@@ -67,30 +69,30 @@ const STEPS: TutorialStep[] = [
         <p>
           This is a <b>poloidal cross-section</b> of the tokamak: imagine
           slicing the donut vertically. You're looking at a 2D slice of the
-          3D torus.
+          3D torus, drawn to scale in R and Z (metres on the axes).
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Flux surfaces</p>
+        <H>Flux surfaces</H>
         <p>
-          The colored contours are <b>flux surfaces</b>: nested, closed
+          The nested white contours are <b>flux surfaces</b>: closed
           surfaces of constant magnetic flux. Because transport along
           field lines is much faster than across them, temperature and
-          density are roughly constant on each flux surface. The hot core
-          (warm colors) is in the center; the cooler edge (blue) is on the
-          outside.
+          density are roughly constant on each flux surface. The core is
+          at the center; the edge is on the outside.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Separatrix and X-point</p>
+        <H>Separatrix and X-point</H>
         <p>
-          The <b>separatrix</b> (red outline) is the outermost closed flux
-          surface, the boundary between confined and unconfined plasma.
-          At the bottom, the separatrix forms an <b>X-point</b> where the
+          The one bright line is the <b>separatrix</b>, the outermost closed flux
+          surface and the boundary between confined and unconfined plasma.
+          At the bottom it forms an <b>X-point</b> (the small square) where the
           poloidal magnetic field is zero. Field lines outside the
           separatrix are "open" and guide escaping particles and heat
-          downward to the <b>divertor</b> target plates.
+          downward to the <b>divertor</b> target plates. The caption gives the
+          configuration (LSN, USN, DN or LIMITED) and the toroidal field B<sub>T</sub>.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Plasma shape</p>
+        <H>Plasma shape</H>
         <p>
           The shape of the plasma cross-section is characterized by its
           <b> elongation (κ)</b>, how tall it is versus wide, and its
@@ -99,7 +101,7 @@ const STEPS: TutorialStep[] = [
           The shape is controlled by currents in external shaping coils.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Strike points</p>
+        <H>Strike points</H>
         <p>
           The points where the separatrix intersects the divertor plates
           are called <b>strike points</b>. The exhaust heat is concentrated
@@ -110,95 +112,99 @@ const STEPS: TutorialStep[] = [
     ),
   },
 
-  /* ─── 2: Traces Overview ─── */
+  /* ─── Traces ─── */
   {
     target: '[data-tutorial="traces"]',
     title: 'Time traces',
-    placement: 'bottom-left',
+    placement: 'top',
     content: (
       <>
         <p>
-          This panel shows the <b>time evolution</b> of key plasma parameters
-          throughout the pulse, like an oscilloscope or strip-chart
-          recorder in a real control room.
+          These strips show the <b>time evolution</b> of the pulse, like a
+          strip-chart recorder in a real control room: the plasma
+          current <b>I<sub>P</sub></b>, the line-averaged density <b>N̄<sub>E</sub></b> with
+          the Greenwald fraction <b>F<sub>GW</sub></b>, the stored energy <b>W<sub>TH</sub></b>,
+          the input power <b>P<sub>IN</sub></b> with the radiated power <b>P<sub>RAD</sub></b>,
+          and the <b>D<sub>α</sub></b> emission whose spikes are ELMs.
         </p>
 
-        <p className="mt-2">
-          By default you'll see the <b>plasma current (I<sub>p</sub>)</b>,
-          <b> normalized beta (β<sub>N</sub>)</b>,
-          <b> internal inductance (l<sub>i</sub>)</b>, and
-          <b> D-alpha (D<sub>α</sub>) emission</b>. You can add or remove
-          traces using the dropdown at the top-left of the panel.
-        </p>
-
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Reading the traces</p>
+        <H>Reading the strips</H>
         <p>
-          The horizontal axis is time (seconds). The dashed lines show
-          the <b>programmed targets</b>, what you asked for. The solid
-          lines show the <b>actual plasma response</b>. The plasma doesn't
+          Time runs left to right across the whole pulse; the stations
+          below mark ramp-up, flat-top, ramp-down and the end. The dotted
+          line is the <b>programmed target</b>, what you asked for; the
+          solid line is the <b>actual plasma response</b>. The plasma does not
           always follow the program; it has its own physics. If the solid
-          line diverges far from the dashed line, you may be pushing the
-          plasma too hard.
+          line diverges far from the dotted one, you may be pushing the
+          plasma too hard. The live value sits at the top right of each strip.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Scrubbing</p>
+        <H>Linking and explaining</H>
         <p>
-          After a pulse finishes, you can click and drag on this panel
-          to <b>scrub</b> through time, replaying the equilibrium and
-          diagnostics at any moment in the pulse.
+          Hover a strip to light it and its matching readout in the block on
+          the left; hover a readout to light its strip. The underlined labels
+          open an explanation of each quantity.
+        </p>
+
+        <H>Scrubbing</H>
+        <p>
+          After a pulse finishes, drag the circle on the timeline, or drag
+          across the strips, to <b>scrub</b> through time and replay the
+          equilibrium and diagnostics at any moment in the pulse.
         </p>
       </>
     ),
   },
 
-  /* ─── 3: Plasma Parameters & Power Balance ─── */
+  /* ─── Plasma parameters ─── */
   {
     target: '[data-tutorial="status"]',
-    title: 'Plasma parameters and power balance',
-    placement: 'bottom-right',
+    title: 'Plasma parameters',
+    placement: 'right',
     content: (
       <>
         <p>
-          The status panel shows the <b>instantaneous state</b> of the plasma.
-          It's organized into several sections:
+          This block shows the <b>instantaneous state</b> of the plasma as
+          twelve readouts. Every underlined label can be hovered or tapped
+          for an explanation of the quantity.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Core parameters</p>
+        <H>Core parameters</H>
         <p>
-          The plasma current <b>I<sub>p</sub></b> (MA), toroidal
-          field <b>B<sub>t</sub></b> (T), central electron
-          temperature <b>T<sub>e0</sub></b> (keV), line-averaged
-          density <b>n̄<sub>e</sub></b>, stored thermal
-          energy <b>W<sub>th</sub></b> (MJ), and confinement
-          time <b>τ<sub>E</sub></b> (s). Together these define the
+          The plasma current <b>I<sub>P</sub></b> (MA), line-averaged
+          density <b>N̄<sub>E</sub></b>, stored thermal energy <b>W<sub>TH</sub></b> (MJ),
+          central electron temperature <b>T<sub>E0</sub></b> (keV), confinement
+          time <b>τ<sub>E</sub></b> (s), confinement quality <b>H<sub>98</sub></b> and
+          loop voltage <b>V<sub>LOOP</sub></b>. Together these define the
           thermodynamic state of the plasma. You want high temperature and
           density for fusion, but the plasma has limits on how far you can push.
+          The toroidal field B<sub>T</sub> is in the equilibrium caption.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Power balance</p>
+        <H>Power balance</H>
         <p>
           Power goes <i>in</i> through ohmic heating (resistive), neutral beam injection
-          (NBI), and electron cyclotron heating (ECH). Power comes <i>out</i> as
-          radiation (P<sub>rad</sub>) and losses conducted to the edge (P<sub>loss</sub>).
+          (NBI), and electron cyclotron heating (ECH), summed as <b>P<sub>IN</sub></b>. Part of it
+          comes <i>out</i> as radiation, <b>P<sub>RAD</sub></b>; the rest is conducted to the edge.
           The balance between input and output determines whether the plasma is heating
-          up, cooling down, or in steady state. The colored bars give you a quick visual
-          sense of the power flows.
+          up, cooling down, or in steady state. The P IN strip below draws both.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Stability and disruption risk</p>
+        <H>Stability and disruption risk</H>
         <p>
-          Key stability metrics like <b>q<sub>95</sub></b> (safety factor),
-          <b> β<sub>N</sub></b> (normalized beta), and <b>f<sub>GW</sub></b> (Greenwald fraction) tell you how close the plasma is to known
+          Key stability metrics, <b>q<sub>95</sub></b> (safety factor),
+          <b> β<sub>N</sub></b> (normalized beta), and <b>f<sub>GW</sub></b> (Greenwald fraction), tell you how close the plasma is to known
           operational limits. Push past these limits and you risk a
           <b> disruption</b> — a sudden, violent loss of confinement where
           the plasma dumps all its energy onto the wall in milliseconds.
-          The disruption risk gauge turns red when you're in danger.
+          These three values turn amber in the warning band and red in the
+          danger band; when the plasma disrupts, the title reads DISRUPT.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Fusion performance</p>
+        <H>Fusion performance</H>
         <p>
-          The neutron diagnostic shows the fusion reaction rate and
-          <b> Q<sub>plasma</sub></b>, the ratio of fusion power produced to
+          The NEUTRONS bar below the readouts shows the fusion reaction rate and
+          <b> Q</b>, the ratio of fusion power produced to
           heating power supplied. Q = 1 is "breakeven"; Q = 10 is the
           ITER target. On smaller machines running D-D fuel, Q will be
           tiny — but on ITER with D-T fuel, the energy of the reactions puts us in a regime where generating electricity from fusion becomes a possibility.
@@ -207,20 +213,20 @@ const STEPS: TutorialStep[] = [
     ),
   },
 
-  /* ─── 4: Divertor ─── */
+  /* ─── Divertor ─── */
   {
     target: '[data-tutorial="status"]',
-    title: 'Divertor temperature',
-    placement: 'bottom-right',
+    title: 'Divertor heat flux',
+    placement: 'right',
     content: (
       <>
         <p>
-          Within the status panel, the <b>divertor diagnostics</b> section
+          The <b>Q⊥ DIVERTOR</b> bar under the readouts
           deserves special attention. It covers one of the biggest engineering
           challenges in fusion.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">The exhaust problem</p>
+        <H>The exhaust problem</H>
         <p>
           All the power that crosses the separatrix flows along field lines
           in a thin <b>scrape-off layer</b> (SOL), typically only a few
@@ -230,26 +236,28 @@ const STEPS: TutorialStep[] = [
           Sun (~10 MW/m²).
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Peak heat flux and surface temperature</p>
+        <H>Reading the bar</H>
         <p>
-          The panel shows the <b>peak heat flux</b> (MW/m²) at the strike
-          point and the resulting <b>surface temperature</b> of the divertor
-          tiles. Modern tokamaks use <b>tungsten</b> armor tiles cooled by
-          pressurized water.
+          The fill is the <b>peak heat flux</b> at the strike point on a
+          25 MW/m² scale: white while it is modest, amber above 5 MW/m², red
+          above 10 MW/m² or when a tungsten target passes its recrystallization
+          temperature. Beside it are the SOL width <b>λ<sub>q</sub></b> (mm), the
+          detachment fraction <b>f<sub>det</sub></b>, and the regime word:
+          ATTACHED, PARTIAL or DETACHED.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Why this matters</p>
+        <H>Why this matters</H>
         <p>
           Tungsten undergoes <b>recrystallization</b> above ~1200–1300°C,
           which makes it brittle and prone to cracking under thermal cycling.
-          This effectively limits steady-state heat flux to ~10 MW/m². If you
-          see the surface temperature climbing above 1000°C, you need to either
+          This effectively limits steady-state heat flux to ~10 MW/m². If the
+          bar turns red, you need to either
           reduce the input power, increase impurity seeding to promote
           radiative cooling (detachment), or adjust the magnetic geometry to
           spread the heat over a larger area.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">Detachment</p>
+        <H>Detachment</H>
         <p>
           The ideal operating regime is <b>detachment</b>, where the divertor
           plasma becomes cold and dense enough that most exhaust power is
@@ -261,10 +269,10 @@ const STEPS: TutorialStep[] = [
     ),
   },
 
-  /* ─── 5: Port View ─── */
+  /* ─── Port view ─── */
   {
     target: '[data-tutorial="portview"]',
-    title: '3D port view',
+    title: 'Port view',
     placement: 'left',
     content: (
       <>
@@ -274,21 +282,20 @@ const STEPS: TutorialStep[] = [
           a real experiment.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">What you're seeing</p>
+        <H>What you're seeing</H>
         <p>
           The glowing column in the center is the <b>plasma</b>. The color
           and intensity reflect the plasma state: it glows brighter with
           higher temperature and density.
         </p>
-        <p className="mt-1">
+        <p>
           The structures at the bottom are the <b>divertor plates</b>. They
           change color based on the heat flux — from cool blue through cyan
           and yellow to dangerous red/white at high heat loads. This is the
-          same heat flux information shown in the divertor diagnostics, but
-          visualized spatially.
+          same heat flux the Q⊥ DIVERTOR bar reports, visualized spatially.
         </p>
 
-        <p className="mt-3 mb-0.5 text-sm font-medium text-gray-200">In a real tokamak</p>
+        <H>In a real tokamak</H>
         <p>
           Real tokamaks have cameras that capture visible and infrared images
           through shielded viewports. Engineers use infrared thermography to
@@ -299,17 +306,38 @@ const STEPS: TutorialStep[] = [
     ),
   },
 
-  /* ─── 6: Objective ─── */
+  /* ─── Controls ─── */
+  {
+    target: '[data-tutorial="controls"]',
+    title: 'Running the pulse',
+    placement: 'top',
+    content: (
+      <>
+        <p>
+          The circle on the timeline is the control: it <b>starts</b> the pulse,
+          <b> pauses</b> it while running, and <b>replays</b> once it has ended.
+          After the pulse, drag the circle (or the strips above) to scrub
+          through time; the time under it follows.
+        </p>
+        <p>
+          The <b>speed</b> figures at the top of the page set the playback rate,
+          0.5 to 2 times real time. The device and scenario links beside them
+          switch machines and presets; EDIT opens the pulse planner to write
+          your own program; RESET clears the pulse.
+        </p>
+      </>
+    ),
+  },
+
+  /* ─── Mission ─── */
   {
     target: null,
     title: 'Your mission',
     placement: 'center',
     content: (
       <>
-        <p className="text-sm font-medium text-gray-200">
-          Run pulses in a fusion power plant that:
-        </p>
-        <ul className="list-disc list-inside mt-1 space-y-1">
+        <H>Run pulses in a fusion power plant that:</H>
+        <ul className="tour-list">
           <li>
             <b>Don't disrupt</b> — disruptions dump all stored energy onto the
             wall in milliseconds. On large machines, this can cause serious
@@ -326,51 +354,41 @@ const STEPS: TutorialStep[] = [
           </li>
           <li>
             <b>Achieve sufficient fusion power</b> — maximize the neutron
-            rate and <b>Q<sub>plasma</sub></b>. This requires high temperature,
+            rate and <b>Q</b>. This requires high temperature,
             high density, and good confinement, all while staying within
             stability limits.
           </li>
           <li>
-            <b>Protect the divertor</b> — keep the surface temperature below
+            <b>Protect the divertor</b> — keep the heat flux below
             the tungsten recrystallization threshold. Use impurity seeding
             and detachment to spread the exhaust heat.
           </li>
         </ul>
 
-        <div className="mt-3 p-2 bg-gray-800 border border-gray-700">
-          <p className="text-sm font-medium text-gray-200 mb-1">Strategy tip</p>
-          <p>
-            The <b>smaller and lower-field</b> the device, the better for
-            testing scenarios in a lower-consequence environment. A disruption
-            on DIII-D is a nuisance; a disruption on ITER is a crisis.
-          </p>
-          <p className="mt-1">
-            The <b>larger and/or higher-field</b> the device, the higher the
-            risk from individual disruptions and even ELMs — but also the
-            higher the potential fusion performance and Q.
-          </p>
-          <p className="mt-1 font-medium text-gray-200">
-            Start small and work your way up. Good luck.
-          </p>
-        </div>
+        <H>Strategy tip</H>
+        <p>
+          The <b>smaller and lower-field</b> the device, the better for
+          testing scenarios in a lower-consequence environment. A disruption
+          on DIII-D is a nuisance; a disruption on ITER is a crisis.
+        </p>
+        <p>
+          The <b>larger and/or higher-field</b> the device, the higher the
+          risk from individual disruptions and even ELMs — but also the
+          higher the potential fusion performance and Q.
+        </p>
+        <p>
+          <b>Start small and work your way up. Good luck.</b>
+        </p>
 
-        <div className="mt-3 p-2 bg-gray-800 border border-gray-700 text-xs text-gray-400">
-          <p className="text-sm font-medium text-gray-200 mb-1">Quick controls recap</p>
-          <ul className="space-y-0.5">
-            <li><b>▶ Start / ⏸ Pause</b>: run or pause the pulse</li>
-            <li><b>Speed buttons</b>: 0.5x to 2x playback speed</li>
-            <li><b>Device dropdown</b>: switch between tokamaks (DIII-D, JET, ITER, CENTAUR)</li>
-            <li><b>Preset buttons</b>: H-mode, L-mode, or Density limit scenarios</li>
-            <li>
-              <b className="inline-flex items-center gap-1 align-middle">
-                <EditIcon />
-                Edit
-              </b>
-              : open the pulse planner to customize the program
-            </li>
-            <li><b>After pulse</b>: click on the trace panel to scrub through time</li>
-          </ul>
-        </div>
+        <H>Quick recap</H>
+        <ul className="tour-list">
+          <li><b>Circle</b>: start, pause, replay; drag to scrub after the pulse</li>
+          <li><b>Speed</b>: 0.5 · 0.75 · 1 · 2 times real time</li>
+          <li><b>Device</b>: DIII-D, CENTAUR, ITER, JET</li>
+          <li><b>Scenario</b>: H-mode, L-mode, or density limit</li>
+          <li><b>EDIT</b>: open the pulse planner to customize the program</li>
+          <li><b>Underlined labels</b>: hover or tap for an explanation</li>
+        </ul>
       </>
     ),
   },
@@ -382,386 +400,169 @@ interface TutorialOverlayProps {
   onComplete: () => void
 }
 
+const CARD_W = 380
+const GAP = 14
+const MARGIN = 8
+
+/** Is a step available on the current page? Target-less steps always are. */
+function available(s: TutorialStep): boolean {
+  return !s.target || !!document.querySelector(s.target)
+}
+
 export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
   const [step, setStep] = useState(0)
-  const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null)
+  const [avail, setAvail] = useState<boolean[]>(() => STEPS.map((s) => !s.target))
+  const [rect, setRect] = useState<DOMRect | null>(null)
   const [visible, setVisible] = useState(false)
+  const [pos, setPos] = useState<React.CSSProperties>({})
   const cardRef = useRef<HTMLDivElement>(null)
 
-  /* Drag & viewport-clamping state */
-  const [posOverride, setPosOverride] = useState<{ top: number; left: number } | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const isDraggingRef = useRef(false)
-  const dragStartRef = useRef({ mx: 0, my: 0, top: 0, left: 0 })
+  const current = STEPS[step]
 
-  const currentStep = STEPS[step]
-
-  // Fade in on mount
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50)
     return () => clearTimeout(t)
   }, [])
 
-  // Measure the target element whenever the step changes
+  // Which steps exist on this page: measured after the page has committed, and again per step.
   useEffect(() => {
-    if (!currentStep.target) {
-      setHighlightRect(null)
-      return
-    }
-    const el = document.querySelector(currentStep.target)
-    if (!el) {
-      setHighlightRect(null)
-      return
-    }
-    const rect = el.getBoundingClientRect()
-    setHighlightRect(rect)
-
-    // Re-measure on resize
-    const onResize = () => {
-      const r = el.getBoundingClientRect()
-      setHighlightRect(r)
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [step, currentStep.target])
-
-  // Scroll card into view when step changes
-  useEffect(() => {
-    cardRef.current?.scrollTo(0, 0)
-  }, [step])
-
-  // Reset position override when step changes (so computed position is used first)
-  useEffect(() => {
-    setPosOverride(null)
-  }, [step])
-
-  // Post-render: clamp card fully within viewport if it overflows
-  useEffect(() => {
-    if (!cardRef.current || posOverride !== null) return
-    const raf = requestAnimationFrame(() => {
-      if (!cardRef.current) return
-      const rect = cardRef.current.getBoundingClientRect()
-      const vw = window.innerWidth
-      const vh = window.innerHeight
-      const margin = 8
-
-      let top = rect.top
-      let left = rect.left
-      let needsClamp = false
-
-      if (rect.bottom > vh - margin) {
-        top = Math.max(margin, vh - rect.height - margin)
-        needsClamp = true
-      }
-      if (top < margin) {
-        top = margin
-        needsClamp = true
-      }
-      if (rect.right > vw - margin) {
-        left = Math.max(margin, vw - rect.width - margin)
-        needsClamp = true
-      }
-      if (left < margin) {
-        left = margin
-        needsClamp = true
-      }
-
-      if (needsClamp) {
-        setPosOverride({ top, left })
-      }
-    })
+    const measure = () => setAvail(STEPS.map(available))
+    const raf = requestAnimationFrame(measure)
     return () => cancelAnimationFrame(raf)
-  }, [step, highlightRect, posOverride])
+  }, [step])
 
-  // Drag: global mousemove / mouseup listeners
+  // The outlined element, re-measured on resize.
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return
-      e.preventDefault()
-      const dx = e.clientX - dragStartRef.current.mx
-      const dy = e.clientY - dragStartRef.current.my
-      setPosOverride({
-        top: dragStartRef.current.top + dy,
-        left: dragStartRef.current.left + dx,
-      })
-    }
-    const onUp = () => {
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false
-        setDragging(false)
-      }
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-  }, [])
+    if (!current.target) { setRect(null); return }
+    const el = document.querySelector(current.target)
+    if (!el) { setRect(null); return }
+    const measure = () => setRect(el.getBoundingClientRect())
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [step, current.target])
 
-  const onHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0 || !cardRef.current) return
-    e.preventDefault()
-    isDraggingRef.current = true
-    setDragging(true)
-    const rect = cardRef.current.getBoundingClientRect()
-    dragStartRef.current = {
-      mx: e.clientX,
-      my: e.clientY,
-      top: rect.top,
-      left: rect.left,
+  useEffect(() => { cardRef.current?.scrollTo(0, 0) }, [step])
+
+  // Place the card beside its target without covering it, then clamp to the viewport.
+  useLayoutEffect(() => {
+    const card = cardRef.current
+    const vw = window.innerWidth, vh = window.innerHeight
+    const h = card?.offsetHeight ?? 300
+    if (!rect || current.placement === 'center') {
+      setPos({ top: Math.max(MARGIN, (vh - h) / 2), left: Math.max(MARGIN, (vw - CARD_W) / 2) })
+      return
     }
-  }, [])
+    const fitsRight = rect.right + GAP + CARD_W <= vw - MARGIN
+    const fitsLeft = rect.left - GAP - CARD_W >= MARGIN
+    const fitsBelow = rect.bottom + GAP + h <= vh - MARGIN
+    const fitsAbove = rect.top - GAP - h >= MARGIN
+    let top: number, left: number
+    let side = current.placement
+    if (side === 'right' && !fitsRight && fitsLeft) side = 'left'
+    else if (side === 'left' && !fitsLeft && fitsRight) side = 'right'
+    else if (side === 'top' && !fitsAbove && fitsBelow) side = 'bottom'
+    else if (side === 'bottom' && !fitsBelow && fitsAbove) side = 'top'
+    switch (side) {
+      case 'right': left = rect.right + GAP; top = rect.top; break
+      case 'left': left = rect.left - GAP - CARD_W; top = rect.top; break
+      case 'top': left = rect.left; top = rect.top - GAP - h; break
+      default: left = rect.left; top = rect.bottom + GAP
+    }
+    left = Math.max(MARGIN, Math.min(left, vw - CARD_W - MARGIN))
+    top = Math.max(MARGIN, Math.min(top, vh - h - MARGIN))
+    setPos({ top, left })
+  }, [rect, step, current.placement])
+
+  const finish = useCallback(() => { setVisible(false); setTimeout(onComplete, 300) }, [onComplete])
 
   const next = useCallback(() => {
-    if (step < STEPS.length - 1) {
-      setStep(s => s + 1)
-    } else {
-      setVisible(false)
-      setTimeout(onComplete, 300)
-    }
-  }, [step, onComplete])
+    let i = step + 1
+    while (i < STEPS.length && !available(STEPS[i])) i++
+    if (i < STEPS.length) setStep(i); else finish()
+  }, [step, finish])
 
   const prev = useCallback(() => {
-    if (step > 0) setStep(s => s - 1)
+    let i = step - 1
+    while (i >= 0 && !available(STEPS[i])) i--
+    if (i >= 0) setStep(i)
   }, [step])
 
-  const skip = useCallback(() => {
-    setVisible(false)
-    setTimeout(onComplete, 300)
-  }, [onComplete])
-
-  // Keyboard: Enter/Right = next, Left = prev, Escape = skip
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === 'ArrowRight') next()
-      else if (e.key === 'ArrowLeft') prev()
-      else if (e.key === 'Escape') skip()
+      if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); next() }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); prev() }
+      else if (e.key === 'Escape') finish()
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [next, prev, skip])
+  }, [next, prev, finish])
 
-  // Compute card position (override if clamped or dragged)
-  const computedStyle = computeCardPosition(currentStep, highlightRect)
-  const cardStyle = posOverride
-    ? { width: 380, maxHeight: '75vh' as const, top: posOverride.top, left: posOverride.left }
-    : computedStyle
+  const shown = STEPS.map((_, i) => avail[i]).filter(Boolean).length
+  const index = STEPS.slice(0, step + 1).filter((_, i) => avail[i]).length
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const isLast = !STEPS.slice(step + 1).some((_, k) => avail[step + 1 + k])
+  const isFirst = !STEPS.slice(0, step).some((_, k) => avail[k])
 
-  // Build the overlay mask with a cutout for the highlighted panel
-  const maskStyle = highlightRect
-    ? buildMaskClip(highlightRect)
+  const mask: React.CSSProperties | undefined = rect
+    ? { clipPath: `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${rect.left - 4}px ${rect.top - 4}px, ${rect.left - 4}px ${rect.bottom + 4}px, ${rect.right + 4}px ${rect.bottom + 4}px, ${rect.right + 4}px ${rect.top - 4}px, ${rect.left - 4}px ${rect.top - 4}px)` }
     : undefined
 
   return (
-    <div
-      className={`fixed inset-0 z-[200] transition-opacity duration-300 ${
-        visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
-    >
-      {/* Dark overlay with cutout */}
-      <div
-        className="absolute inset-0 bg-black/70 transition-all duration-500"
-        style={maskStyle}
-        onClick={(e) => {
-          // Clicking the overlay (not the card) advances
-          if (e.target === e.currentTarget) next()
-        }}
-      />
-
-      {/* Highlight border glow around target */}
-      {highlightRect && (
-        <div
-          className="absolute border border-amber-400 pointer-events-none
-                     transition-all duration-500"
-          style={{
-            top: highlightRect.top - 3,
-            left: highlightRect.left - 3,
-            width: highlightRect.width + 6,
-            height: highlightRect.height + 6,
-          }}
-        />
+    <div className="tour-root" data-visible={visible}>
+      <style>{TOUR_CSS}</style>
+      <div className="tour-mask" style={mask} onClick={(e) => { if (e.target === e.currentTarget) next() }} />
+      {rect && (
+        <div className="tour-outline" style={{ top: rect.top - 4, left: rect.left - 4, width: rect.width + 8, height: rect.height + 8 }} />
       )}
-
-      {/* Explanation card */}
-      <div
-        ref={cardRef}
-        className={`absolute bg-gray-900 border border-gray-700 shadow-2xl overflow-y-auto
-                   ${dragging ? '' : 'transition-all duration-500'} tutorial-card`}
-        style={cardStyle}
-      >
-        {/* Header (drag handle) */}
-        <div
-          className="sticky top-0 bg-gray-900 px-4 pt-3 pb-2 border-b border-gray-800 z-10 select-none"
-          style={{ cursor: dragging ? 'grabbing' : 'grab' }}
-          onMouseDown={onHeaderMouseDown}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-500 text-xs mr-0.5" title="Drag to reposition">⠿</span>
-              <span className="font-mono tabular-nums text-xs text-gray-500">
-                {step + 1}/{STEPS.length}
-              </span>
-              <h3 className="text-base font-medium text-white">{currentStep.title}</h3>
-            </div>
-            <button
-              onClick={skip}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-white transition-colors cursor-pointer"
-            >
-              Skip tour
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          {/* Step dots */}
-          <div className="flex gap-1">
-            {STEPS.map((_, i) => (
-              <div
-                key={i}
-                className={`h-1 rounded-full transition-all duration-300 ${
-                  i === step
-                    ? 'w-4 bg-cyan-400'
-                    : i < step
-                      ? 'w-2 bg-cyan-700'
-                      : 'w-2 bg-gray-700'
-                }`}
-              />
-            ))}
-          </div>
+      <div ref={cardRef} className="tour-card" style={{ ...pos, width: CARD_W }} role="dialog" aria-label={current.title}>
+        <div className="tour-head">
+          <span className="tour-count">{pad(index)} / {pad(shown)}</span>
+          <span className="tour-title">{current.title}</span>
         </div>
-
-        {/* Body */}
-        <div className="px-4 py-3 text-sm text-gray-400 leading-relaxed">
-          {currentStep.content}
-        </div>
-
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-900 px-4 py-2 border-t border-gray-800
-                        flex items-center justify-between z-10">
-          <button
-            onClick={prev}
-            disabled={step === 0}
-            className={`px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer
-              ${step === 0
-                ? 'text-gray-600 cursor-not-allowed'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-          >
-            ← Back
-          </button>
-          <button
-            onClick={next}
-            className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-sm font-medium
-                       transition-colors cursor-pointer text-white"
-          >
-            {step === STEPS.length - 1 ? 'Start operating →' : 'Next →'}
-          </button>
+        <div className="tour-body">{current.content}</div>
+        <div className="tour-foot">
+          <button className="tour-link" onClick={prev} disabled={isFirst}>BACK</button>
+          <button className="tour-link tour-skip" onClick={finish}>SKIP</button>
+          <button className="tour-link" onClick={next}>{isLast ? 'BEGIN' : 'NEXT'}</button>
         </div>
       </div>
     </div>
   )
 }
 
-/* ─── Helpers ─── */
-
-function computeCardPosition(
-  step: TutorialStep,
-  rect: DOMRect | null,
-): React.CSSProperties {
-  const cardWidth = 380
-  const cardMaxHeight = '75vh'
-  const gap = 12
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
-
-  if (step.placement === 'center' || !rect) {
-    return {
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: cardWidth,
-      maxHeight: cardMaxHeight,
-    }
-  }
-
-  const base: React.CSSProperties = {
-    width: cardWidth,
-    maxHeight: cardMaxHeight,
-  }
-
-  // Clamp helpers
-  const clampLeft = (l: number) => Math.max(8, Math.min(l, vw - cardWidth - 8))
-  // Card maxHeight is 75vh — clamp top so the full card fits in the viewport.
-  const maxCardH = vh * 0.75
-  const clampTop = (t: number) => Math.max(8, Math.min(t, vh - maxCardH - 8))
-
-  switch (step.placement) {
-    case 'right': {
-      let left = rect.right + gap
-      // If card would overflow right edge, try positioning it inside the highlight area
-      if (left + cardWidth > vw - 8) left = vw - cardWidth - 8
-      return {
-        ...base,
-        top: clampTop(rect.top),
-        left: clampLeft(left),
-      }
-    }
-    case 'left': {
-      let left = rect.left - cardWidth - gap
-      if (left < 8) left = 8
-      return {
-        ...base,
-        top: clampTop(rect.top),
-        left: clampLeft(left),
-      }
-    }
-    case 'bottom-right': {
-      // Try to the right of the panel first; if no room, overlay on the right side of the panel
-      let left = rect.right + gap
-      if (left + cardWidth > vw - 8) {
-        left = rect.right - cardWidth - gap
-      }
-      if (left < 8) left = 8
-      return {
-        ...base,
-        top: clampTop(rect.top + 20),
-        left: clampLeft(left),
-      }
-    }
-    case 'bottom-left': {
-      let left = rect.left - cardWidth - gap
-      if (left < 8) left = rect.left + gap
-      return {
-        ...base,
-        top: clampTop(rect.top),
-        left: clampLeft(left),
-      }
-    }
-    default:
-      return {
-        ...base,
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-      }
-  }
+/* The card's grammar. It reads the room's type variables where they exist
+   (the Standard room sets --kd-caps / --kd-body) and falls back otherwise. */
+const TOUR_CSS = `
+.tour-root { position: fixed; inset: 0; z-index: 200; opacity: 0; transition: opacity 300ms linear; pointer-events: none; }
+.tour-root[data-visible="true"] { opacity: 1; pointer-events: auto; }
+.tour-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.55); }
+.tour-outline { position: absolute; border: 1px solid var(--kd-warm, #f0a98a); pointer-events: none; }
+.tour-card {
+  position: absolute; max-height: 75vh; overflow-y: auto; box-sizing: border-box;
+  background: #0c1018; border: 1px solid rgba(255,255,255,0.22); color: rgba(255,255,255,0.82);
+  padding: 0; border-radius: 0; box-shadow: none;
+  font-family: var(--kd-body, 'Mona Sans', system-ui, sans-serif); font-stretch: 100%; font-weight: 400;
+  font-size: 13.5px; line-height: 1.55; letter-spacing: 0; text-transform: none; user-select: text;
 }
-
-function buildMaskClip(rect: DOMRect): React.CSSProperties {
-  const pad = 4
-  const t = Math.max(0, rect.top - pad)
-  const l = Math.max(0, rect.left - pad)
-  const b = rect.bottom + pad
-  const r = rect.right + pad
-
-  // Use clip-path with a polygon that has a rectangular hole
-  // Outer rectangle (full viewport) wound clockwise,
-  // inner rectangle (cutout) wound counter-clockwise
-  return {
-    clipPath: `polygon(
-      0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
-      ${l}px ${t}px, ${l}px ${b}px, ${r}px ${b}px, ${r}px ${t}px, ${l}px ${t}px
-    )`,
-  }
-}
+.tour-head { position: sticky; top: 0; z-index: 1; background: #0c1018; display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; padding: 14px 18px 8px; border-bottom: 1px solid rgba(255,255,255,0.12);
+  font-family: var(--kd-caps, 'Mona Sans', sans-serif); font-weight: var(--kd-caps-weight, 400); font-stretch: var(--kd-caps-stretch, 125%);
+  font-size: 9px; letter-spacing: var(--kd-caps-track, 0.12em); text-transform: uppercase; }
+.tour-count { color: rgba(255,255,255,0.45); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tour-title { color: #fff; }
+.tour-body { padding: 0 18px; }
+.tour-body p { margin: 0 0 8px; }
+.tour-body b { color: #fff; font-weight: 500; }
+.tour-body .tour-h { margin: 12px 0 3px; color: #fff; font-weight: 500; }
+.tour-body .tour-dim { color: rgba(255,255,255,0.55); }
+.tour-body .tour-list { margin: 0 0 8px; padding-left: 16px; }
+.tour-body .tour-list li { margin: 0 0 5px; }
+.tour-body sub { font-size: 0.72em; }
+.tour-foot { position: sticky; bottom: 0; z-index: 1; background: #0c1018; display: flex; align-items: baseline; justify-content: space-between; margin-top: 10px; padding: 8px 18px 12px; border-top: 1px solid rgba(255,255,255,0.12);
+  font-family: var(--kd-caps, 'Mona Sans', sans-serif); font-weight: var(--kd-caps-weight, 400); font-stretch: var(--kd-caps-stretch, 125%);
+  font-size: 9px; letter-spacing: var(--kd-caps-track, 0.12em); text-transform: uppercase; }
+.tour-foot .tour-link { background: none; border: 0; border-bottom: 1px dotted rgba(255,255,255,0.45); padding: 2px 0; margin: 0; color: rgba(255,255,255,0.85); font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; border-radius: 0; }
+.tour-foot .tour-link:hover { color: #fff; border-bottom-color: #fff; }
+.tour-foot .tour-link:disabled { color: rgba(255,255,255,0.3); border-bottom-color: rgba(255,255,255,0.15); cursor: default; }
+.tour-foot .tour-skip { color: rgba(255,255,255,0.55); }
+`

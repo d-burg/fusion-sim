@@ -80,6 +80,7 @@ export default function Timeline({ stations, duration, clock, scrubTime, running
     <div
       ref={trackRef}
       className="kd-timeline"
+      data-tutorial="controls"
       data-scrub={finished}
       onPointerDown={trackDown}
       onPointerMove={(e) => { if (finished && e.buttons & 1 && !(e.target as HTMLElement).closest('.kd-playhead')) scrubAt(e.clientX) }}
