@@ -1,3 +1,4 @@
+import { themeColors } from '../lib/themeColors'
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { WaveformPoint } from '../lib/wasm'
@@ -148,11 +149,12 @@ export default function WaveformDrawer({
     const ctx = canvas.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    ctx.fillStyle = '#0a0c10'
+    const tc = themeColors()
+    ctx.fillStyle = tc.base
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
 
     // Grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+    ctx.strokeStyle = tc.grid(tc.light ? 0.10 : 0.06)
     ctx.lineWidth = 0.5
     for (let i = 0; i <= 4; i++) {
       const x = MARGIN.left + (i / 4) * plotW
@@ -162,7 +164,7 @@ export default function WaveformDrawer({
     }
 
     // Axis labels
-    ctx.fillStyle = '#6b7280'
+    ctx.fillStyle = tc.inkFaint
     ctx.font = '10px monospace'
     ctx.textAlign = 'center'
     for (let i = 0; i <= 4; i++) {

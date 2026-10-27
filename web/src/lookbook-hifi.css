@@ -1,0 +1,244 @@
+/* ============================================================================
+   theme: hifi
+   reference world: Dieter Rams-era Braun instruments (SK series, T 1000, ET
+   calculators) crossed with late-70s/80s Japanese reference hi-fi (Nakamichi,
+   Sony ES, Pioneer, Yamaha) with their vacuum-fluorescent readouts.
+
+   Borrowed, and where each lands:
+   1. Warm anthracite faceplate, not blue-black. --c-base/--c-surface/--c-raised
+      are three steps of the same warm charcoal (a hint of brown, never blue),
+      so the chassis reads as painted metal rather than a dark-mode web page.
+   2. Silk-screened legends: small, light, letter-spaced grotesque. .panel-title,
+      .text-gray-500 labels, button captions and nav links are 10-11 px Archivo
+      at weight 400 with 0.10-0.16 em tracking, dim ink. Legends are quiet; the
+      numbers are what you read.
+   3. Engraved hairline rules that group controls. .panel-title carries a 1 px
+      rule beneath it (--c-line); the nav and footer are bounded by the same
+      hairline. Nothing is boxed with a heavy border.
+   4. Soft-touch rectangular keys with a captioned legend. Every button is a
+      flat rectangle, 1 px rule, zero radius, 10.5 px tracked caps. Primary and
+      secondary differ by fill only: the one orange key (Braun's signal orange)
+      is the primary action; everything else is anthracite.
+   5. VFD numerals on a dark glass window. .font-mono is DM Mono in a warm
+      phosphor cream, slightly brighter than body ink, tabular, with a touch
+      of tracking. No text-shadow: at reading distance a VFD is crisp, and the
+      brief bans halos; the warmth of the cream does the glowing.
+   The single accent (--c-accent) is Braun signal orange and appears only on
+   the primary key, the selected row, the focus ring and the highlighted value.
+   ========================================================================== */
+
+html[data-theme="hifi"] {
+  --c-base:        #121110;   /* chassis, matte black with warmth */
+  --c-surface:     #1c1b19;   /* faceplate anthracite */
+  --c-raised:      #272522;   /* key face / select face */
+  --c-line:        #353330;   /* engraved hairline */
+  --c-line-strong: #4a4740;   /* key rule, fader track */
+  --c-ink:         #e6e1d6;   /* silk-screen white, warm */
+  --c-ink-dim:     #aaa59b;   /* legends */
+  --c-ink-faint:   #8b867d;   /* units, captions (4.76:1 on surface) */
+  --c-accent:      #ea8428;   /* Braun signal orange */
+  --c-accent-hi:   #f6a24e;   /* the same key, lit */
+  --c-ok:          #9dbf85;   /* green LED, desaturated */
+  --c-warn:        #d9a441;   /* amber LED */
+  --c-bad:         #c23f2a;   /* red LED fill */
+  --c-bad-ink:     #f0806a;   /* red legend text (6.56:1 on surface) */
+  --font-sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "DM Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ---- base type ---------------------------------------------------------- */
+[data-theme="hifi"] body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0.012em;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+[data-theme="hifi"] h1,
+[data-theme="hifi"] .text-4xl { font-weight: 300; letter-spacing: -0.012em; }
+[data-theme="hifi"] .text-2xl,
+[data-theme="hifi"] .text-lg  { font-weight: 300; letter-spacing: -0.005em; }
+
+[data-theme="hifi"] .text-xs   { font-size: 11px; line-height: 1.4; letter-spacing: 0.03em; }
+[data-theme="hifi"] .text-sm   { font-size: 13px; line-height: 1.45; }
+[data-theme="hifi"] .text-base { font-size: 15px; line-height: 1.55; font-weight: 300; letter-spacing: 0.005em; }
+
+/* secondary text ladder */
+[data-theme="hifi"] .text-gray-200 { color: var(--c-ink); }
+[data-theme="hifi"] .text-gray-300 { color: var(--c-ink-dim); }
+[data-theme="hifi"] .text-gray-400 { color: var(--c-ink-dim); }
+
+/* muted labels and units: silk-screened legends */
+[data-theme="hifi"] .text-gray-500 {
+  color: var(--c-ink-faint);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+[data-theme="hifi"] .text-gray-500 sub,
+[data-theme="hifi"] .text-gray-500 sup { letter-spacing: 0; }
+
+/* the highlighted value: the one readout lit in the accent colour */
+[data-theme="hifi"] .text-cyan-400 { color: var(--c-accent); }
+
+/* ---- VFD numerals ------------------------------------------------------- */
+[data-theme="hifi"] .font-mono {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: #f3ecdc;                 /* phosphor cream, a step above ink */
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: 0.02em;
+}
+[data-theme="hifi"] .text-gray-500.font-mono,
+[data-theme="hifi"] .font-mono.text-gray-500 { color: var(--c-ink-faint); }
+[data-theme="hifi"] .text-cyan-400.font-mono,
+[data-theme="hifi"] .font-mono.text-cyan-400 { color: var(--c-accent); }
+
+/* ---- panels ------------------------------------------------------------- */
+[data-theme="hifi"] .panel-cell {
+  background: var(--c-surface);
+  border-radius: 0;
+}
+[data-theme="hifi"] .panel-title {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-ink-dim);
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+/* ---- nav bar: the aluminium fascia strip ------------------------------- */
+[data-theme="hifi"] nav.border-b.border-gray-800 {
+  background: #c9c5bc;                       /* brushed aluminium fascia */
+  border-bottom: 1px solid #8f8b82;
+  color: #1c1b19;
+}
+[data-theme="hifi"] nav.border-b.border-gray-800 .brand {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #1c1b19;
+}
+[data-theme="hifi"] nav.border-b.border-gray-800 a {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #3a3833;
+  padding: 3px 0;
+  border-bottom: 1px solid transparent;
+}
+[data-theme="hifi"] nav.border-b.border-gray-800 a:hover { color: #1c1b19; border-bottom-color: #1c1b19; }
+[data-theme="hifi"] nav.border-b.border-gray-800 a:focus-visible { outline: none; color: #1c1b19; border-bottom-color: var(--c-accent); }
+[data-theme="hifi"] nav.border-b.border-gray-800 .text-gray-500 { color: #55524b; }
+[data-theme="hifi"] nav.border-b.border-gray-800 .font-mono { color: #1c1b19; }
+
+/* ---- links -------------------------------------------------------------- */
+[data-theme="hifi"] a { color: var(--c-ink-dim); text-decoration: none; border-bottom: 1px solid var(--c-line-strong); }
+[data-theme="hifi"] a:hover { color: var(--c-ink); border-bottom-color: var(--c-ink-dim); }
+[data-theme="hifi"] a:focus-visible { outline: none; color: var(--c-ink); border-bottom-color: var(--c-accent); }
+
+/* ---- keys ---------------------------------------------------------------- */
+[data-theme="hifi"] button {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+  padding: 8px 14px 7px;
+  border-radius: 0;
+  border: 1px solid var(--c-line-strong);
+  background: var(--c-raised);
+  color: var(--c-ink);
+  transition: background-color 80ms linear, border-color 80ms linear, color 80ms linear;
+}
+[data-theme="hifi"] button:focus-visible { outline: 1px solid var(--c-accent-hi); outline-offset: 2px; }
+[data-theme="hifi"] button:active { background: var(--c-base); }
+
+/* primary: the one orange key */
+[data-theme="hifi"] button.bg-cyan-600 {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: #141210;
+  font-weight: 500;
+}
+[data-theme="hifi"] button.bg-cyan-600:hover { background: var(--c-accent-hi); border-color: var(--c-accent-hi); color: #141210; }
+[data-theme="hifi"] button.bg-cyan-600:active { background: #d2721c; border-color: #d2721c; }
+[data-theme="hifi"] button.bg-cyan-600:focus-visible { outline-color: var(--c-ink); }
+
+/* secondary: anthracite keys, same shape */
+[data-theme="hifi"] button.bg-gray-700,
+[data-theme="hifi"] button.bg-amber-600 {
+  background: var(--c-raised);
+  border-color: var(--c-line-strong);
+  color: var(--c-ink-dim);
+}
+[data-theme="hifi"] button.bg-gray-700:hover,
+[data-theme="hifi"] button.bg-amber-600:hover { color: var(--c-ink); border-color: var(--c-ink-faint); background: var(--c-raised); }
+
+/* active toggle: an anthracite key with its LED lit (a 6px lamp at the left) */
+[data-theme="hifi"] button.bg-emerald-600 {
+  background: var(--c-raised);
+  border-color: var(--c-line-strong);
+  color: var(--c-ink);
+  padding-left: 24px;
+  position: relative;
+}
+[data-theme="hifi"] button.bg-emerald-600::before {
+  content: "";
+  position: absolute;
+  left: 10px; top: 50%;
+  width: 6px; height: 6px;
+  margin-top: -3px;
+  background: var(--c-ok);
+}
+[data-theme="hifi"] button.bg-emerald-600:hover { border-color: var(--c-ink-faint); }
+
+/* ---- selects: a recessed selector window ------------------------------- */
+[data-theme="hifi"] select.bg-gray-800 {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--c-ink);
+  background-color: var(--c-base);
+  border: 1px solid var(--c-line-strong);
+  border-radius: 0;
+  padding: 6px 26px 6px 9px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'><path d='M0 0h8L4 5z' fill='%23aaa59b'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+[data-theme="hifi"] select.bg-gray-800:hover { border-color: var(--c-ink-faint); }
+[data-theme="hifi"] select.bg-gray-800:focus-visible { outline: none; border-color: var(--c-accent); }
+
+/* ---- fader -------------------------------------------------------------- */
+[data-theme="hifi"] input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--c-line-strong);
+  border-radius: 0;
+}
+[data-theme="hifi"] input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 16px;
+  border-radius: 0;
+  margin-top: -7px;
+  background: var(--c-ink-dim);     /* a solid fader cap */
+  border: 1px solid var(--c-base);
+  box-shadow: none;
+}
+[data-theme="hifi"] input[type="range"]:hover::-webkit-slider-thumb { background: var(--c-ink); }
+[data-theme="hifi"] input[type="range"]:focus-visible { outline: none; }
+[data-theme="hifi"] input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--c-accent); }
+[data-theme="hifi"] input[type="range"]::-moz-range-track { height: 2px; background: var(--c-line-strong); }
+[data-theme="hifi"] input[type="range"]::-moz-range-thumb { width: 8px; height: 16px; border-radius: 0; background: var(--c-ink-dim); border: 1px solid var(--c-base); }
+
+/* no overlay layer: a faceplate is matte and flat */
+[data-theme="hifi"]::after { content: none; }
