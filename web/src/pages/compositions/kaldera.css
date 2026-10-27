@@ -26,7 +26,7 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
   text-transform: uppercase;
   font-size: 9px;
   display: grid;
-  grid-template-rows: 64px 1fr 136px 76px 28px;
+  grid-template-rows: 64px 1fr 336px 76px 28px;
   overflow: hidden;
   cursor: default;
   user-select: none;
@@ -73,12 +73,13 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 /* ── main: readouts | hero | render ───────────────────────────────── */
 [data-layout="kaldera"] .kd-main {
   position: relative; min-height: 0;
-  display: grid; grid-template-columns: 280px 1fr 400px; column-gap: 24px;
+  display: grid; grid-template-columns: 520px 1fr 400px; column-gap: 24px;
   padding: 8px var(--kd-x) 0;
 }
-[data-layout="kaldera"] .kd-col-l { display: flex; flex-direction: column; gap: 34px; padding-top: 34px; }
-[data-layout="kaldera"] .kd-col-r { display: flex; flex-direction: column; gap: 30px; }
-[data-layout="kaldera"] .kd-hero { position: relative; min-width: 0; min-height: 0; margin-left: 70px; }
+[data-layout="kaldera"] .kd-col-l { display: flex; flex-direction: column; justify-content: space-between; padding: 14px 0 14px; min-height: 0; }
+[data-layout="kaldera"] .kd-scalars { display: grid; grid-template-columns: repeat(3, 1fr); row-gap: 22px; column-gap: 20px; }
+[data-layout="kaldera"] .kd-col-r { display: flex; flex-direction: column; }
+[data-layout="kaldera"] .kd-hero { position: relative; min-width: 0; min-height: 0; margin: 6px 0 12px; }
 [data-layout="kaldera"] .kd-hero canvas { position: absolute; inset: 0; }
 
 /* the one rendered image, at the site's render ratio */
@@ -89,27 +90,26 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 /* readouts: VALUE over caption */
 [data-layout="kaldera"] .kd-ro { display: flex; flex-direction: column; gap: 7px; }
 [data-layout="kaldera"] .kd-ro-v {
-  font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 26px; line-height: 1;
+  font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 24px; line-height: 1;
   letter-spacing: 0.06em; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 [data-layout="kaldera"] .kd-ro-u { font-size: 12px; letter-spacing: 0.16em; font-weight: 300; color: rgba(255,255,255,0.85); }
 [data-layout="kaldera"] .kd-ro-c { font-size: 9px; color: rgba(255,255,255,0.7); }
-[data-layout="kaldera"] .kd-ro-grid { display: grid; grid-template-columns: 1fr 1fr; row-gap: 30px; column-gap: 24px; padding-left: 2px; }
 
 /* chapter title, bottom-left of the main area */
-[data-layout="kaldera"] .kd-title { position: absolute; left: var(--kd-x); bottom: 10px; display: flex; flex-direction: column; gap: 10px; }
+[data-layout="kaldera"] .kd-title { display: flex; flex-direction: column; gap: 9px; }
 [data-layout="kaldera"] .kd-title-cap { font-size: 8px; color: rgba(255,255,255,0.6); }
 [data-layout="kaldera"] .kd-h1 {
-  margin: 0; font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 36px; line-height: 1;
+  margin: 0; font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 32px; line-height: 1;
   letter-spacing: 0.10em; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 [data-layout="kaldera"] .kd-h1-dot { color: rgba(255,255,255,0.55); font-size: 0.6em; vertical-align: 0.2em; }
 [data-layout="kaldera"] .kd-state { font-size: 9px; color: rgba(255,255,255,0.78); }
 [data-layout="kaldera"] .kd-state[data-state="DISRUPTED"] { color: #ff6a56; }
 
-/* ── traces: no box, no axes ──────────────────────────────────────── */
-[data-layout="kaldera"] .kd-traces { position: relative; margin: 0 var(--kd-x); min-height: 0; }
-[data-layout="kaldera"] .kd-traces canvas { position: absolute; inset: 0; }
+/* ── strips: five stacked, one canvas, a shared time axis under them ── */
+[data-layout="kaldera"] .kd-strips { position: relative; margin: 0 var(--kd-x); min-height: 0; }
+[data-layout="kaldera"] .kd-strips canvas { position: absolute; inset: 0; }
 
 /* ── timeline ─────────────────────────────────────────────────────── */
 [data-layout="kaldera"] .kd-timeline { position: relative; margin: 0 var(--kd-x); height: 76px; }

@@ -1,18 +1,33 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
 import type { ControlRoomContext } from './types'
+import type { TracePoint } from '../../lib/types'
 import PortView from '../../components/portview'
 import Hero from './kaldera/Hero'
-import Traces from './kaldera/Traces'
+import Strips, { type Pts, type Strip } from './kaldera/Strips'
 import Timeline, { type Station } from './kaldera/Timeline'
-import { flatTopWindow, parseProgram, pulsePhase } from './kaldera/phase'
+import { flatTopWindow, parseProgram, pulsePhase, type Waveform } from './kaldera/phase'
 import { reconstructionValid } from '../../lib/pulseLog'
 import './kaldera.css'
 
 const f2 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(2) : '—')
+const f1 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(1) : '—')
+
 /** Scenario names as abbreviations, never phrases. */
 const PRESET_WORD: Record<string, string> = { hmode: 'H-MODE', lmode: 'L-MODE', density_limit: 'N-LIMIT' }
 
-const f1 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(1) : '—')
+/** Sum of several programmed waveforms, sampled on the union of their knots. */
+function sumWaveforms(ws: (Waveform | undefined)[]): Waveform | undefined {
+  const live = ws.filter((w): w is Waveform => !!w && w.length > 0)
+  if (live.length === 0) return undefined
+  const at = (w: Waveform, t: number) => {
+    if (t <= w[0][0]) return w[0][1]
+    if (t >= w[w.length - 1][0]) return w[w.length - 1][1]
+    for (let i = 1; i < w.length; i++) if (t <= w[i][0]) { const [t0, v0] = w[i - 1], [t1, v1] = w[i]; return v0 + ((t - t0) / (t1 - t0)) * (v1 - v0) }
+    return w[w.length - 1][1]
+  }
+  const ts = Array.from(new Set(live.flatMap((w) => w.map((p) => p[0])))).sort((a, b) => a - b)
+  return ts.map((t) => [t, live.reduce((acc, w) => acc + at(w, t), 0)])
+}
 
 /** VALUE over a tiny caption, with air around it. */
 function Readout({ value, unit, caption }: { value: string; unit?: string; caption: ReactNode }) {
@@ -42,7 +57,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
   const program = useMemo(() => parseProgram(programJson), [programJson])
   const win = useMemo(() => flatTopWindow(program.ip), [program])
-  const ipPeak = useMemo(() => (program.ip ? Math.max(...program.ip.map((p) => p[1])) : 0), [program])
+  const pinRef = useMemo(() => sumWaveforms([program.p_nbi, program.p_ech, program.p_ich]), [program])
   const T = duration > 0 ? duration : 10
 
   const phase = pulsePhase(win, time, running, finished, s, scrubTime !== null)
@@ -62,6 +77,17 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     st.push({ label: 'END', t: T })
     return st
   }, [win, T])
+
+  const pick = (k: keyof TracePoint): Pts => history.map((p) => [p.t, Number(p[k])] as [number, number])
+  const strips: Strip[] = useMemo(() => [
+    { label: 'IP', unit: 'MA', pts: pick('ip'), ref: program.ip },
+    { label: 'N̄E', pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', pts: pick('f_greenwald'), own: true }, blank: !valid },
+    { label: 'W TH', unit: 'MJ', pts: pick('w_th') },
+    { label: 'P IN', unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', pts: pick('p_rad') }, digits: 1 },
+    { label: 'D α', pts: pick('d_alpha') },
+  // history is mutated in place by the simulation hook; key on its length and last time
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [history, history.length, history.length ? history[history.length - 1].t : 0, program, pinRef, valid])
 
   const dev = ctx.devices.find((d) => d.id === ctx.activeDevice)
   const lastEvent = ctx.events.length ? ctx.events[ctx.events.length - 1] : null
@@ -108,10 +134,25 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
       <main className="kd-main">
         <div className="kd-col-l">
-          <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} />
-          <Readout value={f2(s?.ne_bar)} unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} />
-          <Readout value={f2(s?.w_th)} unit="MJ" caption={<>W<sub>TH</sub></>} />
-          <Readout value={f2(rv(s?.beta_n))} caption={<>β<sub>N</sub></>} />
+          <div className="kd-scalars">
+            <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} />
+            <Readout value={f2(s?.ne_bar)} unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} />
+            <Readout value={f2(s?.w_th)} unit="MJ" caption={<>W<sub>TH</sub></>} />
+            <Readout value={f2(rv(s?.beta_n))} caption={<>β<sub>N</sub></>} />
+            <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} />
+            <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} />
+            <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} />
+            <Readout value={f1(s?.p_rad)} unit="MW" caption={<>P<sub>RAD</sub></>} />
+            <Readout value={f2(rv(s?.te0))} unit="KEV" caption={<>T<sub>E0</sub></>} />
+            <Readout value={f2(rv(s?.tau_e))} unit="S" caption={<>τ<sub>E</sub></>} />
+            <Readout value={f2(rv(s?.h_factor))} caption={<>H<sub>98</sub></>} />
+            <Readout value={f2(s?.v_loop)} unit="V" caption={<>V<sub>LOOP</sub></>} />
+          </div>
+          <div className="kd-title">
+            <div className="kd-title-cap">PULSE</div>
+            <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> {phase}</h1>
+            <div className="kd-state" data-state={stateWord}>{stateWord}</div>
+          </div>
         </div>
 
         <Hero snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
@@ -127,25 +168,12 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
               deviceA={dev?.a}
             />
           </div>
-          <div className="kd-ro-grid">
-            <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} />
-            <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} />
-            <Readout value={f2(rv(s?.te0))} unit="KEV" caption={<>T<sub>E0</sub></>} />
-            <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} />
-          </div>
-        </div>
-
-        <div className="kd-title">
-          <div className="kd-title-cap">PULSE</div>
-          <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> {phase}</h1>
-          <div className="kd-state" data-state={stateWord}>{stateWord}</div>
         </div>
       </main>
 
-      <Traces
-        history={history}
-        ipProgram={program.ip}
-        ipPeak={ipPeak}
+      <Strips
+        strips={strips}
+        stations={stations}
         duration={T}
         time={time}
         scrubTime={scrubTime}
