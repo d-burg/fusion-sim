@@ -1,5 +1,4 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import type { ControlRoomContext } from './types'
 import type { Snapshot, TracePoint } from '../../lib/types'
 import PortView from '../../components/portview'
@@ -68,9 +67,6 @@ function Link({ on, onClick, children }: { on?: boolean; onClick: () => void; ch
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const { displaySnapshot: s, history, running, finished, scrubTime, time, duration, programJson } = ctx
-  // Type pairing under comparison: ?font=a|b|c|d (a is the default).
-  const [search] = useSearchParams()
-  const fontVariant = (['a', 'b', 'c', 'd'].includes(search.get('font') ?? '') ? search.get('font') : 'a') as string
 
   // The blue-black field for whatever shared chrome is mounted here (planner drawer, settings).
   useEffect(() => {
@@ -119,9 +115,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const speeds = [0.5, 0.75, 1, 2]
 
   return (
-    <div data-layout="kaldera" data-font={fontVariant} className="kd-root">
-      <div className="kd-atmos" aria-hidden="true" />
-
+    <div data-layout="kaldera" className="kd-root">
       <nav className="kd-nav">
         <div className="kd-nav-l">
           <span className="kd-brand">CONTROL ROOM</span>

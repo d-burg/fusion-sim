@@ -39,10 +39,10 @@ export const AXIS_H = 16
 /** The caps face from the CSS variables, so the canvas follows the font switch. */
 export function capsFont(el: Element, px: number): { font: string; tracking: string; stretch: string } {
   const cs = getComputedStyle(el)
-  const fam = cs.getPropertyValue('--kd-caps').trim() || "'Michroma', sans-serif"
+  const fam = cs.getPropertyValue('--kd-caps').trim() || "'Mona Sans', sans-serif"
   const w = cs.getPropertyValue('--kd-caps-weight').trim() || '400'
-  const tracking = cs.getPropertyValue('--kd-caps-track').trim() || '0.22em'
-  const stretch = cs.getPropertyValue('--kd-caps-stretch').trim() || '100%'
+  const tracking = cs.getPropertyValue('--kd-caps-track').trim() || '0.12em'
+  const stretch = cs.getPropertyValue('--kd-caps-stretch').trim() || '125%'
   return { font: `${w} ${px}px ${fam}`, tracking, stretch }
 }
 

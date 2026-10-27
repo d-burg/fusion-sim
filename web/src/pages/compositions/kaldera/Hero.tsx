@@ -24,7 +24,7 @@ function tracePath(g: CanvasRenderingContext2D, c: Contour, X: (r: number) => nu
 
 /**
  * The hero: the equilibrium cross-section drawn large, line-only, white at
- * low opacity on the atmosphere. The separatrix is the one bright line and
+ * low opacity on the flat field. The separatrix is the one bright line and
  * carries a faint red warmth, like the render's glow on kaldera.desy.de.
  */
 export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {

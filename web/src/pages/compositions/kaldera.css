@@ -1,8 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,200;125,300&family=Michroma&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@200;300&family=Jost:wght@200;300;400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@125,300;125,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@100..125,300..400&display=swap');
 
-/* kaldera: a blue-black atmosphere; white on it; the red warmth is the only colour.
+/* kaldera: one flat blue-black field; white on it; the red warmth of the separatrix is the only colour.
    The shared chrome mounted here (planner drawer, settings) reads these tokens. */
 html[data-theme="kaldera"] {
   --c-base: #0a0d14; --c-surface: #0f131c; --c-raised: #161b26;
@@ -17,17 +15,17 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 /* the root only: the hint popover is a portal that carries the same attribute
    for scoping, and must not inherit the page grid */
 [data-layout="kaldera"].kd-root {
-  /* a (default): Michroma caps + Archivo Expanded 200 figures */
-  --kd-caps: 'Michroma', 'Syncopate', sans-serif;
+  /* the type: Mona Sans at width 125 throughout (400 caps, 300 figures and title); the canvases read these */
+  --kd-caps: 'Mona Sans', sans-serif;
   --kd-caps-weight: 400;
-  --kd-caps-stretch: 100%;
-  --kd-caps-track: 0.22em;
-  --kd-wide: 'Archivo', 'Michroma', sans-serif;
-  --kd-wide-weight: 200;
+  --kd-caps-stretch: 125%;
+  --kd-caps-track: 0.12em;
+  --kd-wide: 'Mona Sans', sans-serif;
+  --kd-wide-weight: 300;
   --kd-wide-stretch: 125%;
-  --kd-wide-track: 0.06em;
-  --kd-title-weight: 200;
-  --kd-body: 'Archivo', system-ui, sans-serif;
+  --kd-wide-track: 0.04em;
+  --kd-title-weight: 300;
+  --kd-body: 'Mona Sans', system-ui, sans-serif;
   --kd-x: 64px;
   position: fixed;
   inset: 0;
@@ -46,53 +44,12 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
-/* b: Unbounded caps (the closest Google face to Kaldera's extended grotesque) + Archivo Expanded figures */
-[data-layout="kaldera"][data-font="b"].kd-root {
-  --kd-caps: 'Unbounded', 'Michroma', sans-serif;
-  --kd-caps-weight: 300;
-  --kd-caps-track: 0.14em;
-}
-/* c: Jost (a Futura) for everything: 400 tracked caps, 300 figures, 200 title */
-[data-layout="kaldera"][data-font="c"].kd-root {
-  --kd-caps: 'Jost', 'Futura', sans-serif;
-  --kd-caps-weight: 400;
-  --kd-caps-track: 0.26em;
-  --kd-wide: 'Jost', 'Futura', sans-serif;
-  --kd-wide-weight: 300;
-  --kd-wide-stretch: 100%;
-  --kd-wide-track: 0.08em;
-  --kd-title-weight: 200;
-  --kd-body: 'Jost', system-ui, sans-serif;
-}
-/* d: Mona Sans at width 125 for everything: 400 caps, 300 figures and title */
-[data-layout="kaldera"][data-font="d"].kd-root {
-  --kd-caps: 'Mona Sans', 'Archivo', sans-serif;
-  --kd-caps-weight: 400;
-  --kd-caps-stretch: 125%;
-  --kd-caps-track: 0.12em;
-  --kd-wide: 'Mona Sans', 'Archivo', sans-serif;
-  --kd-wide-weight: 300;
-  --kd-wide-stretch: 125%;
-  --kd-wide-track: 0.04em;
-  --kd-title-weight: 300;
-  --kd-body: 'Mona Sans', system-ui, sans-serif;
-}
-
 [data-layout="kaldera"] * { box-sizing: border-box; }
 [data-layout="kaldera"] .kd-g, .kd-pop[data-layout="kaldera"] .kd-g { text-transform: none; }
 [data-layout="kaldera"] button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 [data-layout="kaldera"] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
 
-/* the atmosphere: a soft blue-gray haze behind the plasma and the render's red warmth at the right */
-[data-layout="kaldera"] .kd-atmos {
-  position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background:
-    radial-gradient(ellipse 34% 46% at 46% 42%, rgba(150, 170, 200, 0.16), rgba(150, 170, 200, 0) 100%),
-    radial-gradient(ellipse 22% 36% at 82% 36%, rgba(255, 84, 60, 0.13), rgba(255, 84, 60, 0) 100%),
-    radial-gradient(ellipse 60% 50% at 20% 110%, rgba(110, 130, 160, 0.10), rgba(110, 130, 160, 0) 100%),
-    linear-gradient(180deg, #0c1018 0%, #0a0d14 55%, #070a10 100%);
-}
-[data-layout="kaldera"].kd-root > *:not(.kd-atmos) { position: relative; z-index: 1; }
+[data-layout="kaldera"].kd-root > * { position: relative; z-index: 1; }
 
 /* ── nav row ──────────────────────────────────────────────────────── */
 [data-layout="kaldera"] .kd-nav {
@@ -150,11 +107,11 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
   position: fixed; z-index: 9999; max-height: 70vh; overflow-y: auto; display: block;
   background: #0c1018; border: 1px solid rgba(255,255,255,0.22); color: rgba(255,255,255,0.82);
   padding: 12px 16px 14px; box-shadow: none; border-radius: 0;
-  font-family: var(--kd-body, 'Archivo', system-ui, sans-serif); font-stretch: 100%; font-weight: 400; font-size: 13px; line-height: 1.5;
+  font-family: var(--kd-body, 'Mona Sans', system-ui, sans-serif); font-stretch: 100%; font-weight: 400; font-size: 13px; line-height: 1.5;
   letter-spacing: 0; text-transform: none; user-select: text; cursor: auto;
 }
 .kd-pop[data-layout="kaldera"] .kd-pop-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
-.kd-pop[data-layout="kaldera"] .kd-pop-title { font-family: var(--kd-caps, 'Michroma', sans-serif); font-weight: var(--kd-caps-weight, 400); font-stretch: var(--kd-caps-stretch, 100%); font-size: 9px; letter-spacing: var(--kd-caps-track, 0.22em); text-transform: uppercase; color: #fff; }
+.kd-pop[data-layout="kaldera"] .kd-pop-title { font-family: var(--kd-caps, 'Mona Sans', sans-serif); font-weight: var(--kd-caps-weight, 400); font-stretch: var(--kd-caps-stretch, 100%); font-size: 9px; letter-spacing: var(--kd-caps-track, 0.12em); text-transform: uppercase; color: #fff; }
 .kd-pop[data-layout="kaldera"] .kd-pop-x { background: none; border: 0; color: rgba(255,255,255,0.5); font: inherit; font-size: 14px; line-height: 1; cursor: pointer; padding: 0 0 0 12px; }
 .kd-pop[data-layout="kaldera"] .kd-pop-x:hover { color: #fff; }
 .kd-pop[data-layout="kaldera"] .kd-pop-body p { margin: 0 0 8px; }
