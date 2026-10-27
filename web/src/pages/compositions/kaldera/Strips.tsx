@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Station } from './Timeline'
+import InfoHint from './InfoHint'
 
 export type Pts = [number, number][]
 
 export interface Strip {
   label: string
+  /** Rendered form of the label when it needs markup (Greek glyphs). */
+  node?: ReactNode
+  /** Explanatory content for the label's hint popover. */
+  hint?: ReactNode
   unit?: string
   pts: Pts
   /** Programmed reference, the dotted companion. */
   ref?: Pts
   /** A second series in dim white. `own` scales it to its own maximum instead of the strip's. */
-  second?: { label: string; pts: Pts; own?: boolean }
+  second?: { label: string; hint?: ReactNode; pts: Pts; own?: boolean }
   /** Decimals for the live value. */
   digits?: number
   /** Blank the live value (reconstruction invalid). */
@@ -52,6 +57,7 @@ function valueAt(pts: Pts, t: number | null): number | null {
 export default function Strips({ strips, stations, duration, time, scrubTime, onScrub }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
+  const [stripH, setStripH] = useState(0)
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current, box = boxRef.current
@@ -72,6 +78,7 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
     const X = (t: number) => (t / T) * W
     const n = Math.max(1, strips.length)
     const sh = (H - AXIS_H) / n
+    setStripH((prev) => (Math.abs(prev - sh) > 0.01 ? sh : prev))
     const stationXs = stations.map((s) => Math.round(X(Math.min(s.t, T))) + 0.5)
 
     g.font = FONT
@@ -136,11 +143,8 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
       }
       g.restore()
 
-      // label top-left, live value top-right, in the same face
+      // the label is a DOM element over the canvas (so it can carry a hint); the live value is drawn here
       g.textBaseline = 'top'
-      g.textAlign = 'left'
-      g.fillStyle = 'rgba(255,255,255,0.7)'
-      g.fillText(s.label + (s.second ? `   .   ${s.second.label}` : ''), 8, y0 + 5)
       const v = s.blank ? null : valueAt(s.pts, scrubTime)
       const v2 = s.second && !s.blank ? valueAt(s.second.pts, scrubTime) : null
       const d = s.digits ?? 2
@@ -191,6 +195,19 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
 
   return (
     <div ref={boxRef} className="kd-strips">
+      <div className="kd-strip-labels" aria-hidden={false}>
+        {strips.map((s, i) => (
+          <span key={s.label} className="kd-strip-label" style={{ top: Math.round(i * stripH) + 5 }}>
+            {s.hint ? <InfoHint title={s.label} content={s.hint}>{s.node ?? s.label}</InfoHint> : (s.node ?? s.label)}
+            {s.second && (
+              <>
+                <span className="kd-dot">   .   </span>
+                {s.second.hint ? <InfoHint title={s.second.label} content={s.second.hint}>{s.second.label}</InfoHint> : s.second.label}
+              </>
+            )}
+          </span>
+        ))}
+      </div>
       <canvas
         ref={canvasRef}
         style={{ display: 'block', cursor: onScrub ? 'ew-resize' : 'default' }}

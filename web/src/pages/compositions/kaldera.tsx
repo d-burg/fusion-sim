@@ -1,12 +1,15 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
 import type { ControlRoomContext } from './types'
-import type { TracePoint } from '../../lib/types'
+import type { Snapshot, TracePoint } from '../../lib/types'
 import PortView from '../../components/portview'
 import Hero from './kaldera/Hero'
 import Strips, { type Pts, type Strip } from './kaldera/Strips'
 import Timeline, { type Station } from './kaldera/Timeline'
 import { flatTopWindow, parseProgram, pulsePhase, type Waveform } from './kaldera/phase'
 import { reconstructionValid } from '../../lib/pulseLog'
+import { equilibriumInfo, plasmaParamsInfo, powerBalanceInfo, stabilityInfo, traceDescriptions } from '../../components/infoContent'
+import InfoHint from './kaldera/InfoHint'
+import Diagnostics from './kaldera/Diagnostics'
 import './kaldera.css'
 
 const f2 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(2) : '—')
@@ -29,14 +32,32 @@ function sumWaveforms(ws: (Waveform | undefined)[]): Waveform | undefined {
   return ts.map((t) => [t, live.reduce((acc, w) => acc + at(w, t), 0)])
 }
 
-/** VALUE over a tiny caption, with air around it. */
-function Readout({ value, unit, caption }: { value: string; unit?: string; caption: ReactNode }) {
+/** VALUE over a tiny caption, with air around it; the caption may carry a hint. */
+function Readout({ value, unit, caption, hint }: { value: string; unit?: string; caption: ReactNode; hint?: { title: string; content: ReactNode } }) {
   return (
     <div className="kd-ro">
       <div className="kd-ro-v">{value}{unit && value !== '—' ? <span className="kd-ro-u"> {unit}</span> : null}</div>
-      <div className="kd-ro-c">{caption}</div>
+      <div className="kd-ro-c">{hint ? <InfoHint title={hint.title} content={hint.content}>{caption}</InfoHint> : caption}</div>
     </div>
   )
+}
+
+/** Greek glyphs escape the page-wide uppercase transform (β would become B). */
+const G = ({ children }: { children: ReactNode }) => <span className="kd-g">{children}</span>
+
+const STAB = { title: 'Stability', content: stabilityInfo }
+const POWER = { title: 'Power balance', content: powerBalanceInfo }
+
+/** Configuration word from the engine's enum name. */
+function configWord(s: Snapshot | null): string {
+  if (!s) return '—'
+  if (s.is_limited) return 'LIMITED'
+  const c = s.magnetic_config || ''
+  if (/upper/i.test(c)) return 'USN'
+  if (/double/i.test(c)) return 'DN'
+  if (/lower/i.test(c)) return 'LSN'
+  if (/limit/i.test(c)) return 'LIMITED'
+  return c.toUpperCase() || '—'
 }
 
 /** A text link in tracked caps; the active one is a white filled square. */
@@ -80,11 +101,11 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
   const pick = (k: keyof TracePoint): Pts => history.map((p) => [p.t, Number(p[k])] as [number, number])
   const strips: Strip[] = useMemo(() => [
-    { label: 'IP', unit: 'MA', pts: pick('ip'), ref: program.ip },
-    { label: 'N̄E', pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', pts: pick('f_greenwald'), own: true }, blank: !valid },
-    { label: 'W TH', unit: 'MJ', pts: pick('w_th') },
-    { label: 'P IN', unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', pts: pick('p_rad') }, digits: 1 },
-    { label: 'D α', pts: pick('d_alpha') },
+    { label: 'IP', hint: traceDescriptions.ip, unit: 'MA', pts: pick('ip'), ref: program.ip },
+    { label: 'N̄E', hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
+    { label: 'W TH', hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
+    { label: 'P IN', hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
+    { label: 'D α', node: <>D <G>α</G></>, hint: traceDescriptions.d_alpha, pts: pick('d_alpha') },
   // history is mutated in place by the simulation hook; key on its length and last time
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [history, history.length, history.length ? history[history.length - 1].t : 0, program, pinRef, valid])
@@ -134,20 +155,22 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
       <main className="kd-main">
         <div className="kd-col-l">
+          <div className="kd-head"><InfoHint title="Plasma parameters" content={plasmaParamsInfo}>PLASMA</InfoHint></div>
           <div className="kd-scalars">
             <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} />
             <Readout value={f2(s?.ne_bar)} unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} />
             <Readout value={f2(s?.w_th)} unit="MJ" caption={<>W<sub>TH</sub></>} />
-            <Readout value={f2(rv(s?.beta_n))} caption={<>β<sub>N</sub></>} />
-            <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} />
-            <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} />
-            <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} />
-            <Readout value={f1(s?.p_rad)} unit="MW" caption={<>P<sub>RAD</sub></>} />
+            <Readout value={f2(rv(s?.beta_n))} caption={<><G>β</G><sub>N</sub></>} hint={STAB} />
+            <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} hint={STAB} />
+            <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} hint={STAB} />
+            <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} />
+            <Readout value={f1(s?.p_rad)} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} />
             <Readout value={f2(rv(s?.te0))} unit="KEV" caption={<>T<sub>E0</sub></>} />
-            <Readout value={f2(rv(s?.tau_e))} unit="S" caption={<>τ<sub>E</sub></>} />
+            <Readout value={f2(rv(s?.tau_e))} unit="S" caption={<><G>τ</G><sub>E</sub></>} />
             <Readout value={f2(rv(s?.h_factor))} caption={<>H<sub>98</sub></>} />
             <Readout value={f2(s?.v_loop)} unit="V" caption={<>V<sub>LOOP</sub></>} />
           </div>
+          <Diagnostics snapshot={s} valid={valid} />
           <div className="kd-title">
             <div className="kd-title-cap">PULSE</div>
             <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> {phase}</h1>
@@ -155,7 +178,13 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           </div>
         </div>
 
-        <Hero snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
+        <div className="kd-eq">
+          <div className="kd-eq-cap">
+            <InfoHint title="Equilibrium" content={equilibriumInfo}>EQUILIBRIUM . R–Z</InfoHint>
+            <span className="kd-eq-sub">{configWord(s)}  .  B<sub>T</sub> {f2(s?.bt)} T</span>
+          </div>
+          <Hero snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
+        </div>
 
         <div className="kd-col-r">
           <div className="kd-port">

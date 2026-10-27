@@ -12,7 +12,9 @@ html[data-theme="kaldera"] {
 }
 html[data-theme="kaldera"] body { background: #0a0d14; }
 
-[data-layout="kaldera"] {
+/* the root only: the hint popover is a portal that carries the same attribute
+   for scoping, and must not inherit the page grid */
+[data-layout="kaldera"].kd-root {
   --kd-caps: 'Michroma', 'Syncopate', sans-serif;
   --kd-wide: 'Archivo', 'Michroma', sans-serif;
   --kd-x: 64px;
@@ -26,13 +28,14 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
   text-transform: uppercase;
   font-size: 9px;
   display: grid;
-  grid-template-rows: 64px 1fr 336px 76px 28px;
+  grid-template-rows: 64px 396px 1fr 76px 28px;
   overflow: hidden;
   cursor: default;
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
 [data-layout="kaldera"] * { box-sizing: border-box; }
+[data-layout="kaldera"] .kd-g, .kd-pop[data-layout="kaldera"] .kd-g { text-transform: none; }
 [data-layout="kaldera"] button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 [data-layout="kaldera"] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
 
@@ -45,7 +48,7 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
     radial-gradient(ellipse 60% 50% at 20% 110%, rgba(110, 130, 160, 0.10), rgba(110, 130, 160, 0) 100%),
     linear-gradient(180deg, #0c1018 0%, #0a0d14 55%, #070a10 100%);
 }
-[data-layout="kaldera"] > *:not(.kd-atmos) { position: relative; z-index: 1; }
+[data-layout="kaldera"].kd-root > *:not(.kd-atmos) { position: relative; z-index: 1; }
 
 /* ── nav row ──────────────────────────────────────────────────────── */
 [data-layout="kaldera"] .kd-nav {
@@ -71,15 +74,59 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 [data-layout="kaldera"] .kd-settings .settings-panel { border-radius: 0; letter-spacing: 0.08em; text-transform: none; font-family: 'Archivo', sans-serif; font-stretch: 100%; font-size: 12px; }
 
 /* ── main: readouts | hero | render ───────────────────────────────── */
+/* the three columns share one top line and one bottom line: the render's 380 px */
 [data-layout="kaldera"] .kd-main {
   position: relative; min-height: 0;
-  display: grid; grid-template-columns: 520px 1fr 400px; column-gap: 24px;
-  padding: 8px var(--kd-x) 0;
+  display: grid; grid-template-columns: 470px 1fr 400px; column-gap: 20px; align-items: stretch;
+  padding: 8px var(--kd-x) 8px;
 }
-[data-layout="kaldera"] .kd-col-l { display: flex; flex-direction: column; justify-content: space-between; padding: 14px 0 14px; min-height: 0; }
-[data-layout="kaldera"] .kd-scalars { display: grid; grid-template-columns: repeat(3, 1fr); row-gap: 22px; column-gap: 20px; }
-[data-layout="kaldera"] .kd-col-r { display: flex; flex-direction: column; }
-[data-layout="kaldera"] .kd-hero { position: relative; min-width: 0; min-height: 0; margin: 6px 0 12px; }
+[data-layout="kaldera"] .kd-col-l { display: flex; flex-direction: column; min-height: 0; height: 380px; }
+[data-layout="kaldera"] .kd-head { font-size: 9px; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
+[data-layout="kaldera"] .kd-scalars { display: grid; grid-template-columns: repeat(3, 1fr); row-gap: 14px; column-gap: 18px; }
+[data-layout="kaldera"] .kd-col-r { display: flex; flex-direction: column; height: 380px; }
+[data-layout="kaldera"] .kd-eq { position: relative; min-width: 0; height: 380px; display: flex; flex-direction: column; }
+[data-layout="kaldera"] .kd-eq-cap { position: absolute; top: 0; left: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; font-size: 9px; color: rgba(255,255,255,0.7); white-space: nowrap; }
+[data-layout="kaldera"] .kd-eq-sub { font-size: 8px; color: rgba(255,255,255,0.5); }
+[data-layout="kaldera"] .kd-hero { position: relative; min-width: 0; min-height: 0; flex: 1; }
+
+/* the two bars: a hairline track, a thin fill, the state as a word */
+[data-layout="kaldera"] .kd-bars { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+[data-layout="kaldera"] .kd-bar-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 8px; margin-bottom: 5px; white-space: nowrap; }
+[data-layout="kaldera"] .kd-bar-l { color: rgba(255,255,255,0.7); }
+[data-layout="kaldera"] .kd-bar-r { color: rgba(255,255,255,0.85); font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: 0.12em; margin-left: 12px; }
+[data-layout="kaldera"] .kd-bar-track { position: relative; height: 3px; border-bottom: 1px solid rgba(255,255,255,0.18); }
+[data-layout="kaldera"] .kd-bar-fill { position: absolute; left: 0; bottom: 0; height: 2px; background: #fff; }
+[data-layout="kaldera"] .kd-bar[data-warn="true"] .kd-bar-fill { background: #ff6a56; }
+[data-layout="kaldera"] .kd-bar[data-warn="true"] .kd-bar-r { color: #ff8a78; }
+
+/* hint affordance and popover */
+[data-layout="kaldera"] .kd-hint { border-bottom: 1px dotted rgba(255,255,255,0.4); cursor: help; outline: none; }
+[data-layout="kaldera"] .kd-hint:hover, [data-layout="kaldera"] .kd-hint:focus-visible { border-bottom-color: rgba(255,255,255,0.9); }
+.kd-pop[data-layout="kaldera"] {
+  --kd-caps: 'Michroma', sans-serif;
+  position: fixed; z-index: 9999; max-height: 70vh; overflow-y: auto; display: block;
+  background: #0c1018; border: 1px solid rgba(255,255,255,0.22); color: rgba(255,255,255,0.82);
+  padding: 12px 16px 14px; box-shadow: none; border-radius: 0;
+  font-family: 'Archivo', system-ui, sans-serif; font-stretch: 100%; font-weight: 400; font-size: 13px; line-height: 1.5;
+  letter-spacing: 0; text-transform: none; user-select: text; cursor: auto;
+}
+.kd-pop[data-layout="kaldera"] .kd-pop-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.kd-pop[data-layout="kaldera"] .kd-pop-title { font-family: 'Michroma', sans-serif; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #fff; }
+.kd-pop[data-layout="kaldera"] .kd-pop-x { background: none; border: 0; color: rgba(255,255,255,0.5); font: inherit; font-size: 14px; line-height: 1; cursor: pointer; padding: 0 0 0 12px; }
+.kd-pop[data-layout="kaldera"] .kd-pop-x:hover { color: #fff; }
+.kd-pop[data-layout="kaldera"] .kd-pop-body p { margin: 0 0 8px; }
+.kd-pop[data-layout="kaldera"] .kd-pop-body b { color: #fff; font-weight: 500; }
+.kd-pop[data-layout="kaldera"] .kd-pop-body .text-gray-200 { color: #fff; }
+.kd-pop[data-layout="kaldera"] .kd-pop-body .text-gray-500 { color: rgba(255,255,255,0.55); }
+.kd-pop[data-layout="kaldera"] .kd-pop-body .text-cyan-600 { color: #fff; text-decoration: underline; text-decoration-color: rgba(255,255,255,0.4); }
+.kd-pop[data-layout="kaldera"] .kd-pop-body .text-xs { font-size: 11px; }
+.kd-pop[data-layout="kaldera"] .kd-pop-body .text-sm { font-size: 13px; }
+.kd-pop[data-layout="kaldera"] .kd-pop-body sub, .kd-pop[data-layout="kaldera"] .kd-pop-body sup { font-size: 0.7em; letter-spacing: 0; position: static; }
+
+/* strip labels: DOM over the canvas so they can carry hints */
+[data-layout="kaldera"] .kd-strip-labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+[data-layout="kaldera"] .kd-strip-label { position: absolute; left: 8px; font-size: 8px; color: rgba(255,255,255,0.7); white-space: pre; line-height: 1; }
+[data-layout="kaldera"] .kd-strip-label .kd-hint { pointer-events: auto; }
 [data-layout="kaldera"] .kd-hero canvas { position: absolute; inset: 0; }
 
 /* the one rendered image, at the site's render ratio */
@@ -88,19 +135,19 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 [data-layout="kaldera"] .kd-port canvas { width: 100% !important; height: 100% !important; display: block; }
 
 /* readouts: VALUE over caption */
-[data-layout="kaldera"] .kd-ro { display: flex; flex-direction: column; gap: 7px; }
+[data-layout="kaldera"] .kd-ro { display: flex; flex-direction: column; gap: 6px; }
 [data-layout="kaldera"] .kd-ro-v {
-  font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 24px; line-height: 1;
+  font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 20px; line-height: 1;
   letter-spacing: 0.06em; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-[data-layout="kaldera"] .kd-ro-u { font-size: 12px; letter-spacing: 0.16em; font-weight: 300; color: rgba(255,255,255,0.85); }
+[data-layout="kaldera"] .kd-ro-u { font-size: 10px; letter-spacing: 0.16em; font-weight: 300; color: rgba(255,255,255,0.85); }
 [data-layout="kaldera"] .kd-ro-c { font-size: 9px; color: rgba(255,255,255,0.7); }
 
 /* chapter title, bottom-left of the main area */
-[data-layout="kaldera"] .kd-title { display: flex; flex-direction: column; gap: 9px; }
+[data-layout="kaldera"] .kd-title { display: flex; flex-direction: column; gap: 7px; margin-top: auto; }
 [data-layout="kaldera"] .kd-title-cap { font-size: 8px; color: rgba(255,255,255,0.6); }
 [data-layout="kaldera"] .kd-h1 {
-  margin: 0; font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 32px; line-height: 1;
+  margin: 0; font-family: var(--kd-wide); font-stretch: 125%; font-weight: 200; font-size: 21px; line-height: 1;
   letter-spacing: 0.10em; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 [data-layout="kaldera"] .kd-h1-dot { color: rgba(255,255,255,0.55); font-size: 0.6em; vertical-align: 0.2em; }
