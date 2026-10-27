@@ -9,12 +9,17 @@
  * is tuned to sound dramatic; the aim is the steady, slightly boring drone of
  * a real hall, with the pulse audible as changes in it.
  *
+ * A third, separately labeled channel, the pulse sonification, is not a
+ * hall sound at all; see `pulseAudio.ts`. It shares this engine's context,
+ * master volume and offline rendering.
+ *
  * Off by default and opt-in from Settings. The level model (`hallLevels`,
  * `plantLoad`, `generatorLoad`, `thumpAmplitude`, `elmClickAmplitude`) is
  * pure so it can be tested without a browser; `HallAudio` owns the graph.
  */
 import type { Device } from './wasm'
 import type { Snapshot } from './types'
+import { PulseVoice, pulseLevels, PULSE_SILENT as PULSE_SILENT_LEVELS } from './pulseAudio'
 
 /** What the pulsed-power plant of a device sounds like. */
 export interface Plant {
@@ -138,7 +143,7 @@ const LEVEL_TAU = 0.08
 /** Mains harmonics of the hum and their weights: magnetostriction at 2f dominates, 6f is converter ripple. */
 const HUM_HARMONICS: [number, number][] = [[1, 0.25], [2, 1.0], [3, 0.35], [4, 0.2], [6, 0.3]]
 
-function noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
+function noiseBuffer(ctx: BaseAudioContext, seconds: number): AudioBuffer {
   const n = Math.floor(ctx.sampleRate * seconds)
   const buf = ctx.createBuffer(1, n, ctx.sampleRate)
   const data = buf.getChannelData(0)
@@ -146,7 +151,7 @@ function noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
   return buf
 }
 
-function loopedNoise(ctx: AudioContext, buffer: AudioBuffer, filter: BiquadFilterNode, out: GainNode): AudioBufferSourceNode {
+function loopedNoise(ctx: BaseAudioContext, buffer: AudioBuffer, filter: BiquadFilterNode, out: GainNode): AudioBufferSourceNode {
   const src = ctx.createBufferSource()
   src.buffer = buffer
   src.loop = true
@@ -157,10 +162,12 @@ function loopedNoise(ctx: AudioContext, buffer: AudioBuffer, filter: BiquadFilte
 }
 
 interface Graph {
-  ctx: AudioContext
+  ctx: BaseAudioContext
   master: GainNode
   hall: GainNode
   dAlpha: GainNode
+  pulse: GainNode
+  voice: PulseVoice
   hum: GainNode
   humOscs: OscillatorNode[]
   plant: GainNode
@@ -177,21 +184,35 @@ export class HallAudio {
   private volume = 0.5
   private hallOn = false
   private dAlphaOn = false
+  private pulseOn = false
   private load = 0
   private lastUpdate = 0
   private lastWall = 0
+  private lastAt = -1
   private watchdog: ReturnType<typeof setInterval> | null = null
+  private readonly offline: BaseAudioContext | null
+
+  /**
+   * With no argument the engine makes its own real-time context on first
+   * use. Given an OfflineAudioContext it renders into that instead: pass the
+   * audio time as `at` to `update`, `disruption` and `elm`, then call the
+   * context's `startRendering`.
+   */
+  constructor(offline?: BaseAudioContext) {
+    this.offline = offline ?? null
+  }
 
   static supported(): boolean {
     return typeof window !== 'undefined' && typeof AudioContext !== 'undefined'
   }
 
-  /** Switch the two channels. Building the graph needs a user gesture, which the settings click is. */
-  setEnabled(hall: boolean, dAlpha: boolean): void {
+  /** Switch the channels. Building the graph needs a user gesture, which the settings click is. */
+  setEnabled(hall: boolean, dAlpha: boolean, pulse = false): void {
     this.hallOn = hall
     this.dAlphaOn = dAlpha
-    if (!hall && !dAlpha) {
-      void this.graph?.ctx.suspend()
+    this.pulseOn = pulse
+    if (!hall && !dAlpha && !pulse) {
+      this.suspend()
       return
     }
     const g = this.ensureGraph()
@@ -199,7 +220,8 @@ export class HallAudio {
     const now = g.ctx.currentTime
     g.hall.gain.setTargetAtTime(hall ? 1 : 0, now, LEVEL_TAU)
     g.dAlpha.gain.setTargetAtTime(dAlpha ? 1 : 0, now, LEVEL_TAU)
-    void g.ctx.resume()
+    g.pulse.gain.setTargetAtTime(pulse ? 1 : 0, now, LEVEL_TAU)
+    this.resume()
   }
 
   setVolume(v: number): void {
@@ -210,27 +232,42 @@ export class HallAudio {
 
   /** Call from the Start click: browsers only let a context run after a gesture. */
   resume(): void {
-    if (this.graph && (this.hallOn || this.dAlphaOn)) void this.graph.ctx.resume()
+    const ctx = this.graph?.ctx
+    if (ctx instanceof AudioContext && (this.hallOn || this.dAlphaOn || this.pulseOn)) void ctx.resume()
   }
 
-  /** Steady levels from the live state. `wallMs` is performance.now(). */
-  update(s: Snapshot | null, device: Device | null, running: boolean, wallMs: number): void {
+  private suspend(): void {
+    const ctx = this.graph?.ctx
+    if (ctx instanceof AudioContext) void ctx.suspend()
+  }
+
+  /**
+   * Steady levels from the live state. `wallMs` is performance.now(); `at`
+   * is the audio time to schedule at, the context's own clock unless rendering offline.
+   */
+  update(s: Snapshot | null, device: Device | null, running: boolean, wallMs: number, at?: number): void {
     const g = this.graph
     if (!g) return
+    const t = at ?? g.ctx.currentTime
     const dt = this.lastWall > 0 ? (wallMs - this.lastWall) / 1000 : 0
     this.lastWall = wallMs
     this.lastUpdate = wallMs
     const target = s && device && running ? plantLoad(s, device) : 0
     this.load = generatorLoad(this.load, target, dt)
-    this.apply(hallLevels(s, device, running, this.load))
+    this.apply(hallLevels(s, device, running, this.load), t)
+    // The detector events are drawn for the interval since the last update,
+    // capped so a stalled tab does not come back with a burst.
+    const span = this.lastAt >= 0 ? clamp(t - this.lastAt, 0, 0.2) : 0
+    this.lastAt = t
+    g.voice.apply(this.pulseOn ? pulseLevels(s, device, running) : { ...PULSE_SILENT_LEVELS }, t, span)
   }
 
   /** The vessel takes the disruption: a low thud and a short burst, scaled with Ip². */
-  disruption(ip: number, ipMax: number): void {
+  disruption(ip: number, ipMax: number, at?: number): void {
     const g = this.graph
     if (!g || !this.hallOn) return
     const a = thumpAmplitude(ip, ipMax)
-    const t = g.ctx.currentTime
+    const t = at ?? g.ctx.currentTime
     const osc = g.ctx.createOscillator()
     osc.type = 'sine'
     osc.frequency.setValueAtTime(48, t)
@@ -255,11 +292,11 @@ export class HallAudio {
   }
 
   /** One click on the sonified D-alpha channel. */
-  elm(energyLossMJ: number, wThMJ: number): void {
+  elm(energyLossMJ: number, wThMJ: number, at?: number): void {
     const g = this.graph
     if (!g || !this.dAlphaOn) return
     const a = elmClickAmplitude(energyLossMJ, wThMJ)
-    const t = g.ctx.currentTime
+    const t = at ?? g.ctx.currentTime
     const click = g.ctx.createBufferSource()
     click.buffer = g.noise
     const bp = g.ctx.createBiquadFilter()
@@ -283,13 +320,13 @@ export class HallAudio {
     for (const src of g.sources) {
       try { src.stop() } catch { /* already stopped */ }
     }
-    void g.ctx.close()
+    if (g.ctx instanceof AudioContext) void g.ctx.close()
   }
 
   private ensureGraph(): Graph | null {
     if (this.graph) return this.graph
-    if (!HallAudio.supported()) return null
-    const ctx = new AudioContext()
+    if (!this.offline && !HallAudio.supported()) return null
+    const ctx = this.offline ?? new AudioContext()
     const master = ctx.createGain()
     master.gain.value = this.volume
     master.connect(ctx.destination)
@@ -299,6 +336,9 @@ export class HallAudio {
     const dAlpha = ctx.createGain()
     dAlpha.gain.value = 0
     dAlpha.connect(master)
+    const pulse = ctx.createGain()
+    pulse.gain.value = 0
+    pulse.connect(master)
     const sources: AudioScheduledSourceNode[] = []
 
     // Hum: a short harmonic stack of the mains frequency.
@@ -350,14 +390,23 @@ export class HallAudio {
     beamFilter.frequency.value = 900
     sources.push(loopedNoise(ctx, noise, beamFilter, beam))
 
-    this.graph = { ctx, master, hall, dAlpha, hum, humOscs, plant, generator, generatorOsc, beam, noise, sources }
+    const voice = new PulseVoice(ctx, noise, pulse)
+
+    this.graph = { ctx, master, hall, dAlpha, pulse, voice, hum, humOscs, plant, generator, generatorOsc, beam, noise, sources }
     this.setHumFrequency(DEFAULT_PLANT.mains)
     this.lastUpdate = performance.now()
     // A hidden tab stops the animation loop that feeds `update`; without
-    // this the last levels would drone on indefinitely.
-    this.watchdog = setInterval(() => {
-      if (performance.now() - this.lastUpdate > STALE_MS) this.apply({ ...SILENT })
-    }, 100)
+    // this the last levels would drone on indefinitely. An offline render
+    // has no such loop and schedules everything ahead, so it needs none.
+    if (!this.offline) {
+      this.watchdog = setInterval(() => {
+        if (performance.now() - this.lastUpdate > STALE_MS) {
+          const t = this.graph?.ctx.currentTime ?? 0
+          this.apply({ ...SILENT }, t)
+          this.graph?.voice.apply({ ...PULSE_SILENT_LEVELS }, t, 0)
+        }
+      }, 100)
+    }
     return this.graph
   }
 
@@ -369,10 +418,9 @@ export class HallAudio {
     })
   }
 
-  private apply(l: HallLevels): void {
+  private apply(l: HallLevels, t: number): void {
     const g = this.graph
     if (!g) return
-    const t = g.ctx.currentTime
     this.setHumFrequency(l.humHz)
     g.hum.gain.setTargetAtTime(l.hum, t, LEVEL_TAU)
     g.plant.gain.setTargetAtTime(l.plant * PLANT_GAIN, t, LEVEL_TAU)

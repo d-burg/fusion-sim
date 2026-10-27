@@ -22,26 +22,26 @@ function hasActivation(): boolean {
 }
 
 export function useHallAudio(state: SimState, device: Device | null): HallAudioControls {
-  const { hallAudio, dAlphaAudio, audioVolume } = useSettings()
+  const { hallAudio, dAlphaAudio, pulseAudio, audioVolume } = useSettings()
   const engineRef = useRef<HallAudio | null>(null)
   const prevRef = useRef({ disrupted: false, elmCount: 0 })
-  const settingsRef = useRef({ hallAudio, dAlphaAudio, audioVolume })
-  settingsRef.current = { hallAudio, dAlphaAudio, audioVolume }
+  const settingsRef = useRef({ hallAudio, dAlphaAudio, pulseAudio, audioVolume })
+  settingsRef.current = { hallAudio, dAlphaAudio, pulseAudio, audioVolume }
   /** A stored "on" setting found before any gesture: build on the first click instead. */
   const deferredRef = useRef(false)
-  const enabled = hallAudio || dAlphaAudio
+  const enabled = hallAudio || dAlphaAudio || pulseAudio
 
   const applySettings = useCallback(() => {
     const s = settingsRef.current
     engineRef.current ??= new HallAudio()
     engineRef.current.setVolume(s.audioVolume)
-    engineRef.current.setEnabled(s.hallAudio, s.dAlphaAudio)
+    engineRef.current.setEnabled(s.hallAudio, s.dAlphaAudio, s.pulseAudio)
   }, [])
 
   useEffect(() => {
     if (!enabled) {
       deferredRef.current = false
-      engineRef.current?.setEnabled(false, false)
+      engineRef.current?.setEnabled(false, false, false)
       return
     }
     if (!engineRef.current && !hasActivation()) {
@@ -50,7 +50,7 @@ export function useHallAudio(state: SimState, device: Device | null): HallAudioC
     }
     deferredRef.current = false
     applySettings()
-  }, [enabled, hallAudio, dAlphaAudio, audioVolume, applySettings])
+  }, [enabled, hallAudio, dAlphaAudio, pulseAudio, audioVolume, applySettings])
 
   useEffect(() => () => {
     engineRef.current?.dispose()

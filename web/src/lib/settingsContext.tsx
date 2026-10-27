@@ -31,12 +31,15 @@ interface Settings {
   hallAudio: boolean
   /** A click per ELM on a separately labeled channel. Off by default. */
   dAlphaAudio: boolean
-  /** Master volume for both channels, 0–1. */
+  /** The pulse made audible: current ramp, divertor, neutron detector. Off by default. */
+  pulseAudio: boolean
+  /** Master volume for every channel, 0–1. */
   audioVolume: number
   setTheme: (t: Theme) => void
   setUnits: (u: Units) => void
   setHallAudio: (on: boolean) => void
   setDAlphaAudio: (on: boolean) => void
+  setPulseAudio: (on: boolean) => void
   setAudioVolume: (v: number) => void
 }
 
@@ -45,11 +48,13 @@ const SettingsContext = createContext<Settings>({
   units: 'metric',
   hallAudio: false,
   dAlphaAudio: false,
+  pulseAudio: false,
   audioVolume: DEFAULT_VOLUME,
   setTheme: () => {},
   setUnits: () => {},
   setHallAudio: () => {},
   setDAlphaAudio: () => {},
+  setPulseAudio: () => {},
   setAudioVolume: () => {},
 })
 
@@ -62,6 +67,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   })
   const [hallAudio, setHallAudio] = useState(() => readFlag('tok-sym-hall-audio'))
   const [dAlphaAudio, setDAlphaAudio] = useState(() => readFlag('tok-sym-dalpha-audio'))
+  const [pulseAudio, setPulseAudio] = useState(() => readFlag('tok-sym-pulse-audio'))
   const [audioVolume, setAudioVolume] = useState(() => readVolume('tok-sym-audio-volume'))
 
   // Sync theme to DOM and localStorage
@@ -77,6 +83,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { store('tok-sym-hall-audio', hallAudio ? 'on' : 'off') }, [hallAudio])
   useEffect(() => { store('tok-sym-dalpha-audio', dAlphaAudio ? 'on' : 'off') }, [dAlphaAudio])
+  useEffect(() => { store('tok-sym-pulse-audio', pulseAudio ? 'on' : 'off') }, [pulseAudio])
   useEffect(() => { store('tok-sym-audio-volume', String(audioVolume)) }, [audioVolume])
 
   // Set initial theme on mount
@@ -86,7 +93,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   return (
     <SettingsContext.Provider
-      value={{ theme, units, hallAudio, dAlphaAudio, audioVolume, setTheme, setUnits, setHallAudio, setDAlphaAudio, setAudioVolume }}
+      value={{ theme, units, hallAudio, dAlphaAudio, pulseAudio, audioVolume, setTheme, setUnits, setHallAudio, setDAlphaAudio, setPulseAudio, setAudioVolume }}
     >
       {children}
     </SettingsContext.Provider>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSettings, type Theme, type Units } from '../lib/settingsContext'
 
 export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutorial?: () => void } = {}) {
-  const { theme, units, hallAudio, dAlphaAudio, audioVolume, setTheme, setUnits, setHallAudio, setDAlphaAudio, setAudioVolume } = useSettings()
+  const { theme, units, hallAudio, dAlphaAudio, pulseAudio, audioVolume, setTheme, setUnits, setHallAudio, setDAlphaAudio, setPulseAudio, setAudioVolume } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -124,6 +124,12 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
             <div className="text-xs text-gray-500 mt-1 mb-2">
               One click per ELM. Not a sound the hall makes.
             </div>
+            <OnOff label="Pulse sonification" value={pulseAudio} onChange={setPulseAudio} />
+            <div className="text-xs text-gray-500 mt-1 mb-2">
+              The pulse as sound, not a recording of one: a whine that climbs with the current
+              ramp, a roar that follows the divertor heat flux, and a neutron detector whose
+              crackle gates everything as the fusion power rises.
+            </div>
             <label className="flex items-center gap-2 text-xs text-gray-500">
               <span className="w-14 shrink-0">Volume</span>
               <input
@@ -132,7 +138,7 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
                 max={100}
                 value={Math.round(audioVolume * 100)}
                 onChange={(e) => setAudioVolume(Number(e.target.value) / 100)}
-                disabled={!hallAudio && !dAlphaAudio}
+                disabled={!hallAudio && !dAlphaAudio && !pulseAudio}
                 className="flex-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Audio volume"
               />
