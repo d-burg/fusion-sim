@@ -94,8 +94,15 @@ The dev server runs at `http://localhost:5173` by default.
 ### Running Tests
 
 ```bash
-# Rust physics engine tests
-cargo test -p tok-sym-core
+# Rust physics engine tests (full-pulse tests are slow in debug; use --release)
+cargo test --release -p tok-sym-core
+
+# Envelope sweep: every planner control at five levels on every device and
+# preset, run through the engine and checked for plausibility (~5 min on 6
+# cores). Regenerate the program matrix whenever a preset, a slider range or
+# the program builder changes; the matrix check fails when it is stale.
+cargo test --release -p tok-sym-core --test envelope -- --nocapture
+cd web && npm run matrix:emit && npm run matrix:check
 
 # TypeScript type checking
 cd web && npx tsc -b
