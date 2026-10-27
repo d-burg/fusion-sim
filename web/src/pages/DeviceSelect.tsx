@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { getDevices, type Device } from '../lib/wasm'
-import PlasmaBackdrop from '../components/PlasmaBackdrop'
+import PlasmaBackdrop, { type BackdropVariant } from '../components/PlasmaBackdrop'
 import SettingsDropdown from '../components/SettingsDropdown'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
@@ -98,6 +98,9 @@ function DeviceSilhouette({ device }: { device: Device }) {
 export default function DeviceSelect() {
   const navigate = useNavigate()
   const devices = useMemo(() => getDevices(), [])
+  // Backdrop comparison for this round only: ?nest=a (published nest) or ?nest=b (grammar ramp).
+  const [search] = useSearchParams()
+  const nest: BackdropVariant = search.get('nest') === 'b' ? 'b' : 'a'
 
   // Devices sit in a single horizontally scrolling row so the list can
   // grow without wrapping into a mostly-empty second row. The nudge
@@ -137,7 +140,7 @@ export default function DeviceSelect() {
     <div data-page="landing" className="page-enter">
       {/* ── Hero: the nav on the picture, the wordmark, one rule, one line ── */}
       <header className="sp-hero">
-        <PlasmaBackdrop />
+        <PlasmaBackdrop variant={nest} />
         <StandardNav active="devices" tour />
         <div className="sp-hero-text">
           <h1 className="sp-wordmark">FUSIONSIMULATOR<span className="sp-wordmark-tld">.IO</span></h1>

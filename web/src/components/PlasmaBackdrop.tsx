@@ -1,16 +1,52 @@
 import { useRef, useEffect } from 'react'
 
-/** The warm hue of the Standard grammar (the separatrix's glow on the control room). */
-const WARM = '240, 169, 138'
+/* Inferno colormap (perceptually uniform) — the same ramp as the equilibrium
+   panel, so the backdrop previews the real physics the tool computes. */
+const INFERNO: [number, number, number][] = [
+  [0, 0, 4], [27, 12, 65], [74, 12, 107], [120, 28, 109], [165, 44, 96],
+  [207, 68, 70], [237, 105, 37], [251, 154, 6], [247, 208, 60], [252, 255, 164],
+]
+function inferno(t: number): [number, number, number] {
+  const x = Math.max(0, Math.min(1, t)) * (INFERNO.length - 1)
+  const i = Math.floor(x)
+  const f = x - i
+  const a = INFERNO[i]
+  const b = INFERNO[Math.min(i + 1, INFERNO.length - 1)]
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f),
+  ]
+}
+
+/** The Standard grammar's warm hue (--kd-warm on the control room). */
+const WARM: [number, number, number] = [240, 169, 138]
+/** White at the edge to the warm hue at the core. */
+function warmRamp(t: number): [number, number, number] {
+  const u = Math.max(0, Math.min(1, t))
+  return [
+    Math.round(255 + (WARM[0] - 255) * u),
+    Math.round(255 + (WARM[1] - 255) * u),
+    Math.round(255 + (WARM[2] - 255) * u),
+  ]
+}
 
 /**
- * The landing hero's picture: a large tokamak poloidal cross-section drawn
- * line-only on the flat field. Nested flux surfaces are white at low opacity;
- * the separatrix is the one bright line and carries the warm hue faintly, as
- * on the control room's equilibrium. No fill, no gradient, no bloom. It
- * breathes very slowly; still under reduced motion.
+ * `a` (faithful): the published nest — inferno ramp edge to core, alpha rising
+ * toward the core, a faint warm core bloom (its alpha a third lower than
+ * published so it does not read as a background gradient).
+ * `b` (grammar): the same nest, but white at the edge ramping to the page's
+ * warm hue at the core, and no bloom.
  */
-export default function PlasmaBackdrop({ className }: { className?: string }) {
+export type BackdropVariant = 'a' | 'b'
+
+/**
+ * Atmospheric hero backdrop: a large, faint tokamak poloidal cross-section
+ * (nested magnetic flux surfaces with a Shafranov shift, fading edge to core)
+ * positioned to bleed off the right edge. It breathes very slowly and each
+ * surface carries a faint ripple; still under reduced motion.
+ */
+export default function PlasmaBackdrop({ className, variant = 'a' }: { className?: string; variant?: BackdropVariant }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -36,29 +72,48 @@ export default function PlasmaBackdrop({ className }: { className?: string }) {
       const { w, h, dpr } = dims
       if (!(w > 0 && h > 0)) return
       const t = tMs / 1000
-      // Breathing: a ~14 s cycle drives a tiny radius change; a slower harmonic adds a faint shimmer.
+      // Breathing: a very slow ~14s cycle drives a faint alpha pulse and a tiny
+      // radius expansion; a slower harmonic adds gentle organic shimmer.
       const breathe = Math.sin((t * 2 * Math.PI) / 14)
       const breathe2 = Math.sin((t * 2 * Math.PI) / 22 + 1)
+      const pulse = 0.5 + 0.5 * breathe // 0..1
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, w, h)
 
-      // The cross-section fills the band's height (the D's tips just touch the
-      // edges) and sits at the right, clear of the wordmark.
-      const a = h * 0.35 * (1 + 0.01 * breathe)
-      const cx = w * 0.76
+      // Large plasma, axis pushed right so it bleeds off the right edge.
+      const a = h * 0.85 * (1 + 0.01 * breathe) // ±1% radius breathing
+      const cx = w * 0.80
       const cy = h * 0.5
       const kappa = 1.55
       const delta = 0.45
-      const N = 18
-      const steps = 180
+      const N = 20
 
-      const surface = (rho: number, s: number) => {
-        const shift = a * 0.14 * Math.max(0, 1 - rho)
+      if (variant === 'a') {
+        // Warm core bloom, faintly pulsing (published 0.14 → 0.19, here a third lower).
+        const bloomA = (0.14 + 0.05 * pulse) * (2 / 3)
+        const bloom = ctx.createRadialGradient(cx + a * 0.12, cy, 0, cx + a * 0.12, cy, a * 1.5)
+        bloom.addColorStop(0, `rgba(252, 178, 98, ${bloomA})`)
+        bloom.addColorStop(0.4, `rgba(210, 92, 48, ${bloomA * 0.32})`)
+        bloom.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        ctx.fillStyle = bloom
+        ctx.fillRect(0, 0, w, h)
+      }
+
+      // Nested flux surfaces (edge → core), fading in toward the core.
+      ctx.lineWidth = 1.1
+      const steps = 160
+      for (let s = N; s >= 1; s--) {
+        const rho = s / N
+        const shift = a * 0.14 * (1 - rho)
+        const [r, g, b] = variant === 'a' ? inferno(1 - rho) : warmRamp(1 - rho)
+        const alpha = (0.09 + 0.5 * Math.pow(1 - rho, 1.4)) * (0.95 + 0.05 * pulse)
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
         ctx.beginPath()
         for (let k = 0; k <= steps; k++) {
           const th = (k / steps) * Math.PI * 2
-          const rr = rho * (1 + 0.004 * Math.sin(t * 0.4 + s * 0.55) * breathe2)
+          // Per-surface ripple for a faint living-plasma shimmer.
+          const rr = rho * (1 + 0.005 * Math.sin(t * 0.4 + s * 0.55) * breathe2)
           const R = cx + shift + a * rr * Math.cos(th + delta * Math.sin(th))
           const Z = cy - a * rr * kappa * Math.sin(th)
           if (k === 0) ctx.moveTo(R, Z)
@@ -67,35 +122,9 @@ export default function PlasmaBackdrop({ className }: { className?: string }) {
         ctx.closePath()
         ctx.stroke()
       }
-
-      // Scrape-off layer: a few open surfaces outside the separatrix, fainter with distance.
-      ctx.lineWidth = 1
-      ;[1.05, 1.11, 1.18].forEach((rho, i) => {
-        ctx.strokeStyle = `rgba(255,255,255,${(0.05 - 0.015 * i).toFixed(3)})`
-        surface(rho, N + 1 + i)
-      })
-
-      // Closed flux surfaces, brighter toward the edge so the eye reads the boundary.
-      for (let s = 1; s < N; s++) {
-        const rho = s / N
-        ctx.strokeStyle = `rgba(255,255,255,${(0.05 + 0.10 * rho).toFixed(3)})`
-        surface(rho, s)
-      }
-
-      // Separatrix: the warmth underneath, then the one bright line.
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.strokeStyle = `rgba(${WARM},0.10)`; ctx.lineWidth = 9; surface(1, N)
-      ctx.strokeStyle = `rgba(${WARM},0.22)`; ctx.lineWidth = 3.5; surface(1, N)
-      ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.2; surface(1, N)
-
-      // Magnetic axis as the control room's tiny square marker.
-      const ax = Math.round(cx + a * 0.14)
-      const ay = Math.round(cy)
-      ctx.fillStyle = 'rgba(255,255,255,0.9)'
-      ctx.fillRect(ax - 2, ay - 2, 4, 4)
     }
 
+    // Single animation loop (the only place that schedules rAF).
     const loop = (tMs: number) => {
       drawFrame(tMs)
       raf = requestAnimationFrame(loop)
@@ -103,7 +132,8 @@ export default function PlasmaBackdrop({ className }: { className?: string }) {
     const startLoop = () => { if (!reduce) { cancelAnimationFrame(raf); raf = requestAnimationFrame(loop) } }
 
     measure()
-    // Synchronous first paint so a static image exists even when rAF is paused.
+    // Synchronous first paint — guarantees a static image even when rAF is
+    // paused (background/headless tab); the loop animates once visible.
     drawFrame(0)
     startLoop()
 
@@ -120,7 +150,7 @@ export default function PlasmaBackdrop({ className }: { className?: string }) {
       ro.disconnect()
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [])
+  }, [variant])
 
   return <canvas ref={canvasRef} className={className} aria-hidden="true" />
 }
