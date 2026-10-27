@@ -10,6 +10,7 @@ import { reconstructionValid } from '../../lib/pulseLog'
 import { equilibriumInfo, plasmaParamsInfo, powerBalanceInfo, stabilityInfo, traceDescriptions } from '../../components/infoContent'
 import InfoHint from './kaldera/InfoHint'
 import Diagnostics, { type Tone } from './kaldera/Diagnostics'
+import { createDisplayClock, type DisplayClock } from './kaldera/displayClock'
 import './kaldera.css'
 
 const f2 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(2) : '—')
@@ -68,6 +69,44 @@ function useEma(raw: number | undefined, alpha = 0.05): number | undefined {
   return ref.current
 }
 
+/**
+ * Presentation-side smoothing of the pulse time. The simulation hands over
+ * time in 15 ms sub-steps batched unevenly per render (measured: 0.030 s hops
+ * after 11–68 ms of wall clock), so the playhead moved in bursts. Between
+ * received values the displayed time is extrapolated at the pulse speed from
+ * the last (wallTime, simTime) pair in a requestAnimationFrame loop, capped at
+ * one observed step ahead and stepping back by at most one step if it ran
+ * ahead. The value lives in a DisplayClock outside React's render path, so the
+ * subscribers (playhead, hairline, time text, strip cursor) move every painted
+ * frame. Exact while paused, scrubbing or finished.
+ */
+function useDisplayClock(time: number, exact: number, live: boolean, speed: number): DisplayClock {
+  const clock = useRef<DisplayClock | null>(null)
+  if (!clock.current) clock.current = createDisplayClock(exact)
+  const last = useRef({ wall: 0, sim: time, step: 0.03 })
+  if (time !== last.current.sim) {
+    const d = time - last.current.sim
+    if (d > 0 && d < 0.5) last.current.step = Math.min(0.1, Math.max(0.015, d))
+    last.current = { wall: performance.now(), sim: time, step: last.current.step }
+  }
+  useEffect(() => { if (!live) clock.current?.set(exact) }, [live, exact])
+  useEffect(() => {
+    if (!live) return
+    const c = clock.current
+    if (!c) return
+    let raf = 0
+    const tick = () => {
+      const { wall, sim, step } = last.current
+      const target = Math.min(sim + ((performance.now() - wall) / 1000) * speed, sim + step)
+      c.set(Math.max(target, Math.min(c.get(), sim + step)))
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [live, speed])
+  return clock.current
+}
+
 /** Band of a smoothed value: amber past `warn`, red past `bad`; `below` flips the sense (q95). */
 function band(v: number | undefined, warn: number, bad: number, below = false): Tone {
   if (v === undefined) return undefined
@@ -121,6 +160,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   let elming = false
   for (let i = history.length - 1; i >= 0 && history[i].t > time - 0.3; i--) if (history[i].elm_active) { elming = true; break }
   const valid = reconstructionValid(s)
+  const clock = useDisplayClock(time, scrubTime ?? time, running && !finished && scrubTime === null, ctx.activeSpeed)
   const [hot, setHot] = useState<string | null>(null)
   const ro = (link: string) => ({ link, hot: hot === link, onHot: setHot })
   // threshold bands on smoothed values, only while the reconstruction is valid
@@ -248,7 +288,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         strips={strips}
         stations={stations}
         duration={T}
-        time={time}
+        clock={clock}
         scrubTime={scrubTime}
         onScrub={finished ? ctx.controls.setScrubTime : undefined}
         hot={hot}
@@ -258,7 +298,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       <Timeline
         stations={stations}
         duration={T}
-        time={time}
+        clock={clock}
         scrubTime={scrubTime}
         running={running}
         finished={finished}

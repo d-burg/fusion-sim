@@ -181,6 +181,7 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 /* ── strips: five stacked, one canvas, a shared time axis under them ── */
 [data-layout="kaldera"] .kd-strips { position: relative; margin: 0 var(--kd-x); min-height: 0; }
 [data-layout="kaldera"] .kd-strips canvas { position: absolute; inset: 0; }
+[data-layout="kaldera"] .kd-strips-cursor { pointer-events: none; z-index: 1; }
 
 /* ── timeline ─────────────────────────────────────────────────────── */
 [data-layout="kaldera"] .kd-timeline { position: relative; margin: 0 var(--kd-x); height: 76px; }
@@ -205,7 +206,7 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 [data-layout="kaldera"] .kd-glyph { display: block; }
 [data-layout="kaldera"] .kd-playhead[data-glyph="start"] .kd-glyph { width: 0; height: 0; border-left: 9px solid var(--kd-warm); border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin-left: 2px; }
 [data-layout="kaldera"] .kd-playhead[data-glyph="pause"] .kd-glyph { width: 8px; height: 10px; border-left: 2px solid var(--kd-warm); border-right: 2px solid var(--kd-warm); }
-[data-layout="kaldera"] .kd-playhead[data-glyph="reset"] .kd-glyph { width: 8px; height: 8px; background: var(--kd-warm); }
+[data-layout="kaldera"] .kd-playhead[data-glyph="replay"] .kd-glyph-replay { display: block; color: #fff; }
 [data-layout="kaldera"] .kd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 [data-layout="kaldera"] .kd-playhead-time { position: absolute; top: 54px; transform: translateX(-50%); font-size: 8px; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums; }
 

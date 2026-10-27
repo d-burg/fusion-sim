@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Station } from './Timeline'
 import InfoHint from './InfoHint'
+import type { DisplayClock } from './displayClock'
 
 export type Pts = [number, number][]
 
@@ -30,7 +31,8 @@ interface Props {
   strips: Strip[]
   stations: Station[]
   duration: number
-  time: number
+  /** The displayed time for the cursor: exact when paused, scrubbing or finished; extrapolated per frame while running. */
+  clock: DisplayClock
   scrubTime: number | null
   onScrub?: (t: number | null) => void
   /** The strip under the pointer (or linked from a readout), by id. */
@@ -123,8 +125,9 @@ function valueAt(pts: Pts, t: number | null): number | null {
  * trace as a thin white line and the programme as its dotted companion. One
  * shared time axis under the bottom strip carries the only numerals.
  */
-export default function Strips({ strips, stations, duration, time, scrubTime, onScrub, hot, onHot }: Props) {
+export default function Strips({ strips, stations, duration, clock, scrubTime, onScrub, hot, onHot }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const cursorRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const [stripH, setStripH] = useState(0)
 
@@ -236,23 +239,42 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
       g.fillText(`${s.t.toFixed(2)}${last ? ' S' : ''}`, i === 0 ? 0 : last ? W : x, ay + 5)
     })
 
-    // the hairline at the playhead time, continued below by the timeline
-    const cur = scrubTime ?? (time > 0 ? time : null)
-    if (cur !== null) {
-      const x = Math.round(X(Math.min(cur, T))) + 0.5
-      g.strokeStyle = 'rgba(255,255,255,0.55)'
-      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke()
-    }
-  }, [strips, stations, duration, time, scrubTime, hot])
+  }, [strips, stations, duration, scrubTime, hot])
 
   useEffect(() => { draw() }, [draw])
+
+  // The hairline at the displayed time lives on its own canvas and follows the clock every frame.
+  const drawCursor = useCallback((t: number) => {
+    const canvas = cursorRef.current, box = boxRef.current
+    if (!canvas || !box) return
+    const g = canvas.getContext('2d')
+    if (!g) return
+    const rect = box.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const W = Math.max(40, Math.floor(rect.width)), H = Math.max(30, Math.floor(rect.height))
+    if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+      canvas.width = W * dpr; canvas.height = H * dpr
+      canvas.style.width = `${W}px`; canvas.style.height = `${H}px`
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0)
+    g.clearRect(0, 0, W, H)
+    const T = duration > 0 ? duration : 10
+    const cur = scrubTime ?? (t > 0 ? t : null)
+    if (cur === null) return
+    const x = Math.round((Math.min(cur, T) / T) * W) + 0.5
+    g.strokeStyle = 'rgba(255,255,255,0.55)'
+    g.lineWidth = 1
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke()
+  }, [duration, scrubTime])
+  useEffect(() => { drawCursor(clock.get()); return clock.subscribe(drawCursor) }, [clock, drawCursor])
+
   useEffect(() => {
     const box = boxRef.current
     if (!box) return
-    const ro = new ResizeObserver(() => draw())
+    const ro = new ResizeObserver(() => { draw(); drawCursor(clock.get()) })
     ro.observe(box)
     return () => ro.disconnect()
-  }, [draw])
+  }, [draw, drawCursor, clock])
 
   const hotAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -298,6 +320,7 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
         onPointerLeave={() => onHot(null)}
         onDoubleClick={() => onScrub?.(null)}
       />
+      <canvas ref={cursorRef} className="kd-strips-cursor" aria-hidden="true" />
     </div>
   )
 }
