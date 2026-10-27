@@ -1,4 +1,5 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { ControlRoomContext } from './types'
 import type { Snapshot, TracePoint } from '../../lib/types'
 import PortView from '../../components/portview'
@@ -67,6 +68,9 @@ function Link({ on, onClick, children }: { on?: boolean; onClick: () => void; ch
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const { displaySnapshot: s, history, running, finished, scrubTime, time, duration, programJson } = ctx
+  // Type pairing under comparison: ?font=a|b|c|d (a is the default).
+  const [search] = useSearchParams()
+  const fontVariant = (['a', 'b', 'c', 'd'].includes(search.get('font') ?? '') ? search.get('font') : 'a') as string
 
   // The blue-black field for whatever shared chrome is mounted here (planner drawer, settings).
   useEffect(() => {
@@ -105,7 +109,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     { label: 'N̄E', hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
     { label: 'W TH', hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
     { label: 'P IN', hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
-    { label: 'D α', node: <>D <G>α</G></>, hint: traceDescriptions.d_alpha, pts: pick('d_alpha') },
+    { label: 'D α', node: <>D <G>α</G></>, hint: traceDescriptions.d_alpha, pts: pick('d_alpha'), elm: history.map((p) => !!p.elm_active) },
   // history is mutated in place by the simulation hook; key on its length and last time
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [history, history.length, history.length ? history[history.length - 1].t : 0, program, pinRef, valid])
@@ -115,7 +119,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const speeds = [0.5, 0.75, 1, 2]
 
   return (
-    <div data-layout="kaldera" className="kd-root">
+    <div data-layout="kaldera" data-font={fontVariant} className="kd-root">
       <div className="kd-atmos" aria-hidden="true" />
 
       <nav className="kd-nav">

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { Contour, Snapshot } from '../../../lib/types'
+import { applyCaps } from './Strips'
 
 interface Props {
   snapshot: Snapshot | null
@@ -64,7 +65,7 @@ export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {
 
     // the scale: a few R and Z values in metres, faint, with 3 px ticks
     const step = (span: number) => { const raw = span / 3, p10 = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / p10; return (r < 1.5 ? 1 : r < 3.5 ? 2 : 5) * p10 }
-    g.font = "8px 'Michroma', sans-serif"
+    applyCaps(g, box, 8)
     ;(g as unknown as { letterSpacing: string }).letterSpacing = '0.1em'
     g.fillStyle = 'rgba(255,255,255,0.4)'
     g.strokeStyle = 'rgba(255,255,255,0.25)'

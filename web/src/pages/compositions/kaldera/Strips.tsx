@@ -16,6 +16,8 @@ export interface Strip {
   ref?: Pts
   /** A second series in dim white. `own` scales it to its own maximum instead of the strip's. */
   second?: { label: string; hint?: ReactNode; pts: Pts; own?: boolean }
+  /** Per-point ELM latch, parallel to `pts`: ELMs are drawn as vertical spikes. */
+  elm?: boolean[]
   /** Decimals for the live value. */
   digits?: number
   /** Blank the live value (reconstruction invalid). */
@@ -31,12 +33,65 @@ interface Props {
   onScrub?: (t: number | null) => void
 }
 
-const FONT = "8px 'Michroma', sans-serif"
 /** Height of the shared time axis under the bottom strip. */
 export const AXIS_H = 16
 
-function setTracking(g: CanvasRenderingContext2D, em: string) {
-  (g as unknown as { letterSpacing: string }).letterSpacing = em
+/** The caps face from the CSS variables, so the canvas follows the font switch. */
+export function capsFont(el: Element, px: number): { font: string; tracking: string; stretch: string } {
+  const cs = getComputedStyle(el)
+  const fam = cs.getPropertyValue('--kd-caps').trim() || "'Michroma', sans-serif"
+  const w = cs.getPropertyValue('--kd-caps-weight').trim() || '400'
+  const tracking = cs.getPropertyValue('--kd-caps-track').trim() || '0.22em'
+  const stretch = cs.getPropertyValue('--kd-caps-stretch').trim() || '100%'
+  return { font: `${w} ${px}px ${fam}`, tracking, stretch }
+}
+
+export function applyCaps(g: CanvasRenderingContext2D, el: Element, px: number) {
+  const f = capsFont(el, px)
+  g.font = f.font
+  const gx = g as unknown as { letterSpacing: string; fontStretch: string }
+  gx.letterSpacing = f.tracking
+  gx.fontStretch = parseFloat(f.stretch) >= 120 ? 'expanded' : parseFloat(f.stretch) >= 110 ? 'semi-expanded' : 'normal'
+}
+
+/** One spike flag per ELM: the tallest point of each run of latched points. */
+function elmSpikes(pts: Pts, elm: boolean[]): boolean[] | null {
+  if (pts.length <= 2) return null
+  const isSpike: boolean[] = new Array(pts.length).fill(false)
+  for (let i = 1; i < pts.length - 1; i++) if (elm[i]) isSpike[i] = true
+  for (let i = 1; i < pts.length; i++) {
+    if (isSpike[i] && isSpike[i - 1]) {
+      if (pts[i][1] >= pts[i - 1][1]) isSpike[i - 1] = false
+      else isSpike[i] = false
+    }
+  }
+  return isSpike
+}
+
+/** Baseline for a latched point: the last value before the run, searched back up to five points. */
+function baseline(pts: Pts, elm: boolean[], i: number, fallback: number): number {
+  for (let j = i - 1; j >= Math.max(0, i - 5); j--) if (!elm[j]) return pts[j][1]
+  return fallback
+}
+
+/**
+ * Stroke one series. With an ELM latch the spike point is drawn as a vertical
+ * line from the pre-ELM baseline up and straight back down at the same x,
+ * and the other latched points of the run sit on the baseline.
+ */
+function strokeSeries(g: CanvasRenderingContext2D, pts: Pts, X: (t: number) => number, Y: (v: number) => number, elm?: boolean[]) {
+  const spikes = elm ? elmSpikes(pts, elm) : null
+  g.beginPath()
+  for (let i = 0; i < pts.length; i++) {
+    const x = X(pts[i][0]), y = Y(pts[i][1])
+    if (i === 0) g.moveTo(x, y)
+    else if (spikes && elm && spikes[i]) {
+      const by = Y(baseline(pts, elm, i, pts[i - 1][1]))
+      g.lineTo(x, by); g.lineTo(x, y); g.lineTo(x, by)
+    } else if (spikes && elm && elm[i]) g.lineTo(x, Y(baseline(pts, elm, i, pts[i][1])))
+    else g.lineTo(x, y)
+  }
+  g.stroke()
 }
 
 function valueAt(pts: Pts, t: number | null): number | null {
@@ -81,8 +136,7 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
     setStripH((prev) => (Math.abs(prev - sh) > 0.01 ? sh : prev))
     const stationXs = stations.map((s) => Math.round(X(Math.min(s.t, T))) + 0.5)
 
-    g.font = FONT
-    setTracking(g, '0.2em')
+    applyCaps(g, box, 8)
     g.lineWidth = 1
 
     // one hairline frame around the stack and one separator between strips
@@ -137,9 +191,7 @@ export default function Strips({ strips, stations, duration, time, scrubTime, on
       if (s.pts.length > 1) {
         g.strokeStyle = 'rgba(255,255,255,0.88)'
         g.lineJoin = 'round'
-        g.beginPath()
-        s.pts.forEach(([t, v], k) => (k ? g.lineTo(X(t), Y(v)) : g.moveTo(X(t), Y(v))))
-        g.stroke()
+        strokeSeries(g, s.pts, X, Y, s.elm && s.elm.length === s.pts.length ? s.elm : undefined)
       }
       g.restore()
 

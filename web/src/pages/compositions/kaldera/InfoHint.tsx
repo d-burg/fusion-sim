@@ -31,9 +31,15 @@ export default function InfoHint({ title, content, children, className }: Props)
   const hoverIn = () => { clear(); timer.current = window.setTimeout(() => setOpen(true), HOVER_MS) }
   const hoverOut = () => { clear(); timer.current = window.setTimeout(() => { if (!inPop.current) setOpen(false) }, 120) }
 
-  // Place below the label, left-aligned; flip above when it would not fit.
+  // Place below the label, left-aligned; flip above when it would not fit. The
+  // popover is a portal outside the root, so the type variables are copied over.
   useLayoutEffect(() => {
     if (!open || !trigRef.current) return
+    const root = trigRef.current.closest('[data-layout="kaldera"]')
+    if (root && popRef.current) {
+      const cs = getComputedStyle(root)
+      for (const v of ['--kd-caps', '--kd-caps-weight', '--kd-caps-stretch', '--kd-caps-track', '--kd-body']) popRef.current.style.setProperty(v, cs.getPropertyValue(v))
+    }
     const r = trigRef.current.getBoundingClientRect()
     const h = popRef.current?.offsetHeight ?? 240
     let left = r.left
