@@ -26,6 +26,12 @@ for exploring tokamak plasma behavior.
   ADAS cooling curves for core radiation, Z_eff and dilution, a
   Goldston-Reinke-Schwartz detachment threshold, and a radiating divertor
   front tinted by the seeded species
+- **Hall audio (opt-in):** Synthesized machine sounds from the torus hall,
+  driven by the live state: coil and converter hum at the site's mains
+  frequency, flywheel generators sagging under load, beam-line noise, the
+  cryoplant on superconducting machines, and the thud of a disruption. A
+  separately labeled sonified D-alpha channel clicks once per ELM. Off by
+  default; the plasma itself is silent
 - **Pulse record:** Persistent pulse numbers, an append-only event log with
   alarm severities, a named cause and operator action for every disruption,
   an achieved-versus-programmed report, and the previous pulse as a reference

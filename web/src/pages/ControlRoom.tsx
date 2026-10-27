@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useSimulation } from '../lib/useSimulation'
+import { useHallAudio } from '../lib/useHallAudio'
 import { getDevices, type PresetId } from '../lib/wasm'
 import type { MagneticConfig, OverrideValue, ProgramHandoff } from '../lib/program'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
@@ -70,6 +71,9 @@ export default function ControlRoom() {
   const devices = useMemo(() => getDevices(), [])
 
   const [state, controls] = useSimulation(activeDevice, activePreset)
+  // Opt-in machine sounds, driven by the live state; primed on the Start click.
+  const activeDeviceObj = useMemo(() => devices.find((d) => d.id === activeDevice) ?? null, [devices, activeDevice])
+  const audio = useHallAudio(state, activeDeviceObj)
   const {
     displaySnapshot,
     history,
@@ -263,7 +267,7 @@ export default function ControlRoom() {
                         col-span-2 row-start-2 md:col-span-1 md:col-start-2 md:row-start-1">
           {!running ? (
             <button
-              onClick={controls.start}
+              onClick={() => { audio.prime(); controls.start() }}
               className="px-2 sm:px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-sm
                          transition-colors cursor-pointer flex items-center justify-center gap-1 min-w-[4.5rem] sm:min-w-[5rem]"
             >

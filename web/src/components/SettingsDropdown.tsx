@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSettings, type Theme, type Units } from '../lib/settingsContext'
 
 export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutorial?: () => void } = {}) {
-  const { theme, units, setTheme, setUnits } = useSettings()
+  const { theme, units, hallAudio, dAlphaAudio, audioVolume, setTheme, setUnits, setHallAudio, setDAlphaAudio, setAudioVolume } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -59,7 +59,7 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
       </button>
 
       {open && (
-        <div className="settings-panel absolute right-0 top-full mt-1 w-60 z-50
+        <div className="settings-panel absolute right-0 top-full mt-1 w-64 z-50
                         rounded-md shadow-xl border p-3 space-y-3
                         bg-gray-900 border-gray-700">
           {/* Header */}
@@ -112,6 +112,34 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
             </div>
           </div>
 
+          {/* Sound: machine sounds from the torus hall, off by default */}
+          <div>
+            <div className="text-sm text-gray-400 mb-1.5">Sound</div>
+            <OnOff label="Hall audio" value={hallAudio} onChange={setHallAudio} />
+            <div className="text-xs text-gray-500 mt-1 mb-2">
+              Torus-hall microphones: coil and converter hum, flywheel generators sagging under load,
+              beam lines, and the thud of a disruption. The plasma itself is silent.
+            </div>
+            <OnOff label={<>Sonified D<sub>α</sub></>} value={dAlphaAudio} onChange={setDAlphaAudio} />
+            <div className="text-xs text-gray-500 mt-1 mb-2">
+              One click per ELM. Not a sound the hall makes.
+            </div>
+            <label className="flex items-center gap-2 text-xs text-gray-500">
+              <span className="w-14 shrink-0">Volume</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(audioVolume * 100)}
+                onChange={(e) => setAudioVolume(Number(e.target.value) / 100)}
+                disabled={!hallAudio && !dAlphaAudio}
+                className="flex-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Audio volume"
+              />
+              <span className="font-mono tabular-nums w-8 text-right">{Math.round(audioVolume * 100)}</span>
+            </label>
+          </div>
+
           {/* Divider */}
           <div className="border-t border-gray-700/50" />
 
@@ -153,6 +181,32 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** A labeled Off/On segmented toggle, styled like the theme and units toggles. */
+function OnOff({ label, value, onChange }: { label: React.ReactNode; value: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex-1 text-sm text-gray-300">{label}</span>
+      <div className="flex rounded overflow-hidden border border-gray-700 w-24">
+        {([false, true] as const).map((on) => (
+          <button
+            key={String(on)}
+            onClick={() => onChange(on)}
+            aria-pressed={value === on}
+            className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer
+              ${
+                value === on
+                  ? 'theme-toggle-active'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+              }`}
+          >
+            {on ? 'On' : 'Off'}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

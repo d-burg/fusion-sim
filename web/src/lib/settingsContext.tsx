@@ -8,18 +8,49 @@ function normalizeTheme(stored: string | null): Theme {
   return stored === 'retro' ? 'retro' : 'signature'
 }
 
+const DEFAULT_VOLUME = 0.5
+
+function readFlag(key: string): boolean {
+  try { return localStorage.getItem(key) === 'on' } catch { return false }
+}
+function readVolume(key: string): number {
+  try {
+    const raw = localStorage.getItem(key)
+    const v = Number(raw)
+    return raw !== null && Number.isFinite(v) && v >= 0 && v <= 1 ? v : DEFAULT_VOLUME
+  } catch { return DEFAULT_VOLUME }
+}
+function store(key: string, value: string) {
+  try { localStorage.setItem(key, value) } catch { /* private mode or quota: the setting lasts the session */ }
+}
+
 interface Settings {
   theme: Theme
   units: Units
+  /** Machine sounds from the torus hall. Off by default; the plasma is silent. */
+  hallAudio: boolean
+  /** A click per ELM on a separately labeled channel. Off by default. */
+  dAlphaAudio: boolean
+  /** Master volume for both channels, 0–1. */
+  audioVolume: number
   setTheme: (t: Theme) => void
   setUnits: (u: Units) => void
+  setHallAudio: (on: boolean) => void
+  setDAlphaAudio: (on: boolean) => void
+  setAudioVolume: (v: number) => void
 }
 
 const SettingsContext = createContext<Settings>({
   theme: 'signature',
   units: 'metric',
+  hallAudio: false,
+  dAlphaAudio: false,
+  audioVolume: DEFAULT_VOLUME,
   setTheme: () => {},
   setUnits: () => {},
+  setHallAudio: () => {},
+  setDAlphaAudio: () => {},
+  setAudioVolume: () => {},
 })
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -29,6 +60,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [units, setUnits] = useState<Units>(() => {
     return (localStorage.getItem('tok-sym-units') as Units) || 'metric'
   })
+  const [hallAudio, setHallAudio] = useState(() => readFlag('tok-sym-hall-audio'))
+  const [dAlphaAudio, setDAlphaAudio] = useState(() => readFlag('tok-sym-dalpha-audio'))
+  const [audioVolume, setAudioVolume] = useState(() => readVolume('tok-sym-audio-volume'))
 
   // Sync theme to DOM and localStorage
   useEffect(() => {
@@ -41,13 +75,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('tok-sym-units', units)
   }, [units])
 
+  useEffect(() => { store('tok-sym-hall-audio', hallAudio ? 'on' : 'off') }, [hallAudio])
+  useEffect(() => { store('tok-sym-dalpha-audio', dAlphaAudio ? 'on' : 'off') }, [dAlphaAudio])
+  useEffect(() => { store('tok-sym-audio-volume', String(audioVolume)) }, [audioVolume])
+
   // Set initial theme on mount
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [])
 
   return (
-    <SettingsContext.Provider value={{ theme, units, setTheme, setUnits }}>
+    <SettingsContext.Provider
+      value={{ theme, units, hallAudio, dAlphaAudio, audioVolume, setTheme, setUnits, setHallAudio, setDAlphaAudio, setAudioVolume }}
+    >
       {children}
     </SettingsContext.Provider>
   )

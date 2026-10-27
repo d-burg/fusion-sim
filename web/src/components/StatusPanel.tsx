@@ -131,6 +131,9 @@ export default function StatusPanel({
   }
 
   const s = snapshot
+  // CENTAUR runs a negative-triangularity edge: no L-H transition and no
+  // ELMs, with confinement between L- and H-mode. Its regime is neither.
+  const ntEdge = s.device_id === 'centaur'
   // Reconstructed quantities (profile shape, normalised pressure, confinement
   // factor) have no meaning without a plasma: below 0.1 MA and after the
   // current quench they are shown as INVALID rather than as a number.
@@ -149,10 +152,12 @@ export default function StatusPanel({
               ? 'bg-red-900 text-red-300'
               : s.in_hmode
                 ? 'bg-cyan-900 text-cyan-300'
-                : 'bg-gray-800 text-gray-300'
+                : ntEdge
+                  ? 'bg-gray-800 text-cyan-300'
+                  : 'bg-gray-800 text-gray-300'
           }`}
         >
-          {s.disrupted ? 'DISRUPTED' : s.in_hmode ? 'H-MODE' : 'L-MODE'}
+          {s.disrupted ? 'DISRUPTED' : s.in_hmode ? 'H-MODE' : ntEdge ? 'NT-EDGE' : 'L-MODE'}
         </span>
         {/* Disruption risk bar */}
         <DisruptionRisk risk={s.disruption_risk} />
