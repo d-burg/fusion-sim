@@ -626,8 +626,8 @@ export default function ProgramPulse() {
             label={editing.label}
             unit={editing.unit}
             color="#e0a23a"
-            min={paramRange(editing, device?.volume).min}
-            max={paramRange(editing, device?.volume).max}
+            min={paramRange(editing, device).min}
+            max={paramRange(editing, device).max}
             onSave={(drawn) => {
               const stored: WaveformPoint[] =
                 timeScale === 1 ? drawn : drawn.map(([t, v]) => [t / timeScale, v])

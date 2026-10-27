@@ -247,7 +247,7 @@ export default function PulsePlanner({
           const value = getEffectiveValue(param)
           const waveform = getEffectiveWaveform(param)
           const color = paramColors[param.key] ?? '#94a3b8'
-          const range = paramRange(param, device?.volume)
+          const range = paramRange(param, device)
 
           return (
             <div key={param.key}>
@@ -340,8 +340,8 @@ export default function PulsePlanner({
             label={param.label}
             unit={param.unit}
             color={paramColors[param.key] ?? '#94a3b8'}
-            min={paramRange(param, device?.volume).min}
-            max={paramRange(param, device?.volume).max}
+            min={paramRange(param, device).min}
+            max={paramRange(param, device).max}
             onSave={(wf) => {
               onOverridesChange({ ...overrides, [param.key]: wf })
               setDrawingParam(null)

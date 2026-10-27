@@ -96,7 +96,7 @@ export function generateMatrix(
 
       for (const param of SCALAR_PARAMS) {
         if (!channelAvailable(param.key, device.id)) continue
-        const range = paramRange(param, device.volume)
+        const range = paramRange(param, device)
         for (const [level, f] of SLIDER_LEVELS.entries()) {
           const value = snapToStep(range.min + f * (range.max - range.min), range.min, range.step)
           const overrides: Record<string, OverrideValue> = { [param.key]: value }

@@ -268,7 +268,17 @@ impl OhmicCircuit {
         let l_v = if i_old > 1e3 { (psi_v / i_old).clamp(0.0, 0.8 * l) } else { 0.0 };
         let i_held = ((l_old - l_v) * i_old + dt * r * i_ni * 1e6) / (l - l_v + r * dt);
         let v_held = l_v * (i_held - i_old) / dt;
-        // `room` is the flux the solenoid can still push this step.
+        // The solenoid never sits above its budget. The loop integral can
+        // exceed budget + ψ_v only because ψ_v fell since the last step (a
+        // held solenoid, or a free one that had just landed on the budget),
+        // and a held one is at the budget whatever ψ_v did: re-pin the loop
+        // integral to the present ψ_v, so the drift of the vertical-field
+        // share is neither fresh room nor, on the step a hold releases, a
+        // voltage spike of −Δψ_v/dt.
+        if self.exhausted || self.flux_loop > self.flux_budget + psi_v {
+            self.flux_loop = self.flux_budget + psi_v;
+        }
+        // `room` is the flux the solenoid can still push this step (≥ 0).
         let room = self.flux_budget + psi_v - self.flux_loop;
         let at_limit = room <= 0.0 || self.exhausted;
         self.exhausted = at_limit && v_cmd >= v_held;
@@ -279,8 +289,12 @@ impl OhmicCircuit {
             // carries only the vertical-field share ψ_v ≈ L_v I.
             self.flux_loop = self.flux_budget + l_v * i_new;
         } else {
-            if !at_limit && v * dt > room {
-                // Land exactly on the budget rather than overshooting it by a step.
+            // Land exactly on the budget rather than overshooting it by a
+            // step. The budget binds whether or not the hold was engaged:
+            // on the step the hold releases, `room` is whatever the pinned
+            // flux left (about zero), and the free step may not push past
+            // it either.
+            if v * dt > room {
                 v = room / dt;
                 i_new = solve(v);
             }
@@ -295,7 +309,14 @@ impl OhmicCircuit {
 
         self.ip = (i_new * 1e-6).max(0.0);
         self.v_loop = v;
-        self.flux_consumed = (self.flux_loop - psi_v).max(0.0);
+        // While held, the solenoid flux is the budget by construction: the
+        // loop integral carries ψ_v at the new current, which the caller's
+        // ψ_v (evaluated at the old current) would misreport by L_v ΔI.
+        self.flux_consumed = if self.exhausted {
+            self.flux_budget
+        } else {
+            (self.flux_loop - psi_v).max(0.0)
+        };
     }
 
     /// A disruption owns the current: take the quench model's value and
@@ -472,9 +493,8 @@ mod tests {
         }
         assert!(held.exhausted && free.exhausted);
         assert!(held.v_loop < 0.0, "held V {}", held.v_loop);
-        // Pinned by construction up to one step's L_v·ΔI (≈ 0.005 Wb here:
-        // the current falls 3.3 kA per step through L_v = 1.5 µH).
-        assert!((held.flux_consumed - 2.0).abs() < 0.01, "pinned Ψ {}", held.flux_consumed);
+        // Pinned at the budget by construction.
+        assert!((held.flux_consumed - 2.0).abs() < 1e-12, "pinned Ψ {}", held.flux_consumed);
         assert!(held.ip < free.ip, "held {} should decay faster than free {}", held.ip, free.ip);
         let tau_eff = (l - l_v) / r_fast;
         let expect = (-1.0_f64 / tau_eff).exp();
@@ -510,6 +530,73 @@ mod tests {
         }
         assert!(!c.exhausted);
         assert!(c.flux_consumed < 5.0);
+    }
+
+    #[test]
+    fn releasing_the_hold_cannot_overshoot_the_budget() {
+        // When the program asks for less than the held solenoid gives, the
+        // hold releases; the releasing step and every free step after it
+        // must still land on the budget, never past it. A plasma driven
+        // non-inductively above its current has a positive L_v dI/dt while
+        // held, so a small positive command sits below it and the latch
+        // opens with the supply pushing — the case that used to skip the
+        // budget clip.
+        let d = devices::diiid();
+        let l = plasma_inductance(&d, d.kappa, 1.0);
+        let l_v = 0.5 * l;
+        let r = 1.0e-6;
+        let mut released_pushing = 0;
+        for k in 0..40 {
+            let mut c = OhmicCircuit::new(2.0, 20.0);
+            c.ip = 1.0;
+            c.flux_loop = 2.0 + l_v * 1e6;
+            c.exhausted = true;
+            let ip_prog = 1.0 + 0.0005 * k as f64;
+            for _ in 0..50 {
+                c.step(0.005, ip_prog, 0.0, l, r, 1.5, l_v * c.ip * 1e6);
+                assert!(c.flux_consumed <= 2.0 + 1e-9, "k={k}: Ψ {} beyond the 2 V·s budget", c.flux_consumed);
+                if !c.exhausted && c.v_loop > 0.0 {
+                    released_pushing += 1;
+                }
+            }
+        }
+        assert!(released_pushing > 0, "no program released the hold with a positive command; nothing exercised");
+    }
+
+    #[test]
+    fn vertical_field_drop_on_release_does_not_spike_the_voltage() {
+        // Held at the budget, the plasma loses a tenth of its vertical-field
+        // flux in one step (a stored-energy crash) just as the program asks
+        // for a small ramp-down. The release must stay within the supply
+        // rating and on the budget; it used to read the ψ_v drop as
+        // negative room and put −Δψ_v/dt on the loop.
+        let d = devices::diiid();
+        let l = plasma_inductance(&d, d.kappa, 1.0);
+        let r = 5.0e-7;
+        let mut c = OhmicCircuit::new(5.0, 10.0);
+        c.ip = 1.2;
+        c.flux_loop = 5.0 + 1.5;
+        for _ in 0..100 {
+            c.step(0.005, 1.2, 0.0, l, r, 0.0, 1.25e-6 * c.ip * 1e6);
+        }
+        assert!(c.exhausted);
+        for k in 0..20 {
+            let psi_v = 1.25e-6 * c.ip * 1e6 * if k == 0 { 0.9 } else { 1.0 };
+            c.step(0.005, c.ip - 0.01, -2.0, l, r, 0.0, psi_v);
+            assert!(c.v_loop.abs() <= 10.0 + 1e-9, "step {k}: V {} beyond the 10 V supply", c.v_loop);
+            assert!(c.flux_consumed <= 5.0 + 1e-9, "step {k}: Ψ {} beyond the budget", c.flux_consumed);
+        }
+        // The same drop on a free solenoid that has just landed on its
+        // budget (not yet held) must not read as negative room either.
+        let mut c = OhmicCircuit::new(5.0, 10.0);
+        c.ip = 1.2;
+        c.flux_loop = 5.0 + 1.5;
+        for k in 0..20 {
+            let psi_v = 1.25e-6 * c.ip * 1e6 * if k == 0 { 0.9 } else { 1.0 };
+            c.step(0.005, c.ip - 0.01, -2.0, l, r, 0.0, psi_v);
+            assert!(c.v_loop.abs() <= 10.0 + 1e-9, "free step {k}: V {} beyond the 10 V supply", c.v_loop);
+            assert!(c.flux_consumed <= 5.0 + 1e-9, "free step {k}: Ψ {} beyond the budget", c.flux_consumed);
+        }
     }
 
     #[test]

@@ -222,8 +222,13 @@ fn check_step(e: &Entry, dev: &devices::Device, s: &SimulationSnapshot, tally: &
         if p_disrupted && !s.disrupted {
             violate(tally, out, "disruption un-latched", t, "disrupted went true -> false".into());
         }
-        if p_exhausted && !s.flux_exhausted && s.prog_ip >= p_prog_ip - 1e-12 {
-            violate(tally, out, "flux exhaustion re-armed", t, format!("flux_exhausted cleared while the program holds Ip at {:.3} MA", s.prog_ip));
+        // The hold may release when the program ramps down, or when flux
+        // comes back to the solenoid (an inductance drop hands back I·ΔL):
+        // either way the loop voltage on the releasing step is not positive.
+        // Releasing with the supply pushing is the re-arm the latch exists
+        // to prevent.
+        if p_exhausted && !s.flux_exhausted && s.prog_ip >= p_prog_ip - 1e-12 && s.v_loop > 1e-9 {
+            violate(tally, out, "flux exhaustion re-armed", t, format!("flux_exhausted cleared with V = {:.3} V while the program holds Ip at {:.3} MA", s.v_loop, s.prog_ip));
         }
         if p_status != SimulationStatus::Running && s.status != p_status {
             violate(tally, out, "status moved after the end", t, format!("{:?} -> {:?}", p_status, s.status));
@@ -340,51 +345,7 @@ fn run_entry(e: &Entry) -> Summary {
 /// suite; one that stops reproducing fails the suite until its line is
 /// removed, so the register cannot go stale. Fixing the engine is the way
 /// to shorten this list; adding to it is a flagged decision.
-const KNOWN_ISSUES: &[(&str, &str, &str)] = &[
-    ("diiid/hmode/config/2", "separatrix missing", "Equilibrium::x_points_physical places the upper X-point with the lower triangularity while assemble_usn_system uses delta_upper; the anchor misses by ~0.2 m and keep_chains_near drops the whole separatrix in upper single null"),
-    ("diiid/hmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("diiid/hmode/delta/4", "non-finite", "DIII-D equilibrium adds a fixed δ offset of +0.27 (equilibrium_delta_lower − delta_lower) to the programmed δ, so the slider maximum 0.8 reaches asin(1.07): NaN axis, no boundary"),
-    ("diiid/hmode/delta/4", "separatrix missing", "same δ offset overflow as the NaN axis above"),
-    ("diiid/lmode/config/2", "separatrix missing", "Equilibrium::x_points_physical places the upper X-point with the lower triangularity while assemble_usn_system uses delta_upper; the anchor misses by ~0.2 m and keep_chains_near drops the whole separatrix in upper single null"),
-    ("diiid/lmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("diiid/lmode/n2_puff/4", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/lmode/n2_puff/4", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/lmode/neon_puff/2", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/lmode/neon_puff/3", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/lmode/neon_puff/3", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/lmode/argon_puff/1", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/lmode/argon_puff/1", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/lmode/argon_puff/2", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/lmode/argon_puff/2", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/lmode/argon_puff/3", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/lmode/argon_puff/3", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/lmode/delta/4", "non-finite", "DIII-D equilibrium adds a fixed δ offset of +0.27 (equilibrium_delta_lower − delta_lower) to the programmed δ, so the slider maximum 0.8 reaches asin(1.07): NaN axis, no boundary"),
-    ("diiid/lmode/delta/4", "separatrix missing", "same δ offset overflow as the NaN axis above"),
-    ("diiid/density_limit/config/2", "separatrix missing", "Equilibrium::x_points_physical places the upper X-point with the lower triangularity while assemble_usn_system uses delta_upper; the anchor misses by ~0.2 m and keep_chains_near drops the whole separatrix in upper single null"),
-    ("diiid/density_limit/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("diiid/density_limit/p_ech/4", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/density_limit/n2_puff/4", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/density_limit/neon_puff/1", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/density_limit/neon_puff/1", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/density_limit/neon_puff/2", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/density_limit/neon_puff/2", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/density_limit/neon_puff/3", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/density_limit/neon_puff/3", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/density_limit/argon_puff/1", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("diiid/density_limit/argon_puff/1", "flux exhaustion re-armed", "the hold un-latches for one step on a flat program when v_cmd drops below v_held as a seeded or heated plasma changes its inductance; see the flux overshoot entry"),
-    ("diiid/density_limit/delta/4", "non-finite", "DIII-D equilibrium adds a fixed δ offset of +0.27 (equilibrium_delta_lower − delta_lower) to the programmed δ, so the slider maximum 0.8 reaches asin(1.07): NaN axis, no boundary"),
-    ("diiid/density_limit/delta/4", "separatrix missing", "same δ offset overflow as the NaN axis above"),
-    ("centaur/hmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("centaur/lmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("centaur/density_limit/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("iter/hmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("iter/lmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("iter/density_limit/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("jet/hmode/duration/4", "flux beyond budget", "OhmicCircuit::step: the room clip is skipped on the step the hold un-latches (at_limit is read before exhausted is updated), and flux_consumed pairs the pinned flux_loop (I_new) with ψ_v(I_old); overshoots of 0.001–0.035 V·s"),
-    ("jet/hmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("jet/lmode/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-    ("jet/density_limit/ip/0", "separatrix missing", "the Ip slider minimum (0.1 MA) is the engine's own separatrix display threshold (actual_ip > 0.1), so a 0.1 MA pulse never draws a boundary on any device"),
-];
+const KNOWN_ISSUES: &[(&str, &str, &str)] = &[];
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
@@ -609,6 +570,14 @@ fn envelope_sweep() {
     assert!(failures.is_empty(), "{} envelope failures (see list above)", failures.len());
 }
 
+// First-sweep findings, all fixed on this branch: the δ slider maximum
+// overflowed asin through DIII-D's fitted δ offset (now a device-aware
+// range plus DELTA_EQ_MAX in the engine); upper single null anchored its
+// separatrix on the lower-δ X-point position and lost the boundary; the Ip
+// slider minimum sat on the engine's 0.1 MA display threshold (now a
+// tenth of the rating); and the flux hold skipped its budget clip on the
+// releasing step and misreported the pinned flux by L_v ΔI.
+//
 // Tier 2 notes (to be written after the first sweep is read): confinement
 // time against IPB98 recomputed from the snapshot's own inputs; loop voltage
 // and bootstrap fraction against the circuit; H-mode against the threshold

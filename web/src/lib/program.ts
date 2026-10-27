@@ -1,4 +1,4 @@
-import type { PresetId, PulseProgram, WaveformPoint } from './wasm'
+import type { Device, PresetId, PulseProgram, WaveformPoint } from './wasm'
 
 /* ─── Types ─────────────────────────────────────────────── */
 
@@ -10,17 +10,66 @@ export interface ScalarParam {
   min: number
   max: number
   step: number
+  /** Range tied to the machine rather than to a fixed span; overrides min/max/step when a device is known. */
+  deviceRange?: (device: Device) => Range
   precision: number
   /** Particle sources: the range scales with plasma volume so the same
    *  fraction is reachable on every machine (base ranges are DIII-D's). */
   scalesWithVolume?: boolean
 }
 
+export type Range = { min: number; max: number; step: number }
+
 /** DIII-D plasma volume (m³), the reference for volume-scaled ranges. */
 export const REFERENCE_VOLUME = 19.4
 
+const snapUp = (x: number, step: number) => Number((Math.ceil(x / step - 1e-9) * step).toPrecision(10))
+const snapDown = (x: number, step: number) => Number((Math.floor(x / step + 1e-9) * step).toPrecision(10))
+
+/* Plasma current: a tenth of the machine's rating (never below 0.2 MA, the
+ * engine draws no boundary at or below 0.1 MA) up to a fifth above it, so a
+ * visitor can cross the kink limit but not program DIII-D at ITER current. */
+export const IP_MIN_FRACTION = 0.1
+export const IP_MIN_FLOOR = 0.2
+export const IP_MAX_FACTOR = 1.2
+
+export function ipRange(device: Device): Range {
+  const step = device.ip_max >= 5 ? 0.1 : 0.05
+  return {
+    min: snapUp(Math.max(IP_MIN_FLOOR, IP_MIN_FRACTION * device.ip_max), step),
+    max: snapDown(IP_MAX_FACTOR * device.ip_max, step),
+    step,
+  }
+}
+
+/* Triangularity: the engine keeps the X-point on the machine's own side
+ * (a positive-δ device ignores the sign of the waveform), floors |δ| at
+ * its X-point formation value, and feeds the analytic solver asin(δ) after
+ * adding the device's fitted equilibrium offset. The range therefore runs
+ * from that floor to the largest |δ| the solver can hold with the offset
+ * and the strike sweep on top (DELTA_EQ_MAX in simulation.rs), capped at
+ * 0.8, on the device's side of zero. */
+export const DELTA_MIN = 0.2
+export const DELTA_CAP = 0.8
+export const DELTA_EQ_MAX = 0.95
+export const DELTA_STEP = 0.05
+
+export function deltaRange(device: Device): Range {
+  const sign = device.delta_lower < 0 ? -1 : 1
+  const eqLower = device.equilibrium_delta_lower ?? device.delta_lower
+  const eqUpper = device.equilibrium_delta_upper ?? device.delta_lower
+  const offset = Math.max(0, sign * (eqLower - device.delta_lower), sign * (eqUpper - device.delta_lower))
+  const sweep = device.strike_sweep_delta ?? 0
+  const top = snapDown(Math.min(DELTA_CAP, DELTA_EQ_MAX - offset - sweep), DELTA_STEP)
+  return sign > 0
+    ? { min: DELTA_MIN, max: top, step: DELTA_STEP }
+    : { min: -top, max: -DELTA_MIN, step: DELTA_STEP }
+}
+
 /** The channel's slider range for a given device. */
-export function paramRange(param: ScalarParam, deviceVolume: number | undefined): { min: number; max: number; step: number } {
+export function paramRange(param: ScalarParam, device: Device | null | undefined): Range {
+  if (param.deviceRange && device) return param.deviceRange(device)
+  const deviceVolume = device?.volume
   if (!param.scalesWithVolume || !deviceVolume || deviceVolume <= 0) {
     return { min: param.min, max: param.max, step: param.step }
   }
@@ -76,7 +125,7 @@ export function channelAvailable(key: string, deviceId: string | undefined): boo
 /* ─── Parameter definitions ─────────────────────────────── */
 
 export const SCALAR_PARAMS: ScalarParam[] = [
-  { key: 'ip', label: 'Iₚ flat-top', unit: 'MA', waveformKey: 'ip', min: 0.1, max: 20, step: 0.1, precision: 1 },
+  { key: 'ip', label: 'Iₚ flat-top', unit: 'MA', waveformKey: 'ip', min: 0.2, max: 20, step: 0.1, precision: 2, deviceRange: ipRange },
   { key: 'p_nbi', label: 'NBI power', unit: 'MW', waveformKey: 'p_nbi', min: 0, max: 40, step: 0.5, precision: 1 },
   { key: 'p_ech', label: 'ECH power', unit: 'MW', waveformKey: 'p_ech', min: 0, max: 20, step: 0.5, precision: 1 },
   { key: 'ne', label: 'Density target', unit: '10²⁰m⁻³', waveformKey: 'ne_target', min: 0.1, max: 3.0, step: 0.05, precision: 2 },
@@ -85,7 +134,7 @@ export const SCALAR_PARAMS: ScalarParam[] = [
   { key: 'neon_puff', label: 'Neon seeding', unit: '10²⁰ atoms/s', waveformKey: 'neon_puff', min: 0, max: 2.0, step: 0.05, precision: 2, scalesWithVolume: true },
   { key: 'argon_puff', label: 'Argon seeding', unit: '10²⁰ atoms/s', waveformKey: 'argon_puff', min: 0, max: 1.0, step: 0.02, precision: 2, scalesWithVolume: true },
   { key: 'kappa', label: 'Elongation κ', unit: '', waveformKey: 'kappa', min: 1.0, max: 2.2, step: 0.05, precision: 2 },
-  { key: 'delta', label: 'Triangularity δ', unit: '', waveformKey: 'delta', min: -0.6, max: 0.8, step: 0.05, precision: 2 },
+  { key: 'delta', label: 'Triangularity δ', unit: '', waveformKey: 'delta', min: -0.8, max: 0.8, step: 0.05, precision: 2, deviceRange: deltaRange },
 ]
 
 /* ─── Per-device duration limits ───────────────────────── */
