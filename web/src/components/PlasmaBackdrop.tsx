@@ -19,26 +19,6 @@ function inferno(t: number): [number, number, number] {
   ]
 }
 
-/** The Standard grammar's warm hue (--kd-warm on the control room). */
-const WARM: [number, number, number] = [240, 169, 138]
-/** White at the edge to the warm hue at the core. */
-function warmRamp(t: number): [number, number, number] {
-  const u = Math.max(0, Math.min(1, t))
-  return [
-    Math.round(255 + (WARM[0] - 255) * u),
-    Math.round(255 + (WARM[1] - 255) * u),
-    Math.round(255 + (WARM[2] - 255) * u),
-  ]
-}
-
-/**
- * `a` (faithful): the published nest — inferno ramp edge to core, alpha rising
- * toward the core, a faint warm core bloom (its alpha a third lower than
- * published so it does not read as a background gradient).
- * `b` (grammar): the same nest, but white at the edge ramping to the page's
- * warm hue at the core, and no bloom.
- */
-export type BackdropVariant = 'a' | 'b'
 
 /**
  * Atmospheric hero backdrop: a large, faint tokamak poloidal cross-section
@@ -46,7 +26,7 @@ export type BackdropVariant = 'a' | 'b'
  * positioned to bleed off the right edge. It breathes very slowly and each
  * surface carries a faint ripple; still under reduced motion.
  */
-export default function PlasmaBackdrop({ className, variant = 'a' }: { className?: string; variant?: BackdropVariant }) {
+export default function PlasmaBackdrop({ className }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -89,16 +69,15 @@ export default function PlasmaBackdrop({ className, variant = 'a' }: { className
       const delta = 0.45
       const N = 20
 
-      if (variant === 'a') {
-        // Warm core bloom, faintly pulsing (published 0.14 → 0.19, here a third lower).
-        const bloomA = (0.14 + 0.05 * pulse) * (2 / 3)
-        const bloom = ctx.createRadialGradient(cx + a * 0.12, cy, 0, cx + a * 0.12, cy, a * 1.5)
-        bloom.addColorStop(0, `rgba(252, 178, 98, ${bloomA})`)
-        bloom.addColorStop(0.4, `rgba(210, 92, 48, ${bloomA * 0.32})`)
-        bloom.addColorStop(1, 'rgba(0, 0, 0, 0)')
-        ctx.fillStyle = bloom
-        ctx.fillRect(0, 0, w, h)
-      }
+      // Warm core bloom, faintly pulsing (published 0.14 → 0.19, here a third lower
+      // so it reads as part of the picture rather than a background gradient).
+      const bloomA = (0.14 + 0.05 * pulse) * (2 / 3)
+      const bloom = ctx.createRadialGradient(cx + a * 0.12, cy, 0, cx + a * 0.12, cy, a * 1.5)
+      bloom.addColorStop(0, `rgba(252, 178, 98, ${bloomA})`)
+      bloom.addColorStop(0.4, `rgba(210, 92, 48, ${bloomA * 0.32})`)
+      bloom.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      ctx.fillStyle = bloom
+      ctx.fillRect(0, 0, w, h)
 
       // Nested flux surfaces (edge → core), fading in toward the core.
       ctx.lineWidth = 1.1
@@ -106,7 +85,7 @@ export default function PlasmaBackdrop({ className, variant = 'a' }: { className
       for (let s = N; s >= 1; s--) {
         const rho = s / N
         const shift = a * 0.14 * (1 - rho)
-        const [r, g, b] = variant === 'a' ? inferno(1 - rho) : warmRamp(1 - rho)
+        const [r, g, b] = inferno(1 - rho)
         const alpha = (0.09 + 0.5 * Math.pow(1 - rho, 1.4)) * (0.95 + 0.05 * pulse)
         ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
         ctx.beginPath()
@@ -150,7 +129,7 @@ export default function PlasmaBackdrop({ className, variant = 'a' }: { className
       ro.disconnect()
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [variant])
+  }, [])
 
   return <canvas ref={canvasRef} className={className} aria-hidden="true" />
 }
