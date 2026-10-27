@@ -32,7 +32,7 @@ const DEVICE_LIMITERS: Record<string, [number, number][]> = {
  * active page as a white square, the settings menu where the control room
  * has it. `left` takes the page's own links (the program page's devices).
  */
-export function StandardNav({ active, left, tour }: { active?: 'devices'; left?: ReactNode; tour?: boolean }) {
+export function StandardNav({ active, left, tour }: { active?: 'devices' | 'bibliography'; left?: ReactNode; tour?: boolean }) {
   const navigate = useNavigate()
   return (
     <nav className="sp-nav">
@@ -44,7 +44,7 @@ export function StandardNav({ active, left, tour }: { active?: 'devices'; left?:
       <div className="sp-nav-r">
         <Link to="/" className="sp-link" data-on={active === 'devices'}>DEVICES</Link>
         {tour && <button type="button" className="sp-link" onClick={() => navigate(TOUR_URL)}>TOUR</button>}
-        <Link to="/bibliography" className="sp-link">BIBLIOGRAPHY</Link>
+        <Link to="/bibliography" className="sp-link" data-on={active === 'bibliography'}>BIBLIOGRAPHY</Link>
         <a href="https://github.com/d-burg/fusion-sim" target="_blank" rel="noopener noreferrer" className="sp-link">GITHUB</a>
         <span className="sp-settings"><SettingsDropdown onRestartTutorial={() => navigate(TOUR_URL)} /></span>
       </div>

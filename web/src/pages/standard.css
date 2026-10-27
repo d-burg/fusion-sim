@@ -238,3 +238,118 @@
   [data-page="program"] .sp-aside { padding: 20px var(--sp-x) 0; }
   [data-page="program"] .sp-chart-col { padding: 20px var(--sp-x) 20px; }
 }
+
+/* ── bibliography: the reading page ──────────────────────────────── */
+/* Sentences live here. The field, nav and captions are the grammar's; the body
+   is Mona Sans at width 100, 16 px on a ~70-character measure. */
+[data-page="bibliography"] {
+  --sp-caps: 'Mona Sans', sans-serif;
+  --sp-caps-weight: 400;
+  --sp-caps-stretch: 125%;
+  --sp-caps-track: 0.12em;
+  --sp-wide-weight: 300;
+  --sp-wide-track: 0.04em;
+  --sp-body: 'Mona Sans', system-ui, sans-serif;
+  --sp-warm: #f0a98a;
+  --sp-field: #0a0d14;
+  --sp-line: rgba(255,255,255,0.12);
+  --sp-x: 64px;
+  min-height: 100vh;
+  background: var(--sp-field);
+  color: rgba(255,255,255,0.82);
+  font-family: var(--sp-body);
+  font-weight: 400;
+  font-stretch: 100%;
+  font-size: 16px;
+  line-height: 1.55;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+/* the caption voice, applied where the control pages inherit it from their root */
+[data-page="bibliography"] :is(.sp-nav, .sp-head, .sp-caps, .sp-toc, .sp-ref-n) {
+  font-family: var(--sp-caps); font-weight: var(--sp-caps-weight); font-stretch: var(--sp-caps-stretch);
+  letter-spacing: var(--sp-caps-track); text-transform: uppercase; font-size: 9px; line-height: 1.3;
+}
+[data-page="bibliography"] .sp-bib-main {
+  display: grid; grid-template-columns: 16rem minmax(0, 1fr); column-gap: 56px;
+  padding: 12px var(--sp-x) 0; align-items: start;
+}
+[data-page="bibliography"] .sp-toc { position: sticky; top: 24px; }
+[data-page="bibliography"] .sp-toc-head { margin-bottom: 10px; color: rgba(255,255,255,0.7); }
+[data-page="bibliography"] .sp-toc-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--sp-line); }
+[data-page="bibliography"] .sp-toc-list li { border-bottom: 1px solid var(--sp-line); }
+[data-page="bibliography"] .sp-toc-link {
+  display: block; padding: 6px 0 5px; color: rgba(255,255,255,0.62); text-decoration: none;
+  font-size: 8px; line-height: 1.5;
+}
+[data-page="bibliography"] .sp-toc-link:hover { color: #fff; }
+[data-page="bibliography"] .sp-bib-col { max-width: 70ch; min-width: 0; padding-bottom: 48px; }
+[data-page="bibliography"] .sp-bib-intro { margin-bottom: 40px; }
+[data-page="bibliography"] .sp-bib-h1 {
+  margin: 0; font-family: var(--sp-caps); font-weight: var(--sp-wide-weight); font-stretch: var(--sp-caps-stretch);
+  font-size: 28px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; color: #fff;
+}
+[data-page="bibliography"] .sp-bib-rule { height: 1px; background: rgba(255,255,255,0.55); margin: 16px 0 20px; }
+[data-page="bibliography"] .sp-bib-lede { margin: 0; color: rgba(255,255,255,0.82); }
+[data-page="bibliography"] .sp-note {
+  margin: 20px 0 0; padding: 2px 0 2px 16px; border-left: 1px solid rgba(255,255,255,0.35);
+  font-size: 14px; line-height: 1.55; color: rgba(255,255,255,0.62);
+}
+[data-page="bibliography"] .sp-note-cap {
+  display: block; margin-bottom: 4px; font-family: var(--sp-caps); font-weight: var(--sp-caps-weight); font-stretch: var(--sp-caps-stretch);
+  letter-spacing: var(--sp-caps-track); text-transform: uppercase; font-size: 8px; color: rgba(255,255,255,0.7);
+}
+[data-page="bibliography"] .sp-bib-sec { margin: 0 0 44px; }
+[data-page="bibliography"] .sp-bib-h2 { margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--sp-line); color: rgba(255,255,255,0.85); white-space: normal; font-size: 10px; }
+[data-page="bibliography"] .sp-bib-body > * { margin-top: 0; margin-bottom: 0; }
+[data-page="bibliography"] .sp-bib-body > * + * { margin-top: 14px; }
+[data-page="bibliography"] .sp-bib-body em { font-style: italic; color: #fff; }
+[data-page="bibliography"] .sp-bib-body strong { font-weight: 500; color: #fff; }
+[data-page="bibliography"] .sp-bib-body ul, [data-page="bibliography"] .sp-bib-body ol { margin: 0; padding-left: 1.4em; }
+[data-page="bibliography"] .sp-bib-body li { margin: 0; }
+[data-page="bibliography"] .sp-bib-body li::marker { color: rgba(255,255,255,0.4); }
+[data-page="bibliography"] .sp-bib-body sub, [data-page="bibliography"] .sp-bib-body sup { font-size: 0.75em; letter-spacing: 0; position: static; vertical-align: sub; }
+[data-page="bibliography"] .sp-bib-body sup { vertical-align: super; }
+/* equations: monochrome mono on a hairline left rule, set as they are */
+[data-page="bibliography"] .sp-eq {
+  margin: 14px 0; padding: 4px 0 4px 16px; border-left: 1px solid rgba(255,255,255,0.35);
+  font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.92); overflow-x: auto; white-space: pre-wrap;
+  letter-spacing: 0;
+}
+/* citations in the prose: a small figure, warm on hover */
+[data-page="bibliography"] .sp-ref {
+  font-family: var(--sp-caps); font-stretch: var(--sp-caps-stretch); letter-spacing: 0.06em;
+  font-size: 9px; vertical-align: super; margin-left: 2px; color: rgba(255,255,255,0.6); text-decoration: none;
+}
+[data-page="bibliography"] .sp-ref:hover { color: var(--sp-warm); }
+/* the reference list: rows separated by hairlines */
+[data-page="bibliography"] .sp-refs { list-style: none; margin: 0; padding: 0; }
+[data-page="bibliography"] .sp-ref-row {
+  display: grid; grid-template-columns: 3rem minmax(0, 1fr); column-gap: 8px; padding: 12px 0;
+  border-bottom: 1px solid var(--sp-line); font-size: 14px; line-height: 1.5; color: rgba(255,255,255,0.7);
+  scroll-margin-top: 24px;
+}
+[data-page="bibliography"] .sp-ref-row:target { color: rgba(255,255,255,0.92); }
+[data-page="bibliography"] .sp-ref-n { color: rgba(255,255,255,0.5); padding-top: 4px; }
+[data-page="bibliography"] .sp-ref-row:target .sp-ref-n { color: var(--sp-warm); }
+[data-page="bibliography"] .sp-ref-authors { color: rgba(255,255,255,0.88); }
+[data-page="bibliography"] .sp-ref-text em { font-style: italic; }
+[data-page="bibliography"] .sp-bib-sec { scroll-margin-top: 24px; }
+/* text links: the dotted hairline, warm only on hover */
+[data-page="bibliography"] .sp-bib-link {
+  color: rgba(255,255,255,0.78); text-decoration: none; border-bottom: 1px dotted rgba(255,255,255,0.4); padding-bottom: 1px;
+}
+[data-page="bibliography"] .sp-bib-link:hover { color: var(--sp-warm); border-bottom-color: var(--sp-warm); }
+[data-page="bibliography"] .sp-bib-foot {
+  display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--sp-line); color: rgba(255,255,255,0.45);
+}
+@media (max-width: 56rem) {
+  [data-page="bibliography"] .sp-bib-main { grid-template-columns: minmax(0, 1fr); row-gap: 32px; }
+  [data-page="bibliography"] .sp-toc { position: static; }
+  [data-page="bibliography"] .sp-toc-list { columns: 2; column-gap: 24px; }
+}
+@media (max-width: 40rem) {
+  [data-page="bibliography"] { --sp-x: 24px; }
+  [data-page="bibliography"] .sp-toc-list { columns: 1; }
+}
