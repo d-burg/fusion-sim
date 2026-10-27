@@ -13,6 +13,67 @@ export interface Series {
   label: ReactNode
   /** Lower bound of the axis; data minimum when omitted. */
   floor?: number
+  /** Draw ELMs as vertical spikes (the published Dα rule) instead of joined points. */
+  spikes?: boolean
+}
+
+/**
+ * Stroke one series. With `isSpike`, each ELM is drawn as a vertical line
+ * from the pre-ELM baseline up to the spike value and straight back down at
+ * the same x, and the other latched points of the run sit at the baseline
+ * (the last value before the run, searched back up to five points), so the
+ * ELMs read as transient events rather than triangular "tent poles".
+ */
+function strokeSeries(
+  ctx: CanvasRenderingContext2D,
+  pts: TracePoint[],
+  vals: number[],
+  toX: (t: number) => number,
+  toY: (v: number) => number,
+  isSpike: boolean[] | null,
+) {
+  ctx.beginPath()
+  for (let i = 0; i < pts.length; i++) {
+    const x = toX(pts[i].t)
+    const y = toY(vals[i])
+    if (i === 0) {
+      ctx.moveTo(x, y)
+    } else if (isSpike && isSpike[i]) {
+      let baseVal = vals[i - 1]
+      for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+        if (!pts[j].elm_active) { baseVal = vals[j]; break }
+      }
+      const baseY = toY(baseVal)
+      ctx.lineTo(x, baseY)
+      ctx.lineTo(x, y)
+      ctx.lineTo(x, baseY)
+    } else if (isSpike && pts[i].elm_active) {
+      let baseVal = vals[i]
+      for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+        if (!pts[j].elm_active) { baseVal = vals[j]; break }
+      }
+      ctx.lineTo(x, toY(baseVal))
+    } else {
+      ctx.lineTo(x, y)
+    }
+  }
+  ctx.stroke()
+}
+
+/** One spike flag per ELM: the tallest point of each run of latched points. */
+function elmSpikes(pts: TracePoint[], vals: number[]): boolean[] | null {
+  if (pts.length <= 2) return null
+  const isSpike: boolean[] = new Array(pts.length).fill(false)
+  for (let i = 1; i < pts.length - 1; i++) {
+    if (pts[i].elm_active) isSpike[i] = true
+  }
+  for (let i = 1; i < pts.length; i++) {
+    if (isSpike[i] && isSpike[i - 1]) {
+      if (vals[i] >= vals[i - 1]) isSpike[i - 1] = false
+      else isSpike[i] = false
+    }
+  }
+  return isSpike
 }
 
 interface Props {
@@ -176,16 +237,8 @@ export default function BoardPlot(p: Props) {
       ctx.strokeStyle = s.color
       ctx.lineWidth = 1.3
       ctx.lineJoin = 'round'
-      ctx.beginPath()
-      let started = false
-      for (const h of history) {
-        const v = h[s.key] as number
-        if (typeof v !== 'number' || !isFinite(v)) continue
-        const x = tx(h.t)
-        const y = ty(v, i)
-        if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
-      }
-      ctx.stroke()
+      const vals = history.map((h) => { const v = h[s.key] as number; return typeof v === 'number' && isFinite(v) ? v : 0 })
+      strokeSeries(ctx, history, vals, tx, (v) => ty(v, i), s.spikes ? elmSpikes(history, vals) : null)
     })
 
     // ── cursor ──

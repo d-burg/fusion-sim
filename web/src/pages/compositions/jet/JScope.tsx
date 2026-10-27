@@ -26,6 +26,8 @@ export interface SeriesDef {
   /** Legend text for the series (defaults to the row label). */
   name?: string
   scale?: number
+  /** Dα: draw each ELM as a vertical spike (up and back down at one x). */
+  spikes?: boolean
 }
 
 export interface RowDef {
@@ -50,6 +52,65 @@ interface Props {
   scrubTime: number | null
   finished: boolean
   onScrub: (t: number | null) => void
+}
+
+/**
+ * Stroke one series. With `isSpike`, each ELM is a vertical line from the
+ * pre-ELM baseline up to the spike value and straight back down at the same
+ * x; the other latched points of the run sit on the baseline (the last
+ * value before the run, searched back up to five points). Same rule as the
+ * published trace panel, so the spikes read as transients, not tent poles.
+ */
+function strokeSeries(
+  g: CanvasRenderingContext2D,
+  pts: TracePoint[],
+  vals: number[],
+  toX: (t: number) => number,
+  toY: (v: number) => number,
+  isSpike: boolean[] | null,
+) {
+  g.beginPath()
+  for (let i = 0; i < pts.length; i++) {
+    const x = toX(pts[i].t)
+    const y = toY(vals[i])
+    if (i === 0) {
+      g.moveTo(x, y)
+    } else if (isSpike && isSpike[i]) {
+      let baseVal = vals[i - 1]
+      for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+        if (!pts[j].elm_active) { baseVal = vals[j]; break }
+      }
+      const baseY = toY(baseVal)
+      g.lineTo(x, baseY)
+      g.lineTo(x, y)
+      g.lineTo(x, baseY)
+    } else if (isSpike && pts[i].elm_active) {
+      let baseVal = vals[i]
+      for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+        if (!pts[j].elm_active) { baseVal = vals[j]; break }
+      }
+      g.lineTo(x, toY(baseVal))
+    } else {
+      g.lineTo(x, y)
+    }
+  }
+  g.stroke()
+}
+
+/** One spike flag per ELM: the tallest point of each run of latched points. */
+function elmSpikes(pts: TracePoint[], vals: number[]): boolean[] | null {
+  if (pts.length <= 2) return null
+  const isSpike: boolean[] = new Array(pts.length).fill(false)
+  for (let i = 1; i < pts.length - 1; i++) {
+    if (pts[i].elm_active) isSpike[i] = true
+  }
+  for (let i = 1; i < pts.length; i++) {
+    if (isSpike[i] && isSpike[i - 1]) {
+      if (vals[i] >= vals[i - 1]) isSpike[i - 1] = false
+      else isSpike[i] = false
+    }
+  }
+  return isSpike
 }
 
 const LEFT = 44
@@ -238,16 +299,11 @@ export default function JScope({ rows, history, programJson, duration, time, scr
       row.series.forEach((s, si) => {
         const sc = s.scale ?? 1
         g.strokeStyle = s.color ?? (si === 0 ? JS.trace : si === 1 ? JS.second : JS.third)
-        g.beginPath()
-        let started = false
-        for (const p of history) {
+        const vals = history.map((p) => {
           const raw = p[s.key]
-          const v = (typeof raw === 'number' ? raw : raw ? 1 : 0) * sc
-          if (!isFinite(v)) { started = false; continue }
-          const x = toX(p.t); const y = toY(v)
-          if (!started) { g.moveTo(x, y); started = true } else g.lineTo(x, y)
-        }
-        g.stroke()
+          return (typeof raw === 'number' ? raw : raw ? 1 : 0) * sc
+        })
+        strokeSeries(g, history, vals, toX, toY, s.spikes ? elmSpikes(history, vals) : null)
       })
 
       // cursor

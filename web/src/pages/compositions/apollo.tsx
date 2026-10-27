@@ -103,7 +103,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     {
       number: '11', title: <>D<sub>α</sub></>, unit: 'AU', xAxis: true,
       series: [
-        { key: 'd_alpha', color: WHITE, fmt: f2, unit: '', label: <>D<sub>α</sub></>, floor: 0 },
+        { key: 'd_alpha', color: WHITE, fmt: f2, unit: '', label: <>D<sub>α</sub></>, floor: 0, spikes: true },
         { key: 'disruption_risk', color: CYAN, fmt: (v) => (isFinite(v) ? (v * 100).toFixed(2) : '—'), unit: '%/S', label: <>HAZ</>, floor: 0 },
       ],
     },

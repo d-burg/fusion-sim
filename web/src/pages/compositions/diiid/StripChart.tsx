@@ -7,6 +7,46 @@ export interface Series {
   pts: [number, number][]
   /** Programmed reference, drawn dashed in the series colour at half strength. */
   ref?: [number, number][]
+  /** Per-point ELM latch (D-alpha): spikes are drawn as vertical transients, not tent poles. */
+  elm?: boolean[]
+}
+
+/** One spike flag per ELM: the tallest point of each run of latched points (the published panel's rule). */
+function elmSpikes(pts: [number, number][], elm: boolean[]): boolean[] | null {
+  if (pts.length <= 2) return null
+  const isSpike: boolean[] = new Array(pts.length).fill(false)
+  for (let i = 1; i < pts.length - 1; i++) if (elm[i]) isSpike[i] = true
+  for (let i = 1; i < pts.length; i++) {
+    if (isSpike[i] && isSpike[i - 1]) {
+      if (pts[i][1] >= pts[i - 1][1]) isSpike[i - 1] = false
+      else isSpike[i] = false
+    }
+  }
+  return isSpike
+}
+
+/** Baseline for a latched point: the last un-latched value, searched back up to five points. */
+function elmBase(pts: [number, number][], elm: boolean[], i: number, fallback: number): number {
+  for (let j = i - 1; j >= Math.max(0, i - 5); j--) if (!elm[j]) return pts[j][1]
+  return fallback
+}
+
+/** Stroke a series; with an ELM latch the spike point goes up and straight back down at the same x,
+ *  and the other latched points in the run sit on the baseline. */
+function strokeSeries(g: CanvasRenderingContext2D, pts: [number, number][], elm: boolean[] | undefined,
+  X: (t: number) => number, Y: (v: number) => number) {
+  const isSpike = elm ? elmSpikes(pts, elm) : null
+  g.beginPath()
+  for (let i = 0; i < pts.length; i++) {
+    const x = X(pts[i][0]), y = Y(pts[i][1])
+    if (i === 0) g.moveTo(x, y)
+    else if (isSpike && elm && isSpike[i]) {
+      const by = Y(elmBase(pts, elm, i, pts[i - 1][1]))
+      g.lineTo(x, by); g.lineTo(x, y); g.lineTo(x, by)
+    } else if (isSpike && elm && elm[i]) g.lineTo(x, Y(elmBase(pts, elm, i, pts[i][1])))
+    else g.lineTo(x, y)
+  }
+  g.stroke()
 }
 
 interface Props {
@@ -127,10 +167,7 @@ export default function StripChart({ title, unit, series, tMax, yMin, yMax, scru
       if (s.pts.length > 1) {
         g.strokeStyle = s.color
         g.lineWidth = 1.25
-        g.beginPath()
-        let first = true
-        for (const [t, v] of s.pts) { const x = X(t), y = Y(v); if (first) { g.moveTo(x, y); first = false } else g.lineTo(x, y) }
-        g.stroke()
+        strokeSeries(g, s.pts, s.elm && s.elm.length === s.pts.length ? s.elm : undefined, X, Y)
       }
     }
     // cursor

@@ -70,7 +70,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     { title: 'DENSV2', unit: '1e20 m-3', series: [{ label: 'ne', color: CYAN, pts: pick(h, 'ne_bar'), ref: refs?.ne }], yMin: 0 },
     { title: 'WMHD', unit: 'MJ', series: [{ label: 'Wth', color: YELLOW, pts: pick(h, 'w_th') }], yMin: 0 },
     { title: 'BETAN', series: [{ label: 'bN', color: MAGENTA, pts: pick(h, 'beta_n'), ref: refs?.betaN }], yMin: 0 },
-    { title: 'FS04 D-ALPHA', unit: 'a.u.', series: [{ label: 'Da', color: RED, pts: pick(h, 'd_alpha') }], yMin: 0 },
+    { title: 'FS04 D-ALPHA', unit: 'a.u.', series: [{ label: 'Da', color: RED, pts: pick(h, 'd_alpha'), elm: h.map((p) => !!p.elm_active) }], yMin: 0 },
     { title: 'PINJ / PRAD', unit: 'MW', series: [
       { label: 'Pin', color: YELLOW, pts: pick(h, 'p_input'), ref: refs?.pin },
       { label: 'Prad', color: MAGENTA, pts: pick(h, 'p_rad') },

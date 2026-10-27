@@ -44,7 +44,7 @@ const ROWS_A: RowDef[] = [
 ]
 
 const ROWS_B: RowDef[] = [
-  { label: 'Dalpha', unit: 'a.u.', series: [{ key: 'd_alpha' }], yMin: 0 },
+  { label: 'Dalpha', unit: 'a.u.', series: [{ key: 'd_alpha', spikes: true }], yMin: 0 },
   { label: 'betaN', unit: '', series: [{ key: 'beta_n' }], yMin: 0 },
   { label: 'q95', unit: '', series: [{ key: 'q95' }, { key: 'li', name: 'li' }], yMin: 0, yMax: 10 },
   { label: 'H98', unit: '', series: [{ key: 'h_factor' }, { key: 'f_greenwald', name: 'fGW' }], yMin: 0 },
