@@ -48,6 +48,12 @@ export interface Device {
   /** Solenoid flux swing (V·s) and Ohmic supply loop-voltage limit (V). */
   flux_swing_vs?: number
   v_loop_max?: number
+  /** Equilibrium-only triangularities the engine substitutes for the
+   *  published ones, and the strike-sweep excursion it adds on top; they
+   *  bound the δ the planner may program (see `deltaRange`). */
+  equilibrium_delta_upper?: number
+  equilibrium_delta_lower?: number
+  strike_sweep_delta?: number
   wall_outline: [number, number][]
   config: string
 }

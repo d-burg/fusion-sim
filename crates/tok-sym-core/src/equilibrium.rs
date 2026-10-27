@@ -1046,13 +1046,17 @@ impl CerfonEquilibrium {
         let eps = self.shape.epsilon;
         let kappa = self.shape.kappa;
         let delta = self.shape.delta;
-        let x_xpt = 1.0 - 1.01 * eps * delta;
         match self.shape.config {
             MagneticConfig::UpperSingleNull => {
+                // The USN system puts its X-point at the upper triangularity
+                // (see assemble_usn_system); report the same point.
+                let delta_xpt = self.shape.delta_upper.unwrap_or(delta);
+                let x_xpt = 1.0 - 1.01 * eps * delta_xpt;
                 let y_xpt = 1.01 * eps * kappa;
                 (x_xpt * self.r0, y_xpt * self.r0 + self.z0)
             }
             _ => {
+                let x_xpt = 1.0 - 1.01 * eps * delta;
                 let y_xpt = -1.01 * eps * kappa;
                 (x_xpt * self.r0, y_xpt * self.r0 + self.z0)
             }
@@ -1069,10 +1073,13 @@ impl CerfonEquilibrium {
         let r_xpt = x_xpt * self.r0;
         let z_lower = -1.01 * eps * kappa * self.r0 + self.z0;
         let z_upper = 1.01 * eps * kappa * self.r0 + self.z0;
+        // In USN the X-point is built at the upper triangularity; the double
+        // null system is up-down symmetric in `delta`.
+        let r_xpt_usn = (1.0 - 1.01 * eps * self.shape.delta_upper.unwrap_or(delta)) * self.r0;
         match self.shape.config {
             MagneticConfig::Limited => (None, None),
             MagneticConfig::LowerSingleNull => (Some((r_xpt, z_lower)), None),
-            MagneticConfig::UpperSingleNull => (None, Some((r_xpt, z_upper))),
+            MagneticConfig::UpperSingleNull => (None, Some((r_xpt_usn, z_upper))),
             MagneticConfig::DoubleNull => {
                 (Some((r_xpt, z_lower)), Some((r_xpt, z_upper)))
             }
@@ -1886,6 +1893,33 @@ mod tests {
                  top; ψ there is {psi_bot:.3e}"
             );
         }
+    }
+
+    #[test]
+    fn test_usn_x_point_is_reported_where_it_was_solved() {
+        // The USN system puts its X-point at the upper triangularity; the
+        // reported X-point, which anchors the traced separatrix, must be the
+        // same point, where ψ = 0 by construction. On DIII-D the two
+        // triangularities differ by 0.34, enough to lose the whole boundary
+        // when the anchor used the lower one.
+        let mut shape = ShapeParams::from_device(&crate::devices::diiid());
+        shape.config = MagneticConfig::UpperSingleNull;
+        shape.x_point_alpha = None;
+        let eq = CerfonEquilibrium::solve(&shape, 1.67, 0.0).unwrap();
+        let (lower, upper) = eq.x_points_physical();
+        assert!(lower.is_none());
+        let (rx, zx) = upper.unwrap();
+        assert_eq!((rx, zx), eq.x_point_physical());
+        let scale = eq.psi_axis.abs();
+        assert!(
+            eq.psi(rx, zx).abs() < 1e-6 * scale,
+            "ψ at the reported X-point: {} (axis {})", eq.psi(rx, zx), eq.psi_axis
+        );
+        let r_wrong = (1.0 - 1.01 * shape.epsilon * shape.delta) * 1.67;
+        assert!(
+            eq.psi(r_wrong, zx).abs() > 1e-3 * scale,
+            "the lower-δ position would also sit on the boundary; the test cannot tell them apart"
+        );
     }
 
     #[test]

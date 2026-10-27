@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "matrix:emit": "npx tsx scripts/emit_program_matrix.ts",
+    "matrix:check": "npx tsx scripts/programMatrix.test.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",

@@ -69,6 +69,11 @@ const GAMMA_ECCD_10KEV: f64 = 0.2;
 /// than at the limited ellipse's zero. Forming an X-point is a topology
 /// change — this is the jump it makes.
 const DELTA_XPOINT_MIN: f64 = 0.2;
+/// Largest |δ| handed to the analytic equilibrium, which takes asin(δ). The
+/// planner's δ range stops short of this after the device's fitted offset
+/// (see `deltaRange` in web/src/lib/program.ts); drawn waveforms are caught
+/// here, so no program can produce a NaN axis.
+const DELTA_EQ_MAX: f64 = 0.95;
 
 /// Smooth 0→1 ramp (cubic smoothstep) of `x` over [0, 1].
 fn smoothstep01(x: f64) -> f64 {
@@ -1231,6 +1236,8 @@ impl Simulation {
         let delta_eq_upper = delta_eq
             + shape_w
                 * (self.device.equilibrium_delta_upper - self.device.equilibrium_delta_lower);
+        let delta_eq = delta_eq.clamp(-DELTA_EQ_MAX, DELTA_EQ_MAX);
+        let delta_eq_upper = delta_eq_upper.clamp(-DELTA_EQ_MAX, DELTA_EQ_MAX);
         // Equilibrium-only κ correction (see Device::equilibrium_kappa_scale)
         let kappa_eq = prog.kappa * kappa_scale_eff;
 
@@ -1972,6 +1979,32 @@ mod tests {
     }
 
     /// Run a programme to its end, returning every snapshot.
+    #[test]
+    fn test_triangularity_beyond_the_solver_range_keeps_the_equilibrium_finite() {
+        // DIII-D's fitted equilibrium adds +0.27 to the programmed δ; a
+        // drawn δ of 0.8 used to reach asin(1.07) at lift-off and leave a
+        // NaN axis and no boundary for the rest of the pulse.
+        let device = devices::diiid();
+        let mut program = PulseProgram::standard_hmode(&device);
+        program.delta = vec![(0.0, 0.8), (program.duration, 0.8)];
+        let mut sim = Simulation::new(device, program);
+        sim.start();
+        let mut last = None;
+        for _ in 0..400 {
+            let s = sim.step(0.005);
+            assert!(s.axis_r.is_finite() && s.axis_z.is_finite(), "non-finite axis at t={}", s.time);
+            if s.status != SimulationStatus::Running {
+                break;
+            }
+            last = Some(s);
+        }
+        let s = last.unwrap();
+        assert!(
+            !s.is_limited && s.separatrix.points.len() > 8,
+            "no boundary at t={} with Ip {} MA", s.time, s.ip
+        );
+    }
+
     fn run_pulse(device: Device, program: PulseProgram, seed: u64) -> Vec<SimulationSnapshot> {
         let mut sim = Simulation::new(device, program);
         sim.seed_disruption(seed);
