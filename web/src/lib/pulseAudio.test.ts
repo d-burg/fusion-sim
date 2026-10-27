@@ -4,7 +4,7 @@
  */
 import {
   DEAD_TIME, DRIVE_HZ_MAX, DRIVE_HZ_MIN, EVENT_FLOOR, GATE_ATTACK, GATE_HOLD, GATE_RELEASE,
-  ROAR_HZ_MAX, ROAR_HZ_MIN, eventRate, poissonCount, pulseLevels,
+  PILEUP_DRIVE, PILEUP_FLOOR, ROAR_HZ_MAX, ROAR_HZ_MIN, eventRate, pileupFraction, poissonCount, pulseLevels, shaperGains,
 } from './pulseAudio'
 import type { Device } from './wasm'
 import type { Snapshot } from './types'
@@ -103,6 +103,26 @@ function snap(o: Partial<Snapshot> = {}): Snapshot {
   assert(1 / (GATE_ATTACK + GATE_HOLD + GATE_RELEASE + DEAD_TIME) < 20, 'the detector saturates below 20 events/s')
 }
 
+// ── Detector pile-up and the shaper ───────────────────────────────────
+{
+  assert(pileupFraction(0) === 0 && pileupFraction(1e13) === 0 && pileupFraction(PILEUP_FLOOR) === 0, 'a DD pulse does not pile up')
+  const jet = pileupFraction(2e18), centaur = pileupFraction(1.4e19), iter = pileupFraction(1.4e20)
+  assert(jet > 0.2 && jet < 0.45, `JET DT gets an edge (${jet.toFixed(2)})`)
+  assert(centaur > 0.55 && centaur < 0.8, `CENTAUR is well into saturation (${centaur.toFixed(2)})`)
+  assert(iter === 1, 'ITER is fully piled up')
+  assert(pileupFraction(1e30) === 1, 'clamped')
+  const clean = shaperGains(0)
+  assert(near(clean.pre, 0.25) && Math.abs(clean.post - 1) < 0.02, 'no pile-up: unity slope through the curve and (near) unity make-up')
+  const full = shaperGains(1)
+  assert(near(full.pre, PILEUP_DRIVE / 4), 'full pile-up: full drive')
+  assert(full.post < clean.post && full.post > 0.2, 'the make-up gain pulls the clipped signal back down, within reason')
+  let last = shaperGains(0).post
+  for (const f of [0.25, 0.5, 0.75, 1]) { const g = shaperGains(f).post; assert(g < last, `make-up falls monotonically (${f})`); last = g }
+  const dt = pulseLevels(snap({ te_profile: flat(5), ne_profile: flat(0.8), mass_number: 2.5 }), device(), true)
+  assert(dt.pileup >= 0 && dt.pileup <= 1, 'pile-up is a fraction')
+  assert(pulseLevels(snap(), device(), false).pileup === 0, 'silent means clean')
+}
+
 // ── Poisson draws ─────────────────────────────────────────────────────
 {
   assert(poissonCount(0) === 0 && poissonCount(-1) === 0 && poissonCount(NaN) === 0, 'no expectation, no events')
@@ -121,7 +141,7 @@ function snap(o: Partial<Snapshot> = {}): Snapshot {
 // ── Bounds under extreme inputs ───────────────────────────────────────
 {
   const wild = pulseLevels(snap({ ip: 30, v_loop: -1e4, p_loss: 1e5, p_rad: -5, te_profile: flat(100), ne_profile: flat(50) }), device(), true)
-  assert(inUnit(wild.drive) && inUnit(wild.sol) && inUnit(wild.roar) && inUnit(wild.hiss), 'every level stays in [0, 1]')
+  assert(inUnit(wild.drive) && inUnit(wild.sol) && inUnit(wild.roar) && inUnit(wild.hiss) && inUnit(wild.pileup), 'every level stays in [0, 1]')
   assert(Number.isFinite(wild.driveHz) && Number.isFinite(wild.roarHz) && Number.isFinite(wild.events), 'every rate stays finite')
   const zero = pulseLevels(snap(), device({ ip_max: 0, v_loop_max: 0 }), true)
   assert(Number.isFinite(zero.drive) && Number.isFinite(zero.driveHz), 'a device with zero limits does not divide by zero')

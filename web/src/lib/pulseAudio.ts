@@ -16,6 +16,9 @@
  *           milliseconds and ticks, so a DD pulse ticks sparsely and a DT
  *           burn becomes a crackling, gated roar.
  *   hiss    fusion power sets a high band of noise under the gating.
+ *   pileup  at high neutron rates a detector piles up and saturates, so the
+ *           same rate drives a waveshaper on the whole layer: clean on a DD
+ *           machine, an edge on JET, clipped on CENTAUR and ITER.
  *
  * The level model (`pulseLevels`, `eventRate`, `poissonCount`) is pure and
  * tested without a browser; `PulseVoice` owns the audio nodes and takes the
@@ -39,9 +42,11 @@ export interface PulseLevels {
   events: number
   /** Fusion hiss, 0–1. */
   hiss: number
+  /** Detector pile-up, 0–1: how hard the layer is driven into saturation. */
+  pileup: number
 }
 
-export const PULSE_SILENT: PulseLevels = { drive: 0, driveHz: 180, sol: 0, roar: 0, roarHz: 120, events: 0, hiss: 0 }
+export const PULSE_SILENT: PulseLevels = { drive: 0, driveHz: 180, sol: 0, roar: 0, roarHz: 120, events: 0, hiss: 0, pileup: 0 }
 
 /** Pitch of the whine at zero and at full programmed current (Hz). */
 export const DRIVE_HZ_MIN = 180
@@ -59,6 +64,11 @@ export const EVENT_SCALE = 1.2
 export const EVENT_POWER = 1.5
 /** Fusion power (MW) at which the hiss is full. */
 export const HISS_REF = 100
+/** Neutron rate (n/s) where the detector starts to pile up, and the decades over which it saturates. */
+export const PILEUP_FLOOR = 3e17
+export const PILEUP_DECADES = 2.5
+/** Waveshaper drive at full pile-up, as a multiple of the clean (unity-slope) drive. */
+export const PILEUP_DRIVE = 7
 /** Detector dead time (s): events closer than this are dropped, which also bounds the gate rate. */
 export const DEAD_TIME = 0.03
 /** Gate shape: time to close, time held closed, time to reopen (s), and the closed level. */
@@ -74,6 +84,12 @@ export function eventRate(neutronRate: number): number {
   if (!(neutronRate > EVENT_FLOOR)) return 0
   const decades = Math.log10(neutronRate / EVENT_FLOOR)
   return EVENT_SCALE * Math.pow(decades, EVENT_POWER)
+}
+
+/** Detector pile-up fraction (0–1) for a neutron rate, logarithmic above its onset. */
+export function pileupFraction(neutronRate: number): number {
+  if (!(neutronRate > PILEUP_FLOOR)) return 0
+  return clamp(Math.log10(neutronRate / PILEUP_FLOOR) / PILEUP_DECADES, 0, 1)
 }
 
 /** Number of events in an interval with expectation `mean` (Knuth's method, `rand` in [0,1)). */
@@ -111,6 +127,7 @@ export function pulseLevels(s: Snapshot | null, device: Device | null, running: 
     roarHz: ROAR_HZ_MIN + (ROAR_HZ_MAX - ROAR_HZ_MIN) * roar,
     events: eventRate(fusion.neutron_rate),
     hiss: Math.sqrt(clamp(fusion.p_fus / HISS_REF, 0, 1)),
+    pileup: pileupFraction(fusion.neutron_rate),
   }
 }
 
@@ -126,6 +143,34 @@ const TICK_GAIN = 0.18
 const SOL_HZ = 43
 const LEVEL_TAU = 0.08
 const PITCH_TAU = 0.15
+/** The shaper curve is tanh(K·x)/tanh(K); a pre-gain of 1/K makes it unity slope, i.e. clean. */
+const SHAPER_K = 4
+/** Design RMS of the summed layer at the shaper input; the make-up gain holds this loudness as the drive rises. */
+const SHAPER_RMS = 0.12
+
+function tanhCurve(n = 4096): Float32Array<ArrayBuffer> {
+  const c = new Float32Array(n)
+  for (let i = 0; i < n; i++) c[i] = Math.tanh(((i / (n - 1)) * 2 - 1) * SHAPER_K) / Math.tanh(SHAPER_K)
+  return c
+}
+
+/** RMS out of the shaper for a Gaussian input of RMS SHAPER_RMS at total drive `drive` (unity slope at 1). */
+function shapedRms(drive: number): number {
+  const sigma = SHAPER_RMS
+  const n = 400
+  const lim = 5 * sigma
+  const h = (2 * lim) / n
+  let acc = 0
+  let w = 0
+  for (let i = 0; i <= n; i++) {
+    const x = -lim + i * h
+    const phi = Math.exp(-(x * x) / (2 * sigma * sigma))
+    const y = Math.tanh(drive * x) / Math.tanh(SHAPER_K)
+    acc += y * y * phi
+    w += phi
+  }
+  return Math.sqrt(acc / w)
+}
 
 function noiseThrough(ctx: BaseAudioContext, noise: AudioBuffer, filter: BiquadFilterNode, gain: number, out: AudioNode): GainNode {
   const src = ctx.createBufferSource()
@@ -138,12 +183,25 @@ function noiseThrough(ctx: BaseAudioContext, noise: AudioBuffer, filter: BiquadF
   return g
 }
 
+/**
+ * Pre- and make-up gains around the shaper for a pile-up fraction. Clean is
+ * unity slope; full pile-up drives PILEUP_DRIVE times harder, and the
+ * make-up gain keeps a SHAPER_RMS input at the same loudness coming out.
+ */
+export function shaperGains(pileup: number): { pre: number; post: number } {
+  const drive = 1 + (PILEUP_DRIVE - 1) * clamp(pileup, 0, 1)
+  const out = shapedRms(drive)
+  return { pre: drive / SHAPER_K, post: out > 0 ? SHAPER_RMS / out : 1 }
+}
+
 /** The sonification's nodes on a context the hall engine owns. */
 export class PulseVoice {
   private readonly ctx: BaseAudioContext
   private readonly noise: AudioBuffer
   private readonly out: AudioNode
   private readonly gate: GainNode
+  private readonly pre: GainNode
+  private readonly post: GainNode
   private readonly drive: GainNode
   private readonly driveOsc: OscillatorNode
   private readonly driveLow: BiquadFilterNode
@@ -160,9 +218,19 @@ export class PulseVoice {
     this.noise = noise
     this.out = out
     this.rand = rand
+    // Every voice passes the gate, then a saturating waveshaper whose
+    // drive is the detector pile-up; the make-up gain after it keeps the
+    // loudness steady so pile-up changes the texture, not the level.
     this.gate = ctx.createGain()
     this.gate.gain.value = 1
-    this.gate.connect(out)
+    this.pre = ctx.createGain()
+    this.pre.gain.value = 1
+    const shaper = ctx.createWaveShaper()
+    shaper.curve = tanhCurve()
+    shaper.oversample = '2x'
+    this.post = ctx.createGain()
+    this.post.gain.value = 1
+    this.gate.connect(this.pre).connect(shaper).connect(this.post).connect(out)
 
     // Converter whine: a rounded sawtooth and a band of noise at the same pitch.
     this.drive = ctx.createGain()
@@ -234,6 +302,9 @@ export class PulseVoice {
     this.roar.gain.setTargetAtTime(l.roar, t, LEVEL_TAU)
     this.roarLow.frequency.setTargetAtTime(l.roarHz, t, PITCH_TAU)
     this.hiss.gain.setTargetAtTime(l.hiss, t, LEVEL_TAU)
+    const { pre, post } = shaperGains(l.pileup)
+    this.pre.gain.setTargetAtTime(pre, t, LEVEL_TAU)
+    this.post.gain.setTargetAtTime(post, t, LEVEL_TAU)
     if (!(dt > 0) || !(l.events > 0)) return
     const n = poissonCount(l.events * dt, this.rand)
     const times: number[] = []
