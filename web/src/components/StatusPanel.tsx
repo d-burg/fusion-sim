@@ -217,63 +217,70 @@ export default function StatusPanel({
           />
         </div>
       ) : (
-      <div className="flex-1 flex flex-col justify-between">
-      {/* Params & Stability */}
-      <div>
-        <div className="flex items-center gap-2 panel-title mb-1.5">
-          <span className="flex items-center gap-1">
-            Plasma parameters
-            <InfoPopup title="Plasma Parameters" position="right">{plasmaParamsInfo}</InfoPopup>
-          </span>
-          <span className="flex items-center gap-1 ml-auto">
-            Stability
-            <InfoPopup title="Stability Limits" position="left">{stabilityInfo}</InfoPopup>
-          </span>
+      <div className="flex-1 flex flex-col gap-y-2 @container">
+        {/* Wide panels put the power balance beside the parameters and the
+            neutron readout beside the divertor, so the whole view fits the
+            panel without scrolling; narrow panels stack the sections. */}
+        <div className="grid grid-cols-1 @[48rem]:grid-cols-[11fr_9fr] @[48rem]:gap-x-5">
+          {/* Params & Stability */}
+          <div>
+            <div className="flex items-center gap-2 panel-title mb-1.5">
+              <span className="flex items-center gap-1">
+                Plasma parameters
+                <InfoPopup title="Plasma Parameters" position="right">{plasmaParamsInfo}</InfoPopup>
+              </span>
+              <span className="flex items-center gap-1 ml-auto">
+                Stability
+                <InfoPopup title="Stability Limits" position="left">{stabilityInfo}</InfoPopup>
+              </span>
+            </div>
+            {/* Row-major: the right-hand column holds the stability limits. */}
+            <div className="grid grid-cols-4 gap-x-3 gap-y-0.5">
+              <Param label={<>I<sub>p</sub></>} value={s.ip} unit="MA" />
+              <Param label={<>T<sub>e0</sub></>} value={s.te0} unit="keV" />
+              <Param label={<>Z<sub>eff</sub></>} value={s.z_eff ?? 0} unit="" invalid={invalid} warn={(s.z_eff ?? 0) > 2.5} danger={(s.z_eff ?? 0) > 3.5} />
+              <Param label={<>q<sub>95</sub></>} value={s.q95} unit="" warn={s.q95 < 2.5} danger={s.q95 < 2.0} invalid={invalid} />
+
+              <Param label={<>B<sub>t</sub></>} value={s.bt} unit="T" />
+              <Param label={<><span style={{ textDecoration: 'overline' }}>n</span><sub>e</sub></>} value={s.ne_bar} unit="10²⁰" />
+              <Param label={<>c<sub>z</sub></>} value={100 * ((s.imp_n ?? 0) + (s.imp_ne ?? 0) + (s.imp_ar ?? 0))} unit="%" invalid={invalid} />
+              <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} invalid={invalid} />
+
+              <Param label={<>W<sub>th</sub></>} value={s.w_th} unit="MJ" />
+              <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" invalid={invalid} />
+              <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" />
+              <Param label={<>f<sub>GW</sub></>} value={s.f_greenwald} unit="" warn={s.f_greenwald > 0.8} danger={s.f_greenwald > 0.9} invalid={invalid} />
+
+              <Param label={<>H<sub>98</sub></>} value={s.h_factor} unit="" invalid={invalid} />
+              <Param label={<>l<sub>i</sub></>} value={s.li} unit="" invalid={invalid} />
+              <Param label={<>Ψ<sub>OH</sub></>} value={100 * fluxFrac} unit="%" precision={0} warn={fluxFrac > FLUX_WARN} danger={!!s.flux_exhausted || fluxFrac >= 1} />
+            </div>
+          </div>
+
+          {/* ── Power & Fusion ─────────────────────────────────────── */}
+          <div className="border-t border-gray-800 pt-1.5 @[48rem]:border-t-0 @[48rem]:pt-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="panel-title flex items-center gap-1">
+                Power &amp; Fusion
+                <InfoPopup title="Power Balance &amp; Fusion" position="right">{powerBalanceInfo}</InfoPopup>
+              </span>
+            </div>
+
+            {/* Input / Output two-column power balance */}
+            <PowerBalance snapshot={s} fusion={fusion} usesIch={usesIch} />
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-x-3 gap-y-0.5">
-          <Param label={<>I<sub>p</sub></>} value={s.ip} unit="MA" />
-          <Param label={<>T<sub>e0</sub></>} value={s.te0} unit="keV" />
-          <Param label={<>q<sub>95</sub></>} value={s.q95} unit="" warn={s.q95 < 2.5} danger={s.q95 < 2.0} invalid={invalid} />
 
-          <Param label={<>B<sub>t</sub></>} value={s.bt} unit="T" />
-          <Param label={<><span style={{ textDecoration: 'overline' }}>n</span><sub>e</sub></>} value={s.ne_bar} unit="10²⁰" />
-          <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} invalid={invalid} />
+        <div className="grid grid-cols-1 @[48rem]:grid-cols-[11fr_9fr] @[48rem]:gap-x-5">
+          {/* Divertor thermal loading */}
+          <DivertorLoading divertor={divertor} invalid={invalid} divertorActive={s.xpoint_r > 0 && s.ip >= 0.1} />
 
-          <Param label={<>W<sub>th</sub></>} value={s.w_th} unit="MJ" />
-          <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" invalid={invalid} />
-          <Param label={<>f<sub>GW</sub></>} value={s.f_greenwald} unit="" warn={s.f_greenwald > 0.8} danger={s.f_greenwald > 0.9} invalid={invalid} />
-
-          <Param label={<>H<sub>98</sub></>} value={s.h_factor} unit="" invalid={invalid} />
-          <Param label={<>l<sub>i</sub></>} value={s.li} unit="" invalid={invalid} />
-          <Param label={<>V<sub>loop</sub></>} value={s.diagnostics.v_loop} unit="V" />
-
-          <Param label={<>Z<sub>eff</sub></>} value={s.z_eff ?? 0} unit="" invalid={invalid} warn={(s.z_eff ?? 0) > 2.5} danger={(s.z_eff ?? 0) > 3.5} />
-          <Param label={<>c<sub>z</sub></>} value={100 * ((s.imp_n ?? 0) + (s.imp_ne ?? 0) + (s.imp_ar ?? 0))} unit="%" invalid={invalid} />
-          <Param label={<>Ψ<sub>OH</sub></>} value={100 * fluxFrac} unit="%" precision={0} warn={fluxFrac > FLUX_WARN} danger={!!s.flux_exhausted || fluxFrac >= 1} />
+          {/* Neutron diagnostic + Q display side by side */}
+          <div className="flex gap-2 border-t border-gray-800 pt-1.5">
+            <NeutronDiagnostic fusion={fusion} />
+            <QDisplay fusion={fusion} />
+          </div>
         </div>
-      </div>
-
-      {/* ── Power & Fusion ─────────────────────────────────────── */}
-      <div className="border-t border-gray-800 pt-1.5">
-        <div className="flex items-center justify-between mb-1">
-          <span className="panel-title flex items-center gap-1">
-            Power &amp; Fusion
-            <InfoPopup title="Power Balance &amp; Fusion" position="right">{powerBalanceInfo}</InfoPopup>
-          </span>
-        </div>
-
-        {/* Input / Output two-column power balance */}
-        <PowerBalance snapshot={s} fusion={fusion} usesIch={usesIch} />
-      </div>
-
-      {/* Divertor thermal loading */}
-      <DivertorLoading divertor={divertor} invalid={invalid} divertorActive={s.xpoint_r > 0 && s.ip >= 0.1} />
-
-      {/* Neutron diagnostic + Q display side by side */}
-      <div className="flex gap-2 border-t border-gray-800 pt-1.5">
-        <NeutronDiagnostic fusion={fusion} />
-        <QDisplay fusion={fusion} />
-      </div>
       </div>
       )}
     </div>
