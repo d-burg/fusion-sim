@@ -10,6 +10,10 @@ import StripChart, { type Series } from './diiid/StripChart'
 import SevenSeg from './diiid/SevenSeg'
 import StatusGrid from './diiid/StatusGrid'
 import Console from './diiid/Console'
+import DiagBars from './diiid/DiagBars'
+import { useDiagnostics } from './useDiagnostics'
+import { reconstructionValid } from '../../lib/pulseLog'
+import { formatQ } from '../../lib/fusionPhysics'
 import './diiid.css'
 
 // The wall's primaries: chosen for separation on black, not for taste.
@@ -96,14 +100,16 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const lastEvents = ctx.events.slice(-4).reverse()
   // The green monospace scalar block under the status table, as on the wall's big screen.
   const f = (v: number | undefined, d = 2) => (v === undefined || !isFinite(v) ? '--' : v.toFixed(d))
+  // Readouts that the wall already plots (NEBAR, WTH, TE0, LI) are left to the strip charts; the divertor and neutron
+  // figures come from the shared diagnostics so they agree with every other look.
+  const diag = useDiagnostics(snap, reconstructionValid(snap))
   const readout: [string, string, string][] = snap ? [
     ['IP', f(snap.ip), 'MA'], ['BT', f(snap.bt), 'T'],
-    ['NEBAR', f(snap.ne_bar), '1e20'], ['TE0', f(snap.te0), 'keV'],
-    ['WTH', f(snap.w_th), 'MJ'], ['TAUE', f(snap.tau_e, 3), 's'],
     ['PIN', f(snap.p_input, 1), 'MW'], ['POH', f(snap.p_ohmic), 'MW'],
     ['PRAD', f(snap.p_rad), 'MW'], ['PALF', f(snap.p_alpha, 3), 'MW'],
     ['BETAN', f(snap.beta_n), ''], ['Q95', f(snap.q95), ''],
-    ['LI', f(snap.li), ''], ['NEUT', snap.diagnostics.neutron_rate > 0 ? snap.diagnostics.neutron_rate.toExponential(1) : '--', 'n/s'],
+    ['PFUS', diag.pFus > 0.001 ? f(diag.pFus, diag.pFus < 10 ? 3 : 1) : '--', 'MW'], ['Q', diag.rate > 0 ? formatQ(diag.qPlasma) : '--', ''],
+    ['LAMQ', diag.valid ? f(diag.lambdaQ, 1) : '--', 'mm'], ['FDET', diag.valid ? f(diag.fDet) : '--', ''],
   ] : []
   // ELM activity is a transient flag: hold it for the last 0.3 s of history so the cell reads ELMING, not a flicker.
   let elming = false
@@ -153,6 +159,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           {readout.map(([k, v, u]) => (
             <div key={k} className="dc-text-row"><span>{k}</span><span>{v}</span><span>{u}</span></div>
           ))}
+          {snap && <DiagBars d={diag} />}
         </div>
 
         <div className="dc-tile dc-cam">

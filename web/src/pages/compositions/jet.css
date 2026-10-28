@@ -158,6 +158,11 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
 [data-layout="jet"] .jet-table .state-off { background: #fff; color: #808080; }
 [data-layout="jet"] .jet-table .state-na { background: #e8e8e8; }
 
+/* Excel-style data bar inside the Value cell: a 1 px framed track behind the number, filled in the row's state colour */
+[data-layout="jet"] .jet-table .databar { position: relative; display: block; height: 12px; margin: 1px 0; border: 1px solid #808080; background: #fff; }
+[data-layout="jet"] .jet-table .databar-fill { position: absolute; left: 0; top: 0; bottom: 0; opacity: 0.75; }
+[data-layout="jet"] .jet-table .databar-v { position: relative; display: block; padding-right: 2px; line-height: 12px; }
+
 /* ── event log: plain text list ── */
 [data-layout="jet"] .jet-log {
   flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;

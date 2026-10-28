@@ -5,7 +5,7 @@ export type Units = 'metric' | 'imperial'
 /** Control-room look: which composition renders /run/:device. */
 export type Look = 'kaldera' | 'diiid' | 'apollo' | 'jet'
 export const LOOKS: { id: Look; label: string; blurb: string }[] = [
-  { id: 'kaldera', label: 'Standard', blurb: 'Sparse, cinematic; the default' },
+  { id: 'kaldera', label: 'Modern', blurb: 'Sparse, cinematic; the default' },
   { id: 'diiid', label: 'DIII-D', blurb: 'Wall of strip charts, status grid' },
   { id: 'apollo', label: 'Apollo', blurb: 'Mission-control board and console' },
   { id: 'jet', label: 'JET', blurb: 'White jScope panels and tables' },

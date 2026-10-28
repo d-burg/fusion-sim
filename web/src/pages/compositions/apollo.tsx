@@ -7,6 +7,10 @@ import SevenSeg from './diiid/SevenSeg'
 import BoardPlot, { type Series } from './apollo/BoardPlot'
 import LampKey, { type Lamp } from './apollo/LampKey'
 import { clock, interpWaveform, parseProgram, pulsePhase, type Waveform } from './apollo/phase'
+import DiagLines from './apollo/DiagLines'
+import { useDiagnostics } from './useDiagnostics'
+import { reconstructionValid } from '../../lib/pulseLog'
+import { formatQ } from '../../lib/fusionPhysics'
 import './apollo.css'
 
 /** Console arrangement: 'A' three modules side by side; 'B' an annunciator
@@ -142,19 +146,21 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     ['DISRUPT', s?.disrupted ? 'red' : 'off'],
   ]
 
-  // ── telemetry: 24 rows on a strict 3 x 8 grid of label / value / unit ──
+  // ── telemetry: 21 rows on a strict 3 x 7 grid of label / value / unit; IP, NE, WTH and HAZ are on the
+  //    big board, the neutron rate is the bargraph at the foot of the screen ──
+  const diag = useDiagnostics(s, reconstructionValid(s))
   const tele = (snap: Snapshot | null): [string, string, string][] => {
     const v = (x: number | undefined, d = 2) => (snap && x !== undefined && isFinite(x) ? x.toFixed(d) : '-.--')
-    const neut = snap?.diagnostics.neutron_rate ?? 0
+    const pfus = !snap ? '-.--' : diag.pFus > 0.001 ? diag.pFus.toFixed(diag.pFus < 10 ? 3 : 1) : '0.000'
+    const q = !snap ? '-.--' : diag.rate > 0 ? formatQ(diag.qPlasma).toUpperCase() : '0'
     return [
-      ['IP', v(snap?.ip), 'MA'], ['PIN', v(snap?.p_input, 1), 'MW'], ['VLOOP', v(snap?.v_loop), 'V'],
-      ['BT', v(snap?.bt), 'T'], ['POH', v(snap?.p_ohmic, 1), 'MW'], ['PSI', v(snap?.flux_consumed, 1), 'VS'],
-      ['NE', v(snap?.ne_bar), 'E20'], ['PRAD', v(snap?.p_rad, 1), 'MW'], ['PSIMAX', v(snap?.flux_budget, 1), 'VS'],
-      ['TE0', v(snap?.te0), 'KEV'], ['PLOSS', v(snap?.p_loss, 1), 'MW'], ['IBS', v(snap?.i_bootstrap), 'MA'],
-      ['WTH', v(snap?.w_th), 'MJ'], ['PALPHA', v(snap?.p_alpha, 2), 'MW'], ['ICD', v(snap?.i_cd), 'MA'],
-      ['TAUE', v(snap?.tau_e, 3), 'S'], ['BETAN', v(snap?.beta_n), ''], ['LI', v(snap?.li), ''],
-      ['Q95', v(snap?.q95), ''], ['FGW', v(snap?.f_greenwald), ''], ['H98', v(snap?.h_factor), ''],
-      ['ZEFF', v(snap?.z_eff), ''], ['NEUT', snap ? neut.toExponential(1).replace('e+', 'E').replace('e', 'E') : '-.--', '/S'], ['HAZ', v(hazard * 100, 2), '%/S'],
+      ['BT', v(snap?.bt), 'T'], ['PIN', v(snap?.p_input, 1), 'MW'], ['VLOOP', v(snap?.v_loop), 'V'],
+      ['TE0', v(snap?.te0), 'KEV'], ['POH', v(snap?.p_ohmic, 1), 'MW'], ['PSI', v(snap?.flux_consumed, 1), 'VS'],
+      ['TAUE', v(snap?.tau_e, 3), 'S'], ['PRAD', v(snap?.p_rad, 1), 'MW'], ['PSIMAX', v(snap?.flux_budget, 1), 'VS'],
+      ['BETAN', v(snap?.beta_n), ''], ['PLOSS', v(snap?.p_loss, 1), 'MW'], ['IBS', v(snap?.i_bootstrap), 'MA'],
+      ['Q95', v(snap?.q95), ''], ['PALPHA', v(snap?.p_alpha, 2), 'MW'], ['ICD', v(snap?.i_cd), 'MA'],
+      ['FGW', v(snap?.f_greenwald), ''], ['PFUS', pfus, 'MW'], ['LI', v(snap?.li), ''],
+      ['ZEFF', v(snap?.z_eff), ''], ['Q', q, ''], ['H98', v(snap?.h_factor), ''],
     ]
   }
   const rows = tele(s)
@@ -173,12 +179,15 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     <div className="ap-mod ap-mod-tele">
       <div className="ap-mod-head"><span className="ap-plate">15</span><span className="ap-engr">TELEMETRY</span></div>
       <div className="ap-crt">
-        <div className="ap-crt-screen ap-tele-grid">
-          {rows.map(([k, v, u]) => (
-            <div key={k} className="ap-tele-row">
-              <span>{k}</span><span className="ap-v">{v}</span><span className="ap-u">{u}</span>
-            </div>
-          ))}
+        <div className="ap-crt-screen ap-tele-screen">
+          <div className="ap-tele-grid">
+            {rows.map(([k, v, u]) => (
+              <div key={k} className="ap-tele-row">
+                <span>{k}</span><span className="ap-v">{v}</span><span className="ap-u">{u}</span>
+              </div>
+            ))}
+          </div>
+          <DiagLines d={s ? diag : null} />
         </div>
       </div>
     </div>

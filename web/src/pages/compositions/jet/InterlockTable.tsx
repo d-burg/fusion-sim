@@ -1,5 +1,8 @@
 import type { Snapshot } from '../../../lib/types'
 import type { DeviceInfo } from '../types'
+import { reconstructionValid } from '../../../lib/pulseLog'
+import { formatQ } from '../../../lib/fusionPhysics'
+import { useDiagnostics, type Diagnostics, type DiagTone } from '../useDiagnostics'
 
 /* ─── Spreadsheet-style scalar / interlock table ──────────────────
    name | value | unit | state. The state cell is a coloured block the
@@ -16,6 +19,8 @@ interface Row {
   state: State
   /** Printed in the state cell; defaults by state. */
   word?: string
+  /** 0–1: an Excel-style data bar behind the value, filled in the state colour. */
+  bar?: number
 }
 
 const WORD: Record<State, string> = { ok: 'OK', hi: 'HI', lo: 'LO', alarm: 'ALARM', off: 'OFF', na: '' }
@@ -29,15 +34,18 @@ function band(v: number, warn: number, alarm: number, dir: 'hi' | 'lo' = 'hi'): 
   return v <= alarm ? 'alarm' : v <= warn ? 'lo' : 'ok'
 }
 
-export function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined): Row[] {
+const toneState = (t: DiagTone): State => (t === 'bad' ? 'alarm' : t === 'warn' ? 'hi' : 'ok')
+
+function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnostics): Row[] {
   const plasma = !!s && s.ip > 0.05 && !s.disrupted
   const na = (name: string, unit: string, value = '---'): Row => ({ name, value, unit, state: 'na' })
   if (!s) {
     return [
-      na('Ip', 'MA'), na('Bt', 'T'), na('ne', '1e20 m-3'), na('fGW', ''), na('Te0', 'keV'),
-      na('Wth', 'MJ'), na('tauE', 's'), na('H98', ''), na('betaN', ''), na('q95', ''), na('li', ''),
-      na('Pin', 'MW'), na('POH', 'MW'), na('Prad', 'MW'), na('Ploss', 'MW'), na('Palpha', 'MW'),
-      na('Vloop', 'V'), na('PsiOH', 'V.s'), na('Zeff', ''), na('Sn', '1/s'), na('hazard', '1/s'),
+      na('Ip', 'MA'), na('Bt', 'T'), na('ne', '1e20 m-3'), na('fGW', ''),
+      na('tauE', 's'), na('H98', ''), na('betaN', ''), na('q95', ''), na('li', ''),
+      na('Pin', 'MW'), na('POH', 'MW'), na('Prad', 'MW'),
+      na('q_perp', 'MW/m2'), ...(d.isW ? [na('T_surf', 'degC')] : []), na('Sn', 'n/s'), na('Pfus', 'MW'), na('Q', ''),
+      na('Vloop', 'V'), na('PsiOH', 'V.s'), na('Zeff', ''), na('hazard', '1/s'),
     ]
   }
   const ipMax = dev?.ip_max ?? Infinity
@@ -55,8 +63,6 @@ export function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined): Row[
     { name: 'Bt', value: f(s.bt, 2), unit: 'T', state: s.bt > 0.05 ? band(s.bt / btMax, 0.95, 1.001) : 'off' },
     { name: 'ne', value: f(s.ne_bar, 2), unit: '1e20 m-3', state: st('ok') },
     { name: 'fGW', value: fp(s.f_greenwald, 2), unit: '', state: st(band(s.f_greenwald, 0.8, 1.0)) },
-    { name: 'Te0', value: f(s.te0, 2), unit: 'keV', state: st('ok') },
-    { name: 'Wth', value: f(s.w_th, 2), unit: 'MJ', state: st('ok') },
     { name: 'tauE', value: fp(s.tau_e, 3), unit: 's', state: st('ok') },
     { name: 'H98', value: fp(s.h_factor, 2), unit: '', state: st(s.h_factor < 0.6 ? 'lo' : 'ok') },
     { name: 'betaN', value: fp(s.beta_n, 2), unit: '', state: st(band(s.beta_n / betaLim, 0.8, 1.0)) },
@@ -65,18 +71,23 @@ export function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined): Row[
     { name: 'Pin', value: f(s.p_input, 1), unit: 'MW', state: st('ok') },
     { name: 'POH', value: f(s.p_ohmic, 2), unit: 'MW', state: st('ok') },
     { name: 'Prad', value: f(s.p_rad, 1), unit: 'MW', state: st(s.p_input > 0 ? band(s.p_rad / s.p_input, 0.6, 0.9) : 'ok') },
-    { name: 'Ploss', value: f(s.p_loss, 1), unit: 'MW', state: st('ok') },
-    { name: 'Palpha', value: f(s.p_alpha, 2), unit: 'MW', state: st('ok') },
+    // Te0, Wth, Ploss and Palpha are left out for room: Te0 and Wth are always-OK rows the jScope already plots,
+    // Pin and Prad bracket the power balance, and Pfus carries the fusion power.
+    { name: 'q_perp', value: f(d.q, 1), unit: 'MW/m2', state: st(toneState(d.qTone)), bar: plasma ? d.qFill : undefined },
+    ...(d.isW ? [{ name: 'T_surf', value: f(d.tSurf, 0), unit: 'degC', state: st(toneState(d.tTone)), bar: plasma ? d.tFill : undefined }] : []),
+    { name: 'Sn', value: d.rate > 0 ? d.rate.toExponential(2) : '0', unit: 'n/s', state: st(d.active ? 'ok' : 'off'), word: plasma && !d.active ? 'IDLE' : undefined, bar: plasma ? d.nFill : undefined },
+    { name: 'Pfus', value: f(d.pFus, d.pFus < 10 ? 3 : 1), unit: 'MW', state: st('ok') },
+    { name: 'Q', value: d.rate > 0 ? formatQ(d.qPlasma) : '0', unit: '', state: st('ok') },
     { name: 'Vloop', value: f(s.v_loop, 2), unit: 'V', state: st(vMax ? band(Math.abs(s.v_loop ?? 0) / vMax, 0.9, 0.999) : 'ok'), word: s.oh_saturated ? 'SAT' : undefined },
     { name: 'PsiOH', value: fluxBudget ? `${fluxUsed.toFixed(1)}/${fluxBudget.toFixed(0)}` : f(fluxUsed, 1), unit: 'V.s', state: s.flux_exhausted ? 'alarm' : st(band(fluxFrac, 0.8, 0.95)), word: s.flux_exhausted ? 'EMPTY' : undefined },
     { name: 'Zeff', value: f(s.z_eff, 2), unit: '', state: st(band(s.z_eff ?? 1, 2.5, 4)) },
-    { name: 'Sn', value: s.diagnostics ? s.diagnostics.neutron_rate.toExponential(2) : '---', unit: '1/s', state: st('ok') },
     { name: 'hazard', value: f(s.disruption_risk, 3), unit: '1/s', state: s.disrupted ? 'alarm' : st(band(s.disruption_risk, 0.05, 0.2)), word: s.disrupted ? 'DISR' : undefined },
   ]
 }
 
 export default function InterlockTable({ snapshot, device }: { snapshot: Snapshot | null; device: DeviceInfo | undefined }) {
-  const rows = buildRows(snapshot, device)
+  const diag = useDiagnostics(snapshot, reconstructionValid(snapshot))
+  const rows = buildRows(snapshot, device, diag)
   return (
     <table className="jet-table">
       <thead>
@@ -91,7 +102,14 @@ export default function InterlockTable({ snapshot, device }: { snapshot: Snapsho
         {rows.map((r) => (
           <tr key={r.name}>
             <td>{r.name}</td>
-            <td className="num">{r.value}</td>
+            <td className="num">
+              {r.bar === undefined ? r.value : (
+                <span className="databar">
+                  <span className={`databar-fill state-${r.state}`} style={{ width: `${Math.max(0, Math.min(1, r.bar)) * 100}%` }} />
+                  <span className="databar-v">{r.value}</span>
+                </span>
+              )}
+            </td>
             <td className="unit">{r.unit}</td>
             <td className={`state state-${r.state}`}>{r.word ?? WORD[r.state]}</td>
           </tr>
