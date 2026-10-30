@@ -136,7 +136,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
           )}
         </div>
         <div className="dc-tile dc-cam" data-tutorial="portview">
-          <PortView snapshot={ctx.plasmaSnapshot} limiterPoints={ctx.limiterPoints} deviceId={ctx.activeDevice}
+          <PortView framing="wide" snapshot={ctx.plasmaSnapshot} limiterPoints={ctx.limiterPoints} deviceId={ctx.activeDevice}
             wallJson={ctx.wallJson} deviceR0={dev?.r0} deviceA={dev?.a} />
           <span className="dc-tile-title">TV TANGENTIAL</span>
         </div>

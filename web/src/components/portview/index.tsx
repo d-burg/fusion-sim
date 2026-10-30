@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react'
 import * as THREE from 'three'
 import type { Snapshot } from '../../lib/types'
+import type { PortConfig } from './types'
 import { getPortConfig, DEVICE_OPACITY_SCALE, DEFAULT_OPACITY_SCALE, DEVICE_GLOW_TUNING, DEFAULT_GLOW_TUNING } from './config'
 import { createCamera, updateCamera } from './camera'
 import { buildWallGeometry, buildPortGeometry, resolveExtraPortPositions } from './geometry'
@@ -19,6 +20,8 @@ interface Props {
   wallJson?: string
   deviceR0?: number
   deviceA?: number
+  /** 'wide' pulls the camera back and tilts it down so the lower divertor stays in frame at small sizes (phone layouts). */
+  framing?: 'default' | 'wide'
 }
 
 interface SceneState {
@@ -60,7 +63,14 @@ function seedMix(snapshot: Snapshot): { n: number; ne: number; ar: number } {
   return { n: n / total, ne: ne / total, ar: ar / total }
 }
 
-export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, deviceR0, deviceA }: Props) {
+/** Wider field of view and a lower aim point for small tiles: the whole lower divertor stays visible. */
+function frameConfig(cfg: PortConfig, framing: 'default' | 'wide', deviceA?: number): PortConfig {
+  if (framing !== 'wide') return cfg
+  const a = deviceA ?? 0.6
+  return { ...cfg, fov: Math.min(95, cfg.fov * 1.35), lookZ: cfg.lookZ - 0.55 * a, camZ: cfg.camZ + 0.15 * a }
+}
+
+export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, deviceR0, deviceA, framing = 'default' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<SceneState | null>(null)
   const glowIntensityRef = useRef(0)
@@ -96,7 +106,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    const cfg = getPortConfig(deviceId, deviceR0, deviceA)
+    const cfg = frameConfig(getPortConfig(deviceId, deviceR0, deviceA), framing, deviceA)
     const camera = createCamera(cfg, rect.width / rect.height)
 
     // Ambient light — very dim, divertor glow is the primary illumination
@@ -201,7 +211,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     const state = stateRef.current
     if (!state) return
 
-    const cfg = getPortConfig(deviceId, deviceR0, deviceA)
+    const cfg = frameConfig(getPortConfig(deviceId, deviceR0, deviceA), framing, deviceA)
     const axisR = snapshot?.axis_r ?? deviceR0 ?? 1.7
     const aspect = state.camera.aspect
 
@@ -290,7 +300,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
 
     state.lastDeviceId = deviceId ?? null
     state.lastWallJson = wallJson ?? null
-  }, [deviceId, deviceR0, deviceA, limiterPoints, wallJson, snapshot?.axis_r])
+  }, [deviceId, deviceR0, deviceA, framing, limiterPoints, wallJson, snapshot?.axis_r])
 
   // Update scene when snapshot or device changes
   useEffect(() => {

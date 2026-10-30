@@ -204,6 +204,7 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
           <div className="kd-ph-paircap">PORT VIEW</div>
           <div className="kd-port kd-ph-port" data-tutorial="portview">
             <PortView
+              framing="wide"
               snapshot={ctx.plasmaSnapshot}
               limiterPoints={ctx.limiterPoints}
               deviceId={ctx.activeDevice}
