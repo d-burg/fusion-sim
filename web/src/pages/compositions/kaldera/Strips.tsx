@@ -39,6 +39,8 @@ interface Props {
   /** The strip under the pointer (or linked from a readout), by id. */
   hot: string | null
   onHot: (id: string | null) => void
+  /** Canvas text size in px (live values, axis numerals); 8 on desktop. */
+  fontPx?: number
 }
 
 /** A hue from the root's CSS variables, as "r,g,b" for rgba() use. */
@@ -126,7 +128,7 @@ function valueAt(pts: Pts, t: number | null): number | null {
  * trace as a thin white line and the programme as its dotted companion. One
  * shared time axis under the bottom strip carries the only numerals.
  */
-export default function Strips({ strips, stations, duration, clock, scrubTime, onScrub, hot, onHot }: Props) {
+export default function Strips({ strips, stations, duration, clock, scrubTime, onScrub, hot, onHot, fontPx = 8 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cursorRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -154,7 +156,7 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
     setStripH((prev) => (Math.abs(prev - sh) > 0.01 ? sh : prev))
     const stationXs = stations.map((s) => Math.round(X(Math.min(s.t, T))) + 0.5)
 
-    applyCaps(g, box, 8)
+    applyCaps(g, box, fontPx)
     g.lineWidth = 1
     const warm = hueRgb(box, '--kd-warm', '#f0a98a')
 
@@ -169,7 +171,7 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
     strips.forEach((s, i) => {
       const y0 = Math.round(i * sh) + 0.5, y1 = Math.round((i + 1) * sh) + 0.5
       const h = y1 - y0
-      const top = y0 + 14, bot = y1 - 3
+      const top = y0 + fontPx + 6, bot = y1 - 3
 
       // the faint grid: verticals at the stations, two horizontals
       g.strokeStyle = 'rgba(255,255,255,0.05)'
@@ -240,7 +242,7 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
       g.fillText(`${s.t.toFixed(2)}${last ? ' S' : ''}`, i === 0 ? 0 : last ? W : x, ay + 5)
     })
 
-  }, [strips, stations, duration, scrubTime, hot])
+  }, [strips, stations, duration, scrubTime, hot, fontPx])
 
   useEffect(() => { draw() }, [draw])
 

@@ -16,7 +16,9 @@ interface Props {
  * look and tour, then BEGIN. In the Modern grammar: a hairline-bordered
  * card on a flat mask, tracked caps, the active choice as a white square.
  * Hovering a look previews it behind the card (render-only, nothing stored);
- * clicking commits it through setLook.
+ * clicking commits it through setLook. On touch there is no hover: a tap
+ * commits, and the chosen look shows behind the card before BEGIN. On phones
+ * the card is a full-width bottom sheet with 44 px targets.
  */
 export default function FirstRunCard({ onClose, onStartTour, onPreview }: Props) {
   const { sound, setSound, look, setLook } = useSettings()
@@ -33,7 +35,19 @@ export default function FirstRunCard({ onClose, onStartTour, onPreview }: Props)
   }, [onClose, onPreview])
 
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close() } }
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(); return }
+      // Tab stays inside the card (it is aria-modal): wrap at either end.
+      const card = cardRef.current
+      if (e.key !== 'Tab' || !card) return
+      const items = Array.from(card.querySelectorAll<HTMLElement>('button:not([disabled])'))
+      if (!items.length) return
+      const first = items[0], last = items[items.length - 1]
+      const at = document.activeElement
+      if (!card.contains(at)) { e.preventDefault(); (e.shiftKey ? last : first).focus() }
+      else if (e.shiftKey && (at === first || at === card)) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus() }
+    }
     document.addEventListener('keydown', key)
     return () => document.removeEventListener('keydown', key)
   }, [close])
@@ -66,7 +80,7 @@ export default function FirstRunCard({ onClose, onStartTour, onPreview }: Props)
 
         <div className="fr-row">
           <div className="fr-cap"><span className="fr-num">02</span> . LOOK</div>
-          <div className="fr-looks" onPointerLeave={() => preview(null)}>
+          <div className="fr-looks" onPointerLeave={(e) => { if (e.pointerType === 'mouse') preview(null) }}>
             {LOOKS.map((l) => (
               <div key={l.id} className="fr-look">
                 <button
@@ -74,8 +88,8 @@ export default function FirstRunCard({ onClose, onStartTour, onPreview }: Props)
                   className="fr-choice"
                   data-on={look === l.id}
                   data-preview={hovered === l.id && look !== l.id}
-                  onPointerEnter={() => preview(l.id)}
-                  onPointerLeave={() => preview(null)}
+                  onPointerEnter={(e) => { if (e.pointerType === 'mouse') preview(l.id) }}
+                  onPointerLeave={(e) => { if (e.pointerType === 'mouse') preview(null) }}
                   onFocus={() => preview(l.id)}
                   onBlur={() => preview(null)}
                   onClick={() => commitLook(l.id)}
@@ -146,8 +160,25 @@ const FR_CSS = `
   padding: 2px 0; margin: 0; font-size: 10px; color: rgba(255,255,255,0.9); cursor: pointer;
 }
 .fr-begin:hover { color: #fff; border-bottom-color: #fff; }
-@media (max-width: 560px) {
-  .fr-row { grid-template-columns: 1fr; row-gap: 10px; }
-  .fr-looks { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 767px), (max-height: 500px) and (max-width: 1023px) {
+  .fr-root { align-items: flex-end; padding: 0; }
+  .fr-mask { background: rgba(0,0,0,0.4); }
+  .fr-card {
+    width: 100%; max-height: 82vh; border-left: 0; border-right: 0; border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .fr-head { padding: 14px 16px 10px; font-size: 11px; }
+  .fr-row { grid-template-columns: 1fr; row-gap: 2px; padding: 8px 16px 6px; }
+  .fr-cap { font-size: 10px; }
+  .fr-choices { gap: 4px 10px; }
+  .fr-looks { grid-template-columns: repeat(2, 1fr); gap: 0 10px; }
+  .fr-choice, .fr-begin { min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px; margin-left: -8px; font-size: 11px; }
+  .fr-choice[data-on="true"] { background: linear-gradient(#fff, #fff) center / 100% 20px no-repeat; }
+  .fr-foot { padding: 4px 16px 10px; }
+  .fr-begin { border-bottom: 0; margin: 0 -8px 0 0; text-decoration: underline dotted rgba(255,255,255,0.45); text-underline-offset: 4px; }
+}
+@media (max-height: 500px) and (max-width: 1023px) {
+  .fr-row { grid-template-columns: 96px 1fr; align-items: center; padding: 2px 16px; }
+  .fr-looks { grid-template-columns: repeat(4, auto); justify-content: start; }
 }
 `

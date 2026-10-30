@@ -15,6 +15,8 @@ interface Props {
   onPause: () => void
   onReset: () => void
   onScrub: (t: number | null) => void
+  /** Phone: only the playhead scrubs (no taps or drags on the line). */
+  headOnly?: boolean
 }
 
 const fmtT = (t: number) => `${Math.max(0, t).toFixed(3)} S`
@@ -24,7 +26,7 @@ const fmtT = (t: number) => `${Math.max(0, t).toFixed(3)} S`
  * circular playhead that is the Start/Pause control. After the pulse the
  * playhead can be dragged (or the line clicked) to scrub.
  */
-export default function Timeline({ stations, duration, clock, scrubTime, running, finished, onStart, onPause, onReset, onScrub }: Props) {
+export default function Timeline({ stations, duration, clock, scrubTime, running, finished, onStart, onPause, onReset, onScrub, headOnly }: Props) {
   const trackRef = useRef<HTMLDivElement>(null)
   const T = duration > 0 ? duration : 10
   const cur = scrubTime ?? Math.min(clock.get(), T)
@@ -50,7 +52,7 @@ export default function Timeline({ stations, duration, clock, scrubTime, running
   }
 
   const trackDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!finished) return
+    if (!finished || headOnly) return
     if ((e.target as HTMLElement).closest('.kd-playhead')) return
     e.currentTarget.setPointerCapture(e.pointerId)
     scrubAt(e.clientX)
@@ -83,8 +85,8 @@ export default function Timeline({ stations, duration, clock, scrubTime, running
       data-tutorial="controls"
       data-scrub={finished}
       onPointerDown={trackDown}
-      onPointerMove={(e) => { if (finished && e.buttons & 1 && !(e.target as HTMLElement).closest('.kd-playhead')) scrubAt(e.clientX) }}
-      onDoubleClick={() => { if (finished) onScrub(null) }}
+      onPointerMove={(e) => { if (finished && !headOnly && e.buttons & 1 && !(e.target as HTMLElement).closest('.kd-playhead')) scrubAt(e.clientX) }}
+      onDoubleClick={() => { if (finished && !headOnly) onScrub(null) }}
     >
       <div className="kd-line" />
       {stations.map((s, i) => (
@@ -94,6 +96,7 @@ export default function Timeline({ stations, duration, clock, scrubTime, running
           style={{ left: `${(Math.min(s.t, T) / T) * 100}%` }}
           data-passed={cur >= s.t}
           data-anchor={i === 0 ? 'start' : i === stations.length - 1 ? 'end' : 'mid'}
+          data-half={s.t < T / 2 ? 'first' : 'second'}
         >
           <span className="kd-station-tick" />
           <span className="kd-station-label">{s.label}</span>

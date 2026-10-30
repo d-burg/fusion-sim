@@ -10,6 +10,8 @@ interface Props {
 
 const WIDTH = 320
 const HOVER_MS = 250
+/** 320 px on desktop; on a phone the full width less 8 px margins. */
+const popWidth = () => (window.innerWidth < 768 ? window.innerWidth - 16 : Math.min(WIDTH, window.innerWidth - 16))
 
 /**
  * The label itself is the trigger: a dotted hairline under it is the whole
@@ -24,6 +26,8 @@ export default function InfoHint({ title, content, children, className }: Props)
   const popRef = useRef<HTMLDivElement>(null)
   const timer = useRef<number | null>(null)
   const inPop = useRef(false)
+  // A tap fires focus (which opens) and then click (which would toggle shut): the click right after a focus-open is ignored.
+  const focusOpenAt = useRef(0)
 
   const clear = () => { if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null } }
   const show = useCallback(() => { clear(); setOpen(true) }, [])
@@ -42,8 +46,9 @@ export default function InfoHint({ title, content, children, className }: Props)
     }
     const r = trigRef.current.getBoundingClientRect()
     const h = popRef.current?.offsetHeight ?? 240
+    const w = popWidth()
     let left = r.left
-    if (left + WIDTH > window.innerWidth - 8) left = window.innerWidth - WIDTH - 8
+    if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8
     if (left < 8) left = 8
     let top = r.bottom + 8
     if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - 8 - h)
@@ -77,8 +82,8 @@ export default function InfoHint({ title, content, children, className }: Props)
         aria-expanded={open}
         onMouseEnter={hoverIn}
         onMouseLeave={hoverOut}
-        onClick={(e) => { e.stopPropagation(); if (open) hide(); else show() }}
-        onFocus={show}
+        onClick={(e) => { e.stopPropagation(); if (open) { if (performance.now() - focusOpenAt.current > 500) hide() } else show() }}
+        onFocus={() => { if (!open) focusOpenAt.current = performance.now(); show() }}
         onBlur={() => { if (!inPop.current) hide() }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (open) hide(); else show() } }}
       >
@@ -90,7 +95,7 @@ export default function InfoHint({ title, content, children, className }: Props)
           className="kd-pop"
           data-layout="kaldera"
           role="dialog"
-          style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, width: WIDTH }}
+          style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, width: popWidth() }}
           onMouseEnter={() => { inPop.current = true; clear() }}
           onMouseLeave={() => { inPop.current = false; hoverOut() }}
         >

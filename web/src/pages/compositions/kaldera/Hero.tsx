@@ -6,6 +6,8 @@ interface Props {
   snapshot: Snapshot | null
   wallJson: string
   limiterPoints?: [number, number][]
+  /** Phone: no scale ticks, the cross-section fills the box. */
+  bare?: boolean
 }
 
 /** A polyline with the engine's marching-squares jumps broken into sub-paths. */
@@ -27,7 +29,7 @@ function tracePath(g: CanvasRenderingContext2D, c: Contour, X: (r: number) => nu
  * low opacity on the flat field. The separatrix is the one bright line and
  * carries a faint red warmth, like the render's glow on kaldera.desy.de.
  */
-export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {
+export default function Hero({ snapshot, wallJson, limiterPoints, bare }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
@@ -55,7 +57,7 @@ export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {
     const rMin = Math.min(...rs), rMax = Math.max(...rs), zMin = Math.min(...zs), zMax = Math.max(...zs)
     const dW = rMax - rMin, dH = zMax - zMin
     // margins: a hair above (the caption may overlap the empty corner), the Z scale at the left, the R labels below
-    const MT = 3, ML = 34, MB = 11
+    const MT = bare ? 4 : 3, ML = bare ? 4 : 34, MB = bare ? 4 : 11
     const pad = 0.0
     const scale = Math.min((W - ML) / (dW * (1 + 2 * pad)), (H - MT - MB) / (dH * (1 + 2 * pad)))
     const ox = ML + (W - ML - dW * scale) / 2, oy = MT + (H - MT - MB - dH * scale) / 2
@@ -74,6 +76,7 @@ export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {
     const yb = Math.round(Y(zMin)) + 0.5, xl = Math.round(X(rMin)) + 0.5
     g.textAlign = 'center'; g.textBaseline = 'top'
     const rTicks: number[] = []
+    if (!bare) {
     for (let r = Math.ceil(rMin / rStep) * rStep; r <= rMax + 1e-9; r += rStep) rTicks.push(r)
     rTicks.forEach((r, i) => {
       const x = Math.round(X(r)) + 0.5
@@ -86,6 +89,7 @@ export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {
       const y = Math.round(Y(z)) + 0.5
       g.beginPath(); g.moveTo(xl, y); g.lineTo(xl - 3, y); g.stroke()
       g.fillText((Math.abs(z) < 1e-9 ? 0 : z).toFixed(zStep < 1 ? 1 : 0), xl - 6, y)
+    }
     }
 
     const wallPath = () => {
@@ -150,7 +154,7 @@ export default function Hero({ snapshot, wallJson, limiterPoints }: Props) {
       xp(snapshot.xpoint_upper_r ?? 0, snapshot.xpoint_upper_z ?? 0)
       g.restore()
     }
-  }, [snapshot, wallJson, limiterPoints])
+  }, [snapshot, wallJson, limiterPoints, bare])
 
   useEffect(() => { draw() }, [draw])
   useEffect(() => {
