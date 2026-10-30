@@ -67,7 +67,9 @@ function seedMix(snapshot: Snapshot): { n: number; ne: number; ar: number } {
 function frameConfig(cfg: PortConfig, framing: 'default' | 'wide', deviceA?: number): PortConfig {
   if (framing !== 'wide') return cfg
   const a = deviceA ?? 0.6
-  return { ...cfg, fov: Math.min(95, cfg.fov * 1.35), lookZ: cfg.lookZ - 0.55 * a, camZ: cfg.camZ + 0.15 * a }
+  // Between the desktop framing and a full wide-angle: enough to bring the lower
+  // divertor into the tile without the void outside the wall showing in the corners.
+  return { ...cfg, fov: Math.min(90, cfg.fov * 1.18), lookZ: cfg.lookZ - 0.3 * a, camZ: cfg.camZ + 0.08 * a }
 }
 
 export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, deviceR0, deviceA, framing = 'default' }: Props) {
