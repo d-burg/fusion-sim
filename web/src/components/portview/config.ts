@@ -104,6 +104,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     portR: 2.73, portZ: 0, portRadius: 0.42, portLength: 0.22, portPhi: 0,
     camR: 2.95, camZ: 0.04, camPhi: 0,
     lookR: 1.30, lookZ: -0.02, lookPhi: 0.26, fov: 80,
+    wide: { lookPhi: 0.32 },
     tileColor: [22, 22, 26],
     tileGridSpacing: { poloidal: 0.10, toroidal: 0.10 },
     tileGridDarken: 0.28,
@@ -234,7 +235,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     camR: 4.10, camZ: 0.06, camPhi: 0,
     lookR: 2.00, lookZ: -0.03, lookPhi: 0.25, fov: 80,
     // JET's wall is close to the port: the generic phone tilt shows the outside of the model, so tilt less.
-    wide: { fov: 84, camZ: 0.10, lookZ: -0.14 },
+    wide: { fov: 84, camZ: 0.10, lookZ: -0.14, lookPhi: 0.31 },
     tileColor: [32, 30, 28],
     tileGridSpacing: { poloidal: 0.12, toroidal: 0.10 },
     tileGridDarken: 0.15,

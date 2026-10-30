@@ -70,7 +70,7 @@ function frameConfig(cfg: PortConfig, framing: 'default' | 'wide', deviceA?: num
   // Between the desktop framing and a full wide-angle: enough to bring the lower
   // divertor into the tile without the void outside the wall showing in the corners.
   const w = cfg.wide ?? {}
-  return { ...cfg, fov: w.fov ?? Math.min(90, cfg.fov * 1.18), lookZ: w.lookZ ?? cfg.lookZ - 0.3 * a, camZ: w.camZ ?? cfg.camZ + 0.08 * a }
+  return { ...cfg, fov: w.fov ?? Math.min(90, cfg.fov * 1.18), lookZ: w.lookZ ?? cfg.lookZ - 0.3 * a, camZ: w.camZ ?? cfg.camZ + 0.08 * a, lookPhi: w.lookPhi ?? cfg.lookPhi }
 }
 
 export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, deviceR0, deviceA, framing = 'default' }: Props) {
