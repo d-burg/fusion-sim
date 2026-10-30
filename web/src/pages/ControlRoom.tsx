@@ -56,7 +56,7 @@ function getPresets(deviceId: string): { id: PresetId; label: string }[] {
 
 export default function ControlRoom() {
   const { deviceId: routeDeviceId } = useParams<{ deviceId: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const routePreset = (searchParams.get('preset') || 'hmode') as PresetId
   const showTutorial = searchParams.get('tutorial') === 'true'
   // The control room renders one of the compositions. The look chosen in
@@ -73,6 +73,15 @@ export default function ControlRoom() {
   const location = useLocation()
   const rawHandoff = (location.state ?? null) as ProgramHandoff | null
   const handoff = typeof rawHandoff?.programJson === 'string' ? rawHandoff : null
+  // A ?layout= link that differs from the stored look pins the view; the settings
+  // menu says so and offers to drop the parameter (other parameters are kept).
+  const layoutFixed = layoutParam !== null && layoutParam !== look
+  const releaseLayout = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('layout')
+    setSearchParams(next, { replace: true, state: location.state })
+  }
+  const layoutLock = layoutFixed ? { slug: layoutParam, onRelease: releaseLayout } : undefined
 
   // Local state so user can switch without navigating
   const [tutorialActive, setTutorialActive] = useState(showTutorial)
@@ -260,14 +269,14 @@ export default function ControlRoom() {
       fuelType, showsFuelToggle: activeDevice === 'jet' || activeDevice === 'iter', onFuelChange: handleFuelChange,
       activeSpeed, onSpeedChange: handleSpeedChange, hasCustomProgram,
       showPlanner, togglePlanner: () => setShowPlanner((v) => !v), plannerNode,
-      settingsNode: <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} />,
+      settingsNode: <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} layoutLock={layoutLock} />,
       tutorialNode: tutorialActive ? <TutorialOverlay onComplete={() => setTutorialActive(false)} /> : null,
     }
     return (
       <>
         <LayoutComponent ctx={ctx} />
         {firstRunOpen && (
-          <FirstRunCard onClose={() => setFirstRunOpen(false)} onStartTour={() => setTutorialActive(true)} onPreview={setPreviewLook} />
+          <FirstRunCard onClose={() => setFirstRunOpen(false)} onStartTour={() => setTutorialActive(true)} onPreview={setPreviewLook} fixedByLink={layoutParam !== null} />
         )}
       </>
     )
@@ -419,7 +428,7 @@ export default function ControlRoom() {
               </span>
             )}
           </div>
-          <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} />
+          <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} layoutLock={layoutLock} />
         </div>
       </div>
 

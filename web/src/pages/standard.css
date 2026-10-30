@@ -30,9 +30,9 @@
 [data-page="landing"] { min-height: 100vh; display: flex; flex-direction: column; }
 [data-page] .sp-g { text-transform: none; }
 [data-page] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
-[data-page] .sp-num { color: rgba(255,255,255,0.45); }
+[data-page] .sp-num { color: rgba(255,255,255,0.5); }
 [data-page] .sp-head { font-size: 9px; color: rgba(255,255,255,0.7); white-space: nowrap; }
-[data-page] .sp-head-r { font-size: 8px; color: rgba(255,255,255,0.45); white-space: nowrap; font-variant-numeric: tabular-nums; }
+[data-page] .sp-head-r { font-size: 8px; color: rgba(255,255,255,0.5); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* every control is text; the reset applies to our own classes only, never to shared chrome */
 [data-page] .sp-link, [data-page] .sp-row, [data-page] .sp-tile, [data-page] .sp-edit,
@@ -129,7 +129,7 @@
 [data-page="landing"] .sp-select { margin-top: 24px; }
 [data-page="landing"] .sp-foot {
   margin-top: auto; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
-  padding: 36px var(--sp-x) 28px; font-size: 8px; color: rgba(255,255,255,0.45);
+  padding: 36px var(--sp-x) 28px; font-size: 8px; color: rgba(255,255,255,0.5);
 }
 
 /* ── program page ────────────────────────────────────────────────── */
@@ -154,7 +154,7 @@
 [data-page="program"] .sp-row-word { color: rgba(255,255,255,0.7); padding: 2px 3px; margin-left: -3px; line-height: 1; white-space: nowrap; }
 [data-page="program"] .sp-row:hover .sp-row-word { color: #fff; }
 [data-page="program"] .sp-row[data-on="true"] .sp-row-word { background: #fff; color: var(--sp-field); }
-[data-page="program"] .sp-row-cap { font-size: 8px; color: rgba(255,255,255,0.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+[data-page="program"] .sp-row-cap { font-size: 8px; color: rgba(255,255,255,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 [data-page="program"] .sp-dur {
   display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
   border-top: 1px solid var(--sp-line); border-bottom: 1px solid var(--sp-line); padding: 10px 0 10px;
@@ -307,7 +307,7 @@
 [data-page="bibliography"] .sp-bib-body strong { font-weight: 500; color: #fff; }
 [data-page="bibliography"] .sp-bib-body ul, [data-page="bibliography"] .sp-bib-body ol { margin: 0; padding-left: 1.4em; }
 [data-page="bibliography"] .sp-bib-body li { margin: 0; }
-[data-page="bibliography"] .sp-bib-body li::marker { color: rgba(255,255,255,0.4); }
+[data-page="bibliography"] .sp-bib-body li::marker { color: rgba(255,255,255,0.5); }
 [data-page="bibliography"] .sp-bib-body sub, [data-page="bibliography"] .sp-bib-body sup { font-size: 0.75em; letter-spacing: 0; position: static; vertical-align: sub; }
 [data-page="bibliography"] .sp-bib-body sup { vertical-align: super; }
 /* equations: monochrome mono on a hairline left rule, set as they are */
@@ -342,7 +342,7 @@
 [data-page="bibliography"] .sp-bib-link:hover { color: var(--sp-warm); border-bottom-color: var(--sp-warm); }
 [data-page="bibliography"] .sp-bib-foot {
   display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
-  margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--sp-line); color: rgba(255,255,255,0.45);
+  margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--sp-line); color: rgba(255,255,255,0.5);
 }
 @media (max-width: 56rem) {
   [data-page="bibliography"] .sp-bib-main { grid-template-columns: minmax(0, 1fr); row-gap: 32px; }

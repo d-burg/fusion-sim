@@ -9,6 +9,8 @@ interface Props {
   onStartTour: () => void
   /** Transient preview while a look name is hovered; null clears it. Never persisted. */
   onPreview: (l: Look | null) => void
+  /** A ?layout= link fixes the rendered layout, so hover preview has nothing to show. */
+  fixedByLink?: boolean
 }
 
 /**
@@ -20,13 +22,16 @@ interface Props {
  * commits, and the chosen look shows behind the card before BEGIN. On phones
  * the card is a full-width bottom sheet with 44 px targets.
  */
-export default function FirstRunCard({ onClose, onStartTour, onPreview }: Props) {
+export default function FirstRunCard({ onClose, onStartTour, onPreview, fixedByLink = false }: Props) {
   const { sound, setSound, look, setLook } = useSettings()
   const [hovered, setHovered] = useState<Look | null>(null)
   const beginRef = useRef<HTMLButtonElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
 
-  const preview = useCallback((l: Look | null) => { setHovered(l); onPreview(l) }, [onPreview])
+  const preview = useCallback((l: Look | null) => {
+    if (fixedByLink) return
+    setHovered(l); onPreview(l)
+  }, [onPreview, fixedByLink])
 
   const close = useCallback(() => {
     onPreview(null)
@@ -79,7 +84,10 @@ export default function FirstRunCard({ onClose, onStartTour, onPreview }: Props)
         </div>
 
         <div className="fr-row">
-          <div className="fr-cap"><span className="fr-num">02</span> . LOOK</div>
+          <div className="fr-cap">
+            <span className="fr-num">02</span> . LOOK
+            {fixedByLink && <span className="fr-fixed">FIXED BY LINK</span>}
+          </div>
           <div className="fr-looks" onPointerLeave={(e) => { if (e.pointerType === 'mouse') preview(null) }}>
             {LOOKS.map((l) => (
               <div key={l.id} className="fr-look">
@@ -138,7 +146,8 @@ const FR_CSS = `
 .fr-row { display: grid; grid-template-columns: 96px 1fr; column-gap: 16px; align-items: baseline; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08); }
 .fr-head + .fr-row { border-top: 0; }
 .fr-cap { font-size: 9px; color: rgba(255,255,255,0.7); white-space: nowrap; }
-.fr-num { color: rgba(255,255,255,0.4); }
+.fr-num { color: rgba(255,255,255,0.5); }
+.fr-fixed { display: block; margin-top: 4px; font-size: 8px; color: rgba(255,255,255,0.5); }
 .fr-choices { display: flex; flex-wrap: wrap; gap: 18px; }
 .fr-choice {
   background: none; border: 0; border-radius: 0; margin: 0; padding: 3px 4px; line-height: 1;

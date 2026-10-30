@@ -69,7 +69,7 @@ export default function Hero({ snapshot, wallJson, limiterPoints, bare }: Props)
     const step = (span: number) => { const raw = span / 3, p10 = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / p10; return (r < 1.5 ? 1 : r < 3.5 ? 2 : 5) * p10 }
     applyCaps(g, box, 8)
     ;(g as unknown as { letterSpacing: string }).letterSpacing = '0.1em'
-    g.fillStyle = 'rgba(255,255,255,0.4)'
+    g.fillStyle = 'rgba(255,255,255,0.5)'
     g.strokeStyle = 'rgba(255,255,255,0.25)'
     g.lineWidth = 1
     const rStep = step(dW), zStep = step(dH)

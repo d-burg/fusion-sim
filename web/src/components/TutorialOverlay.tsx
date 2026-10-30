@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react'
+import { usePhone } from '../pages/compositions/usePhone'
 
 /* ═══════════════════════════════════════════════════════════════════
    TutorialOverlay — step-by-step guided tour of the control room.
@@ -403,6 +404,16 @@ interface TutorialOverlayProps {
 const CARD_W = 380
 const GAP = 14
 const MARGIN = 8
+/** Phone sheet: room left at the bottom for the pinned control strip when it cannot be measured. */
+const STRIP_FALLBACK = 110
+
+/** Height of the phone's pinned control strip, read from the controls anchor when it sits along the bottom. */
+function stripHeight(): number {
+  const el = document.querySelector('[data-tutorial="controls"]')
+  if (!el) return STRIP_FALLBACK
+  const r = el.getBoundingClientRect(), vh = window.innerHeight
+  return r.height > 0 && r.top > vh / 2 && Math.abs(r.bottom - vh) < 2 ? Math.round(vh - r.top) : STRIP_FALLBACK
+}
 
 /** Is a step available on the current page? Target-less steps always are. */
 function available(s: TutorialStep): boolean {
@@ -416,6 +427,8 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
   const [visible, setVisible] = useState(false)
   const [pos, setPos] = useState<React.CSSProperties>({})
   const cardRef = useRef<HTMLDivElement>(null)
+  // Below 768 px (and on landscape phones) the card is a bottom sheet above the control strip.
+  const phone = usePhone()
 
   const current = STEPS[step]
 
@@ -439,13 +452,39 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
     const measure = () => setRect(el.getBoundingClientRect())
     measure()
     window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [step, current.target])
+    // On a phone the page scrolls under the sheet, so the outline follows the target.
+    if (phone) window.addEventListener('scroll', measure, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, { capture: true })
+    }
+  }, [step, current.target, phone])
+
+  // Phone: bring the target into the space above the sheet. scroll-margin-bottom
+  // set to the sheet and strip heights makes block 'center' center the target
+  // in that free band rather than in the whole viewport.
+  useEffect(() => {
+    if (!phone || !current.target) return
+    const el = document.querySelector<HTMLElement>(current.target)
+    if (!el) return
+    const raf = requestAnimationFrame(() => {
+      const below = (cardRef.current?.offsetHeight ?? 0) + stripHeight()
+      const prev = el.style.scrollMarginBottom
+      el.style.scrollMarginBottom = `${below}px`
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      el.style.scrollMarginBottom = prev
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [step, current.target, phone])
 
   useEffect(() => { cardRef.current?.scrollTo(0, 0) }, [step])
 
   // Place the card beside its target without covering it, then clamp to the viewport.
   useLayoutEffect(() => {
+    if (phone) {
+      setPos({ left: 0, right: 0, bottom: stripHeight() })
+      return
+    }
     const card = cardRef.current
     const vw = window.innerWidth, vh = window.innerHeight
     const h = card?.offsetHeight ?? 300
@@ -472,7 +511,7 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
     left = Math.max(MARGIN, Math.min(left, vw - CARD_W - MARGIN))
     top = Math.max(MARGIN, Math.min(top, vh - h - MARGIN))
     setPos({ top, left })
-  }, [rect, step, current.placement])
+  }, [rect, step, current.placement, phone])
 
   const finish = useCallback(() => { setVisible(false); setTimeout(onComplete, 300) }, [onComplete])
 
@@ -508,14 +547,29 @@ export default function TutorialOverlay({ onComplete }: TutorialOverlayProps) {
     ? { clipPath: `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${rect.left - 4}px ${rect.top - 4}px, ${rect.left - 4}px ${rect.bottom + 4}px, ${rect.right + 4}px ${rect.bottom + 4}px, ${rect.right + 4}px ${rect.top - 4}px, ${rect.left - 4}px ${rect.top - 4}px)` }
     : undefined
 
+  // The outline sits 4 px outside the target. On a phone a full-width target
+  // (the pinned control strip) would put that off-screen or under the sheet,
+  // so the box is kept inside the viewport and below the sheet's lower edge.
+  let outline: React.CSSProperties | undefined
+  if (rect) {
+    let top = rect.top - 4, left = rect.left - 4, right = rect.right + 4, bottom = rect.bottom + 4
+    if (phone) {
+      const vw = window.innerWidth, vh = window.innerHeight
+      const sheetBottom = vh - (typeof pos.bottom === 'number' ? pos.bottom : 0)
+      if (rect.top >= sheetBottom - 4) top = Math.max(top, sheetBottom)
+      left = Math.max(0, left); right = Math.min(vw, right); bottom = Math.min(vh, bottom)
+    }
+    outline = { top, left, width: right - left, height: bottom - top }
+  }
+
   return (
-    <div className="tour-root" data-visible={visible}>
+    <div className="tour-root" data-visible={visible} data-phone={phone || undefined}>
       <style>{TOUR_CSS}</style>
       <div className="tour-mask" style={mask} onClick={(e) => { if (e.target === e.currentTarget) next() }} />
       {rect && (
-        <div className="tour-outline" style={{ top: rect.top - 4, left: rect.left - 4, width: rect.width + 8, height: rect.height + 8 }} />
+        <div className="tour-outline" style={outline} />
       )}
-      <div ref={cardRef} className="tour-card" style={{ ...pos, width: CARD_W }} role="dialog" aria-label={current.title}>
+      <div ref={cardRef} className="tour-card" style={phone ? pos : { ...pos, width: CARD_W }} role="dialog" aria-label={current.title}>
         <div className="tour-head">
           <span className="tour-count">{pad(index)} / {pad(shown)}</span>
           <span className="tour-title">{current.title}</span>
@@ -548,7 +602,7 @@ const TOUR_CSS = `
 .tour-head { position: sticky; top: 0; z-index: 1; background: #0c1018; display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; padding: 14px 18px 8px; border-bottom: 1px solid rgba(255,255,255,0.12);
   font-family: var(--kd-caps, 'Mona Sans', sans-serif); font-weight: var(--kd-caps-weight, 400); font-stretch: var(--kd-caps-stretch, 125%);
   font-size: 9px; letter-spacing: var(--kd-caps-track, 0.12em); text-transform: uppercase; }
-.tour-count { color: rgba(255,255,255,0.45); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tour-count { color: rgba(255,255,255,0.5); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tour-title { color: #fff; }
 .tour-body { padding: 0 18px; }
 .tour-body p { margin: 0 0 8px; }
@@ -565,4 +619,16 @@ const TOUR_CSS = `
 .tour-foot .tour-link:hover { color: #fff; border-bottom-color: #fff; }
 .tour-foot .tour-link:disabled { color: rgba(255,255,255,0.3); border-bottom-color: rgba(255,255,255,0.15); cursor: default; }
 .tour-foot .tour-skip { color: rgba(255,255,255,0.55); }
+
+/* Phone: a full-width bottom sheet above the pinned control strip. The root and
+   mask let touches through so the page still scrolls; only the sheet takes input. */
+.tour-root[data-phone][data-visible="true"] { pointer-events: none; }
+.tour-root[data-phone] .tour-mask { pointer-events: none; }
+.tour-root[data-phone][data-visible="true"] .tour-card { pointer-events: auto; }
+.tour-root[data-phone] .tour-card { width: auto; max-height: 42vh; border-left: 0; border-right: 0; overscroll-behavior: contain; }
+.tour-root[data-phone] .tour-head { padding: 12px 16px 8px; font-size: 10px; }
+.tour-root[data-phone] .tour-body { padding: 0 16px; }
+.tour-root[data-phone] .tour-foot { margin-top: 6px; padding: 0 16px; font-size: 11px; align-items: center; }
+.tour-root[data-phone] .tour-foot .tour-link { min-height: 44px; padding: 0 8px; margin: 0 -8px; border-bottom: 0; text-decoration: underline dotted rgba(255,255,255,0.45); text-underline-offset: 4px; }
+.tour-root[data-phone] .tour-foot .tour-link:disabled { text-decoration-color: rgba(255,255,255,0.15); }
 `

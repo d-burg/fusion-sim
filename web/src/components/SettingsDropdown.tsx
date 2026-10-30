@@ -3,7 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useSettings, LOOKS, type Sound, type Units } from '../lib/settingsContext'
 import { reopenFirstRun } from '../lib/firstRun'
 
-export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutorial?: () => void } = {}) {
+interface Props {
+  onRestartTutorial?: () => void
+  /** Set when a ?layout= link overrides the stored look: names the layout and drops the parameter. */
+  layoutLock?: { slug: string; onRelease: () => void }
+}
+
+export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Props = {}) {
   const { units, look, sound, setUnits, setLook, setSound } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -91,6 +97,18 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
                 </button>
               ))}
             </div>
+            {layoutLock && (
+              <div className="settings-lock mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[9px] uppercase tracking-[0.12em] text-gray-400">
+                <span>LAYOUT FIXED BY LINK . {layoutLock.slug}</span>
+                <button
+                  type="button"
+                  onClick={() => { layoutLock.onRelease(); setOpen(false) }}
+                  className="shrink-0 uppercase tracking-[0.12em] text-gray-200 border-b border-dotted border-gray-500 hover:text-white cursor-pointer"
+                >
+                  USE MY LOOK
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Units toggle */}
