@@ -31,7 +31,7 @@ const LABEL: Record<string, ReactNode> = {
   Ip: <>I<sub>p</sub></>, Bt: <>B<sub>t</sub></>, ne: <>n<sub>e</sub></>, fGW: <>f<sub>GW</sub></>,
   tauE: <>τ<sub>E</sub></>, H98: <>H<sub>98</sub></>, betaN: <>β<sub>N</sub></>, q95: <>q<sub>95</sub></>, li: <>l<sub>i</sub></>,
   Pin: <>P<sub>in</sub></>, POH: <>P<sub>OH</sub></>, Prad: <>P<sub>rad</sub></>,
-  q_perp: 'Divertor heat flux', T_surf: 'Surface temperature', Sn: 'Neutrons', Pfus: <>P<sub>fus</sub></>,
+  q_perp: 'Divertor heat flux', lambdaQ: <>λ<sub>q</sub></>, fDet: <>f<sub>det</sub></>, T_surf: 'Surface temperature', Sn: 'Neutrons', Pfus: <>P<sub>fus</sub></>,
   Vloop: <>V<sub>loop</sub></>, PsiOH: <>Ψ<sub>OH</sub></>, Zeff: <>Z<sub>eff</sub></>, hazard: 'Hazard',
 }
 
@@ -54,7 +54,7 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
       na('Ip', 'MA'), na('Bt', 'T'), na('ne', '1e20 m-3'), na('fGW', ''),
       na('tauE', 's'), na('H98', ''), na('betaN', ''), na('q95', ''), na('li', ''),
       na('Pin', 'MW'), na('POH', 'MW'), na('Prad', 'MW'),
-      na('q_perp', 'MW/m2'), ...(d.isW ? [na('T_surf', '°C')] : []), na('Sn', 'n/s'), na('Pfus', 'MW'), na('Q', ''),
+      na('q_perp', 'MW/m2'), na('lambdaQ', 'mm'), na('fDet', ''), ...(d.isW ? [na('T_surf', '°C')] : []), na('Sn', 'n/s'), na('Pfus', 'MW'), na('Q', ''),
       na('Vloop', 'V'), na('PsiOH', 'V·s'), na('Zeff', ''), na('hazard', '1/s'),
     ]
   }
@@ -83,8 +83,11 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
     { name: 'Prad', value: f(s.p_rad, 1), unit: 'MW', state: st(s.p_input > 0 ? band(s.p_rad / s.p_input, 0.6, 0.9) : 'ok') },
     // Te0, Wth, Ploss and Palpha are left out for room: Te0 and Wth are always-OK rows the jScope already plots,
     // Pin and Prad bracket the power balance, and Pfus carries the fusion power.
-    { name: 'q_perp', value: f(d.q, 1), unit: 'MW/m2', state: st(toneState(d.qTone)), bar: plasma ? d.qFill : undefined },
-    ...(d.isW ? [{ name: 'T_surf', value: f(d.tSurf, 0), unit: '°C', state: st(toneState(d.tTone)), bar: plasma ? d.tFill : undefined }] : []),
+    // the divertor rows name their regime in the state cell, as the other looks do
+    { name: 'q_perp', value: f(d.q, 1), unit: 'MW/m2', state: st(toneState(d.qTone)), bar: plasma ? d.qFill : undefined, word: plasma && d.regime !== '—' ? d.regime : undefined },
+    { name: 'lambdaQ', value: plasma && d.valid ? f(d.lambdaQ, 1) : '---', unit: 'mm', state: st('ok') },
+    { name: 'fDet', value: plasma && d.valid ? f(d.fDet, 2) : '---', unit: '', state: st(toneState(d.regimeTone)) },
+    ...(d.isW ? [{ name: 'T_surf', value: f(d.tSurf, 0), unit: '°C', state: st(toneState(d.tTone)), bar: plasma ? d.tFill : undefined, word: plasma ? (d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL') : undefined }] : []),
     { name: 'Sn', value: d.rate > 0 ? d.rate.toExponential(2).replace('+', '') : '0', unit: 'n/s', state: st(d.active ? 'ok' : 'off'), word: plasma && !d.active ? 'IDLE' : undefined, bar: plasma ? d.nFill : undefined },
     { name: 'Pfus', value: f(d.pFus, d.pFus < 10 ? 3 : 1), unit: 'MW', state: st('ok') },
     { name: 'Q', value: d.rate > 0 ? formatQ(d.qPlasma) : '0', unit: '', state: st('ok') },
@@ -121,7 +124,7 @@ export default function InterlockTable({ snapshot, device }: { snapshot: Snapsho
               )}
             </td>
             <td className="unit">{r.unit}</td>
-            <td className={`state state-${r.state}`}>{r.word ?? WORD[r.state]}</td>
+            <td className={`state state-${r.state}${(r.word ?? '').length > 10 ? ' state-long' : ''}`}>{r.word ?? WORD[r.state]}</td>
           </tr>
         ))}
       </tbody>

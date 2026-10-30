@@ -6,7 +6,7 @@ import Hero from './kaldera/Hero'
 import Strips, { type Pts, type Strip } from './kaldera/Strips'
 import Timeline, { type Station } from './kaldera/Timeline'
 import { flatTopWindow, parseProgram, pulsePhase, type Waveform } from './kaldera/phase'
-import { reconstructionValid } from '../../lib/pulseLog'
+import { reconstructionValid, type ReportRow } from '../../lib/pulseLog'
 import { equilibriumInfo, plasmaParamsInfo, powerBalanceInfo, stabilityInfo, traceDescriptions } from '../../components/infoContent'
 import InfoHint from './kaldera/InfoHint'
 import Diagnostics, { type Tone } from './kaldera/Diagnostics'
@@ -117,6 +117,45 @@ function band(v: number | undefined, warn: number, bad: number, below = false): 
 /** Greek glyphs escape the page-wide uppercase transform (β would become B). */
 const G = ({ children }: { children: ReactNode }) => <span className="kd-g">{children}</span>
 
+/** Hazard rate (probability per second) as percent per second, two significant figures. */
+function hazardPct(p: number | undefined): string {
+  if (p === undefined || !isFinite(p)) return '—'
+  const v = p * 100
+  if (v <= 0) return '0'
+  if (v < 0.0001) return '< 0.0001'
+  return v.toFixed(Math.min(5, Math.max(0, 1 - Math.floor(Math.log10(v)))))
+}
+
+/** Report labels with their symbols set as the readouts set them (Greek kept lower-case, subscripts real). */
+function reportLabel(label: string): ReactNode {
+  const SYM: Record<string, ReactNode> = {
+    'V_loop': <>V<sub>LOOP</sub></>, 'W_th': <>W<sub>TH</sub></>, 'βN': <><G>β</G><sub>N</sub></>,
+    'fGW': <>F<sub>GW</sub></>, 'q95': <>Q<sub>95</sub></>, 'P_fus': <>P<sub>FUS</sub></>, 'Ip': <>I<sub>P</sub></>,
+  }
+  return label.split(' ').map((w, i) => <span key={i}>{i > 0 ? ' ' : ''}{SYM[w] ?? w}</span>)
+}
+
+/** End-of-pulse report: achieved against programmed, one hairline-framed panel over the strips. */
+function ReportPanel({ rows, pulseNo, onClose }: { rows: ReportRow[]; pulseNo: string; onClose: () => void }) {
+  return (
+    <div className="kd-report" role="dialog" aria-label="Pulse report">
+      <div className="kd-report-head">
+        <span>PULSE {pulseNo} <span className="kd-dot">.</span> REPORT</span>
+        <button className="kd-report-x" onClick={onClose}>CLOSE</button>
+      </div>
+      <div className="kd-report-cols" aria-hidden="true"><span /><span>PROGRAMMED</span><span>ACHIEVED</span></div>
+      {rows.map((r, i) => (
+        <div key={i} className="kd-report-row">
+          <span className="kd-report-l">{reportLabel(r.label)}</span>
+          <span className="kd-report-p">{r.programmed ?? '—'}</span>
+          <span className="kd-report-a" data-tone={r.status === 'major' ? 'bad' : r.status === 'minor' ? 'warn' : undefined}>{r.achieved}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
 const STAB = { title: 'Stability', content: stabilityInfo }
 const POWER = { title: 'Power balance', content: powerBalanceInfo }
 
@@ -167,6 +206,12 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const betaS = useEma(valid ? s?.beta_n : undefined)
   const q95S = useEma(valid ? s?.q95 : undefined)
   const fgwS = useEma(valid ? s?.f_greenwald : undefined)
+  const hazS = useEma(valid ? (s?.disruption_risk ?? 0) * 100 : undefined)
+  // The report opens with each finished pulse; CLOSE hides it until the next one (or REPORT re-opens it).
+  const [reportClosed, setReportClosed] = useState(false)
+  const [wasFinished, setWasFinished] = useState(finished)
+  if (finished !== wasFinished) { setWasFinished(finished); setReportClosed(false) }
+  const showReport = finished && !!ctx.report && ctx.report.length > 0 && !reportClosed
   const stateWord = s?.disrupted ? 'DISRUPTED' : elming ? 'ELMING' : s?.in_hmode ? 'H-MODE' : valid ? 'L-MODE' : finished && scrubTime === null ? 'COMPLETE' : 'STANDBY'
   // Reconstructed quantities mean nothing without a plasma: blank them rather than show the engine's fill values.
   const rv = (v: number | undefined) => (valid ? v : undefined)
@@ -259,6 +304,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
               {stateWord}
               {s?.oh_saturated && <span className="kd-flag">OH SATURATED</span>}
               {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
+              <span className="kd-haz">HAZARD <span className="kd-haz-v" data-tone={band(hazS, 1, 10)}>{valid ? hazardPct(s?.disruption_risk) : '—'}</span>{valid ? ' %/S' : ''}</span>
             </div>
           </div>
         </div>
@@ -310,11 +356,18 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         onScrub={ctx.controls.setScrubTime}
       />
 
+      {showReport && ctx.report && <ReportPanel rows={ctx.report} pulseNo={pulseNo} onClose={() => setReportClosed(true)} />}
+
       <footer className="kd-foot">
         <span className="kd-event" data-sev={lastEvent?.severity ?? 'info'}>
           {lastEvent ? `${lastEvent.t.toFixed(3)} S . ${lastEvent.text}` : ''}
         </span>
-        <span className="kd-foot-r">{T.toFixed(1)} S</span>
+        <span className="kd-foot-r">
+          {finished && ctx.report && ctx.report.length > 0 && (
+            <button className="kd-report-open" data-on={showReport} onClick={() => setReportClosed(showReport)}>REPORT</button>
+          )}
+          {T.toFixed(1)} S
+        </span>
       </footer>
 
       {ctx.plannerNode}

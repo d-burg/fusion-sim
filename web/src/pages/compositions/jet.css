@@ -148,9 +148,9 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
 [data-layout="jet"] .jet-table .num { text-align: right; font-weight: 700; }
 [data-layout="jet"] .jet-table .unit { color: #404040; font-family: var(--jet-sans); font-size: 10px; }
 [data-layout="jet"] .jet-table col { width: 25%; }
-[data-layout="jet"] .jet-table th:nth-child(1), [data-layout="jet"] .jet-table td:nth-child(1) { width: 116px; }
-[data-layout="jet"] .jet-table th:nth-child(2), [data-layout="jet"] .jet-table td:nth-child(2) { width: 70px; }
-[data-layout="jet"] .jet-table th:nth-child(3), [data-layout="jet"] .jet-table td:nth-child(3) { width: 56px; }
+[data-layout="jet"] .jet-table th:nth-child(1), [data-layout="jet"] .jet-table td:nth-child(1) { width: 110px; }
+[data-layout="jet"] .jet-table th:nth-child(2), [data-layout="jet"] .jet-table td:nth-child(2) { width: 62px; }
+[data-layout="jet"] .jet-table th:nth-child(3), [data-layout="jet"] .jet-table td:nth-child(3) { width: 50px; }
 /* signal names: symbols with subscripts and the written-out diagnostics, in the sans */
 [data-layout="jet"] .jet-table .sig { font-family: var(--jet-sans); }
 [data-layout="jet"] .jet-table .sig sub { font-size: 8px; line-height: 0; }
@@ -160,6 +160,8 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
 [data-layout="jet"] .jet-table .state-alarm { background: var(--jet-red); color: #fff; }
 [data-layout="jet"] .jet-table .state-off { background: #fff; color: #808080; }
 [data-layout="jet"] .jet-table .state-na { background: #e8e8e8; }
+/* a long state word (RECRYSTALLIZATION) sets smaller so the cell never clips it */
+[data-layout="jet"] .jet-table .state.state-long { font-size: 8px; letter-spacing: -0.01em; }
 
 /* Excel-style data bar inside the Value cell: a 1 px framed track behind the number, filled in the row's state colour */
 [data-layout="jet"] .jet-table .databar { position: relative; display: block; height: 12px; margin: 1px 0; border: 1px solid #808080; background: #fff; }
