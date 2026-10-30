@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- helpers shared by the desktop and phone compositions */
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import type { Snapshot } from '../../../lib/types'
 import type { ReportRow } from '../../../lib/pulseLog'
 import { powerBalanceInfo, stabilityInfo } from '../../../components/infoContent'
