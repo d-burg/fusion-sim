@@ -133,6 +133,12 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
   const cursorRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const [stripH, setStripH] = useState(0)
+  // Mirrors stripH so draw() only calls setStripH when the height really
+  // changes. draw() runs in a passive effect on every simulation frame; even
+  // an updater that returns `prev` can schedule a render once React has a
+  // stale lane on the fiber, and that repeats every frame until React logs
+  // "Maximum update depth exceeded" (seen after Pause then Start).
+  const stripHRef = useRef(0)
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current, box = boxRef.current
@@ -153,7 +159,10 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
     const X = (t: number) => (t / T) * W
     const n = Math.max(1, strips.length)
     const sh = (H - AXIS_H) / n
-    setStripH((prev) => (Math.abs(prev - sh) > 0.01 ? sh : prev))
+    if (Math.abs(stripHRef.current - sh) > 0.01) {
+      stripHRef.current = sh
+      setStripH(sh)
+    }
     const stationXs = stations.map((s) => Math.round(X(Math.min(s.t, T))) + 0.5)
 
     applyCaps(g, box, fontPx)

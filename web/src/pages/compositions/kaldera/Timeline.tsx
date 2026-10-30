@@ -124,7 +124,11 @@ export default function Timeline({ stations, duration, clock, scrubTime, running
         )}
         <span className="kd-sr">{word}</span>
       </button>
-      <div ref={timeRef} className="kd-playhead-time" style={{ left: `${pct}%` }}>{fmtT(cur)}{scrubTime !== null ? ' . SCRUB' : ''}</div>
+      {/* One string child, so React owns no separate text nodes: the clock
+          subscription above rewrites textContent, and with two children React
+          later tried to remove a ' . SCRUB' node that was gone (crash on Reset
+          after a scrub). */}
+      <div ref={timeRef} className="kd-playhead-time" style={{ left: `${pct}%` }}>{`${fmtT(cur)}${scrubTime !== null ? ' . SCRUB' : ''}`}</div>
     </div>
   )
 }
