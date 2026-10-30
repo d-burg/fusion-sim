@@ -7,6 +7,7 @@ import InfoHint from './InfoHint'
 import type { Tone } from './Diagnostics'
 import type { Waveform } from './phase'
 import { createDisplayClock, type DisplayClock } from './displayClock'
+import { Fx } from '../Fixed'
 
 export const f2 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(2) : '—')
 export const f1 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(1) : '—')
@@ -30,6 +31,8 @@ export function sumWaveforms(ws: (Waveform | undefined)[]): Waveform | undefined
 
 interface ReadoutProps {
   value: string
+  /** Widest text the value can show (e.g. '88.88'): the value sits in a slot that wide, so the unit never moves. */
+  fit?: string
   unit?: string
   caption: ReactNode
   hint?: { title: string; content: ReactNode }
@@ -42,7 +45,7 @@ interface ReadoutProps {
 }
 
 /** VALUE over a tiny caption, with air around it; the caption may carry a hint. */
-export function Readout({ value, unit, caption, hint, tone, link, hot, onHot }: ReadoutProps) {
+export function Readout({ value, fit, unit, caption, hint, tone, link, hot, onHot }: ReadoutProps) {
   return (
     <div
       className="kd-ro"
@@ -50,7 +53,7 @@ export function Readout({ value, unit, caption, hint, tone, link, hot, onHot }: 
       onMouseEnter={link && onHot ? () => onHot(link) : undefined}
       onMouseLeave={link && onHot ? () => onHot(null) : undefined}
     >
-      <div className="kd-ro-v" data-tone={tone}>{value}{unit && value !== '—' ? <span className="kd-ro-u"> {unit}</span> : null}</div>
+      <div className="kd-ro-v" data-tone={tone}>{fit ? <Fx fit={fit} align="start">{value}</Fx> : value}{unit && value !== '—' ? <span className="kd-ro-u"> {unit}</span> : null}</div>
       <div className="kd-ro-c">{hint ? <InfoHint title={hint.title} content={hint.content}>{caption}</InfoHint> : caption}</div>
     </div>
   )

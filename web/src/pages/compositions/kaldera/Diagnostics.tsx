@@ -4,6 +4,7 @@ import { formatQ } from '../../../lib/fusionPhysics'
 import { divertorInfo, neutronDiagnosticInfo } from '../../../components/infoContent'
 import { fmtPfus, sci, useDiagnostics, type DiagTone } from '../useDiagnostics'
 import InfoHint from './InfoHint'
+import { FIT, Fx, N_WORDS, REGIME_WORDS, T_WORDS } from '../Fixed'
 
 export type Tone = DiagTone
 
@@ -29,11 +30,23 @@ function Bar({ label, fill, tone, right, detail }: { label: ReactNode; fill: num
 export default function Diagnostics({ snapshot, valid, compact }: { snapshot: Snapshot | null; valid: boolean; compact?: boolean }) {
   const d = useDiagnostics(snapshot, valid)
 
-  const divRight = <>{d.q.toFixed(1)} MW/M² . <span className="kd-g">λ</span><sub>Q</sub> {valid ? d.lambdaQ.toFixed(1) : '—'} MM . F<sub>DET</sub> {valid ? d.fDet.toFixed(2) : '—'} . <span data-tone={d.regimeTone}>{d.regime}</span></>
+  // Every figure and state word sits in a fixed slot (../Fixed): the separators between them never move.
+  // A figure opening a line (phone detail rows) is left-aligned in its slot; after a label (desktop), right-aligned.
+  const lead = compact ? 'start' : 'end'
+  const qV = <Fx fit={FIT.q} align={lead}>{Math.min(d.q, 99.9).toFixed(1)}</Fx>
+  const lqV = <Fx fit={FIT.lambdaQ}>{valid ? d.lambdaQ.toFixed(1) : '—'}</Fx>
+  const fdV = <Fx fit={FIT.fDet}>{valid ? d.fDet.toFixed(2) : '—'}</Fx>
+  const regimeW = <Fx fit={REGIME_WORDS} data-tone={d.regimeTone}>{d.regime}</Fx>
+  const divDetail = <>{qV} MW/M² . <span className="kd-g">λ</span><sub>Q</sub> {lqV} MM . F<sub>DET</sub> {fdV}</>
+  const divRight = <>{divDetail} . {regimeW}</>
   const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
-  const tRight = <>{d.tSurf.toFixed(0)} °C . W . <span data-tone={d.tTone}>{tWord}</span></>
+  const tWordW = <Fx fit={T_WORDS} data-tone={d.tTone}>{tWord}</Fx>
+  const tV = <Fx fit={FIT.tSurf} align={lead}>{d.tSurf.toFixed(0)}</Fx>
+  const tRight = <>{tV} °C . W . {tWordW}</>
   const pFusStr = d.pFus > 0.001 ? fmtPfus(d.pFus).toUpperCase() : '— MW'
-  const neuRight = <>{sci(d.rate)} N/S . Q <span data-tone={d.qPlasma >= 1 ? 'ok' : undefined}>{d.rate > 0 ? formatQ(d.qPlasma).toUpperCase() : '—'}</span> . P<sub>FUS</sub> {pFusStr} . <span data-tone={d.active ? 'ok' : undefined}>{d.active ? 'ACTIVE' : 'IDLE'}</span></>
+  const nWordW = <Fx fit={N_WORDS} data-tone={d.active ? 'ok' : undefined}>{d.active ? 'ACTIVE' : 'IDLE'}</Fx>
+  const neuDetail = <><Fx fit={FIT.sci} align={lead}>{sci(d.rate)}</Fx> N/S . Q <Fx fit={FIT.Q} data-tone={d.qPlasma >= 1 ? 'ok' : undefined}>{d.rate > 0 ? formatQ(d.qPlasma).toUpperCase() : '—'}</Fx> . P<sub>FUS</sub> <Fx fit={['888.8 MW', '888 KW']} align="start">{pFusStr}</Fx></>
+  const neuRight = <>{neuDetail} . {nWordW}</>
 
   // Phone: the state word sits at the right of the label, the figures on their own line under the bar.
   if (compact) {
@@ -43,24 +56,24 @@ export default function Diagnostics({ snapshot, valid, compact }: { snapshot: Sn
           label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>Q⊥ DIVERTOR</InfoHint>}
           fill={d.qFill}
           tone={d.qTone}
-          right={<span data-tone={d.regimeTone}>{d.regime}</span>}
-          detail={<>{d.q.toFixed(1)} MW/M² . <span className="kd-g">λ</span><sub>Q</sub> {valid ? d.lambdaQ.toFixed(1) : '—'} MM . F<sub>DET</sub> {valid ? d.fDet.toFixed(2) : '—'}</>}
+          right={regimeW}
+          detail={divDetail}
         />
         {d.isW && (
           <Bar
             label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>SURFACE TEMPERATURE</InfoHint>}
             fill={d.tFill}
             tone={d.tTone}
-            right={<span data-tone={d.tTone}>{tWord}</span>}
-            detail={<>{d.tSurf.toFixed(0)} °C . W</>}
+            right={tWordW}
+            detail={<>{tV} °C . W</>}
           />
         )}
         <Bar
           label={<InfoHint title="Neutron diagnostic" content={neutronDiagnosticInfo}>NEUTRONS</InfoHint>}
           fill={d.nFill}
           tone={d.active ? 'ok' : undefined}
-          right={<span data-tone={d.active ? 'ok' : undefined}>{d.active ? 'ACTIVE' : 'IDLE'}</span>}
-          detail={<>{sci(d.rate)} N/S . Q <span data-tone={d.qPlasma >= 1 ? 'ok' : undefined}>{d.rate > 0 ? formatQ(d.qPlasma).toUpperCase() : '—'}</span> . P<sub>FUS</sub> {pFusStr}</>}
+          right={nWordW}
+          detail={neuDetail}
         />
       </div>
     )

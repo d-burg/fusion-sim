@@ -3,6 +3,7 @@ import type { Snapshot } from '../../../lib/types'
 import type { DeviceInfo } from '../types'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
+import { q95Disp } from '../Fixed'
 import { useDiagnostics, type Diagnostics, type DiagTone } from '../useDiagnostics'
 
 /* ─── Spreadsheet-style scalar / interlock table ──────────────────
@@ -76,7 +77,7 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
     { name: 'tauE', value: fp(s.tau_e, 3), unit: 's', state: st('ok') },
     { name: 'H98', value: fp(s.h_factor, 2), unit: '', state: st(s.h_factor < 0.6 ? 'lo' : 'ok') },
     { name: 'betaN', value: fp(s.beta_n, 2), unit: '', state: st(band(s.beta_n / betaLim, 0.8, 1.0)) },
-    { name: 'q95', value: fp(s.q95, 2), unit: '', state: st(band(s.q95, 2.5, 2.0, 'lo')) },
+    { name: 'q95', value: fp(q95Disp(s.q95), 2), unit: '', state: st(band(s.q95, 2.5, 2.0, 'lo')) },
     { name: 'li', value: fp(s.li, 2), unit: '', state: st(band(s.li, 1.2, 1.5)) },
     { name: 'Pin', value: f(s.p_input, 1), unit: 'MW', state: st('ok') },
     { name: 'POH', value: f(s.p_ohmic, 2), unit: 'MW', state: st('ok') },

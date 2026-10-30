@@ -7,6 +7,8 @@ import PortView from '../../../components/portview'
 import JScope, { sumWaveforms, type RowDef } from './JScope'
 import { PhoneInterlockTable } from './InterlockTable'
 import { flatTopWindow, parseProgram, pulsePhase } from '../kaldera/phase'
+import { PHASE_WORDS } from '../kaldera/words'
+import { Fx, digits8 } from '../Fixed'
 import { useSettings } from '../../../lib/settingsContext'
 
 /* ─── JET / CODAS on a phone ──────────────────────────────────────
@@ -54,7 +56,8 @@ function Combo({ value, text, options, onChange, className, title }: {
   )
 }
 
-interface Word { text: string; on: boolean; cls: string }
+/** `fit`: every text the word can show, so its box (and its neighbours) hold still when it changes (../Fixed). */
+interface Word { text: string; on: boolean; cls: string; fit?: readonly string[] }
 
 export default function Phone({ ctx, words, configCode }: { ctx: ControlRoomContext; words: Word[]; configCode: (cfg: string | undefined) => string }) {
   const { phoneTraces, setPhoneTraces } = useSettings()
@@ -69,9 +72,9 @@ export default function Phone({ ctx, words, configCode }: { ctx: ControlRoomCont
   const phase = pulsePhase(win, ctx.time, ctx.running, ctx.finished, s, ctx.scrubTime !== null)
   const hz = s?.disruption_risk ?? 0
   const state: Word[] = [
-    { text: phase === 'DISRUPT' ? 'DISRUPT' : phase, on: phase !== 'STANDBY', cls: phase === 'DISRUPT' ? 'alarm' : phase === 'FLAT-TOP' ? 'ok' : 'blue' },
+    { text: phase === 'DISRUPT' ? 'DISRUPT' : phase, on: phase !== 'STANDBY', cls: phase === 'DISRUPT' ? 'alarm' : phase === 'FLAT-TOP' ? 'ok' : 'blue', fit: PHASE_WORDS },
     ...words,
-    { text: `HAZARD ${s ? hz.toFixed(3) : '---'}`, on: plasma || !!s?.disrupted, cls: s?.disrupted || hz >= 0.2 ? 'alarm' : hz >= 0.05 ? 'warn' : 'ok' },
+    { text: `HAZARD ${s ? hz.toFixed(3) : '---'}`, fit: ['HAZARD 8.888'], on: plasma || !!s?.disrupted, cls: s?.disrupted || hz >= 0.2 ? 'alarm' : hz >= 0.05 ? 'warn' : 'ok' },
   ]
 
   // ── traces ──
@@ -108,14 +111,14 @@ export default function Phone({ ctx, words, configCode }: { ctx: ControlRoomCont
         </span>
         <span className="jp-read jp-read-t">
           <span className="jp-read-k">t [s]{ctx.scrubTime !== null ? ' R' : ''}</span>
-          <span className="jp-read-v">{tDisp.toFixed(2)}</span>
+          <Fx fit={digits8(ctx.duration.toFixed(2))} className="jp-read-v">{tDisp.toFixed(2)}</Fx>
         </span>
         <span className="jp-settings">{ctx.settingsNode}</span>
       </header>
 
       <div className="jp-words">
         {state.map((w) => (
-          <span key={w.text.split(' ')[0]} className={`jet-word${w.on ? ` on ${w.cls}` : ''}`}>{w.text}</span>
+          <span key={w.text.split(' ')[0]} className={`jet-word${w.on ? ` on ${w.cls}` : ''}`}>{w.fit ? <Fx fit={w.fit} align="center">{w.text}</Fx> : w.text}</span>
         ))}
       </div>
 

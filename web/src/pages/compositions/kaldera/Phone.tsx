@@ -12,6 +12,8 @@ import InfoHint from './InfoHint'
 import type { DisplayClock } from './displayClock'
 import type { Phase, Waveform } from './phase'
 import { f1, f2, G, PRESET_WORD, Readout, ReportPanel, STAB, POWER, configWord, hazardPct } from './shared'
+import { FIT, Fx, digits8, q95Disp } from '../Fixed'
+import { CONFIG_WORDS, PHASE_WORDS, STATE_WORDS } from './words'
 
 /** What the desktop composition has already derived, handed over so both layouts agree. */
 export interface PhoneView {
@@ -110,6 +112,7 @@ function Choices({ ctx, onClose }: { ctx: ControlRoomContext; onClose: () => voi
  */
 export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: PhoneView }) {
   const { displaySnapshot: s, history, running, finished, scrubTime, time } = ctx
+  const big = (ctx.devices.find((d) => d.id === ctx.activeDevice)?.r0 ?? 0) > 2.5
   const { valid, clock, phase, pulseNo, stateWord, stations, T, program, pinRef, speeds, tones } = view
   const { phoneTraces, setPhoneTraces } = useSettings()
   const [picking, setPicking] = useState(false)
@@ -172,18 +175,18 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
         </button>
         <div className="kd-ph-pulse">
           <span className="kd-ph-cap">PULSE {pulseNo}</span>
-          <span ref={timeRef} className="kd-ph-time">{fmtT(scrubTime ?? Math.min(clock.get(), T))}</span>
+          <Fx fit={digits8(fmtT(T))} className="kd-ph-time"><span ref={timeRef}>{fmtT(scrubTime ?? Math.min(clock.get(), T))}</span></Fx>
         </div>
         <span className="kd-settings kd-ph-settings">{ctx.settingsNode}</span>
         {picking && <Choices ctx={ctx} onClose={() => setPicking(false)} />}
       </header>
 
       <div className="kd-ph-state" data-state={stateWord}>
-        <span className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</span>
-        {stateWord !== phase && <><span className="kd-dot">.</span><span className="kd-ph-mode">{stateWord}</span></>}
+        <Fx fit={PHASE_WORDS} align="start" className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</Fx>
+        {stateWord !== phase && <><span className="kd-dot">.</span><Fx fit={STATE_WORDS} align="start" className="kd-ph-mode">{stateWord}</Fx></>}
         {s?.oh_saturated && <span className="kd-flag">OH SATURATED</span>}
         {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
-        <span className="kd-haz">HAZARD <span className="kd-haz-v" data-tone={tones.haz}>{valid ? hazardPct(s?.disruption_risk) : '—'}</span>{valid ? ' %/S' : ''}</span>
+        <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={tones.haz}>{valid ? hazardPct(s?.disruption_risk) : '—'}</Fx>{valid ? ' %/S' : ''}</span>
         {hasReport && (
           <button className="kd-ph-report-open" data-on={view.showReport} onClick={view.onToggleReport}>REPORT</button>
         )}
@@ -193,11 +196,11 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
         <div className="kd-ph-eq" data-tutorial="equilibrium">
           <div className="kd-ph-paircap">
             <InfoHint title="Equilibrium" content={equilibriumInfo}>EQUILIBRIUM</InfoHint>
-            <span className="kd-dot">.</span><span className="kd-ph-config">{configWord(s)}</span>
+            <span className="kd-dot">.</span><Fx fit={CONFIG_WORDS} align="start" className="kd-ph-config">{configWord(s)}</Fx>
           </div>
           <div className="kd-ph-eqbox">
             <Hero snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} bare />
-            <span className="kd-ph-bt"><span className="kd-ph-cap">B<sub>T</sub></span>{f2(s?.bt)} T</span>
+            <span className="kd-ph-bt"><span className="kd-ph-cap">B<sub>T</sub></span><span><Fx fit="8.88" align="start">{f2(s?.bt)}</Fx> T</span></span>
           </div>
         </div>
         <div className="kd-ph-portcol">
@@ -223,20 +226,20 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
           <button className="kd-ph-word kd-ph-more" aria-expanded={more} onClick={() => setMore((v) => !v)}>{more ? 'LESS' : 'MORE'}</button>
         </div>
         <div className="kd-scalars kd-ph-scalars">
-          <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} />
-          <Readout value={f2(s?.ne_bar)} unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} />
-          <Readout value={f2(s?.w_th)} unit="MJ" caption={<>W<sub>TH</sub></>} />
-          <Readout value={f2(rv(s?.beta_n))} caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={tones.beta} />
-          <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} hint={STAB} tone={tones.q95} />
-          <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} hint={STAB} tone={tones.fgw} />
+          <Readout value={f2(s?.ip)} fit={big ? "88.88" : "8.88"} unit="MA" caption={<>I<sub>P</sub></>} />
+          <Readout value={f2(s?.ne_bar)} fit="8.88" unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} />
+          <Readout value={f2(s?.w_th)} fit={big ? "888.88" : "8.88"} unit="MJ" caption={<>W<sub>TH</sub></>} />
+          <Readout value={f2(rv(s?.beta_n))} fit="8.88" caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={tones.beta} />
+          <Readout value={f2(q95Disp(rv(s?.q95)))} fit="88.88" caption={<>Q<sub>95</sub></>} hint={STAB} tone={tones.q95} />
+          <Readout value={f2(rv(s?.f_greenwald))} fit="8.88" caption={<>F<sub>GW</sub></>} hint={STAB} tone={tones.fgw} />
           {more && (
             <>
-              <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} />
-              <Readout value={f1(s?.p_rad)} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} />
-              <Readout value={f2(rv(s?.te0))} unit="KEV" caption={<>T<sub>E0</sub></>} />
-              <Readout value={f2(rv(s?.tau_e))} unit="S" caption={<><G>τ</G><sub>E</sub></>} />
-              <Readout value={f2(rv(s?.h_factor))} caption={<>H<sub>98</sub></>} />
-              <Readout value={f2(s?.v_loop)} unit="V" caption={<>V<sub>LOOP</sub></>} />
+              <Readout value={f1(s?.p_input)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} />
+              <Readout value={f1(s?.p_rad)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} />
+              <Readout value={f2(rv(s?.te0))} fit={big ? "88.88" : "8.88"} unit="KEV" caption={<>T<sub>E0</sub></>} />
+              <Readout value={f2(rv(s?.tau_e))} fit="8.88" unit="S" caption={<><G>τ</G><sub>E</sub></>} />
+              <Readout value={f2(rv(s?.h_factor))} fit="8.88" caption={<>H<sub>98</sub></>} />
+              <Readout value={f2(s?.v_loop)} fit="-88.88" unit="V" caption={<>V<sub>LOOP</sub></>} />
             </>
           )}
         </div>

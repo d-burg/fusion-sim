@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type PointerEvent, type ReactNode } from 'react'
 import type { TracePoint } from '../../../lib/types'
 import { interpWaveform, type Waveform } from './phase'
+import { Fx } from '../Fixed'
 
 export interface Series {
   key: keyof TracePoint
@@ -17,6 +18,22 @@ export interface Series {
   spikes?: boolean
   /** Derived channel: read the value from the whole sample instead of `key`. */
   get?: (h: TracePoint) => number
+  /** Widest text the readout can show; defaults by channel (FIT_BY_KEY). */
+  fit?: string
+}
+
+/** Readout slot widths by channel, for the formats the board uses (f2 / f1): the readouts sit right-anchored
+ *  in one row, so a figure that grew a digit would shove every readout to its left. */
+const FIT_BY_KEY: Partial<Record<keyof TracePoint, string>> = {
+  ip: '88.88', i_ni: '88.88', ne_bar: '8.88', f_greenwald: '8.88', w_th: '888.88', beta_n: '8.88',
+  p_input: '888.8', p_rad: '888.8', d_alpha: '88.88', disruption_risk: '88.88', q95: '88.88', v_loop: '-88.88',
+  te0: '88.88', te_ped: '88.88', h_factor: '8.88', psi_oh: '888.8', li: '8.88',
+}
+
+/** Readout text: q95 is held at 99 (the engine's start-up values are absurd); the trace itself is untouched. */
+const readout = (s: Series, h: TracePoint): string => {
+  const v = valueOf(s, h)
+  return s.fmt(s.key === 'q95' && !s.get ? Math.min(v, 99) : v)
 }
 
 const valueOf = (s: Series, h: TracePoint): number => {
@@ -309,7 +326,7 @@ export default function BoardPlot(p: Props) {
       <div className="ap-plot-vals">
         {series.map((s) => (
           <span key={String(s.key)} style={{ color: s.color }}>
-            {s.label} {sample ? s.fmt(valueOf(s, sample)) : '—'}{s.unit ? ` ${s.unit}` : ''}
+            {s.label} <Fx fit={s.fit ?? FIT_BY_KEY[s.key] ?? '888.88'}>{sample ? readout(s, sample) : '—'}</Fx>{s.unit ? ` ${s.unit}` : ''}
           </span>
         ))}
       </div>

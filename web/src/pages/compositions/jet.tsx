@@ -7,6 +7,7 @@ import JScope, { sumWaveforms, type RowDef } from './jet/JScope'
 import InterlockTable from './jet/InterlockTable'
 import Phone from './jet/Phone'
 import { usePhone } from './usePhone'
+import { Fx, digits8 } from './Fixed'
 import './jet.css'
 
 /* ─── JET / CODAS wall, light direction ──────────────────────────
@@ -75,9 +76,9 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
   const words = useMemo(() => [
     { text: 'PLASMA', on: plasma, cls: 'ok' },
-    { text: s?.in_hmode ? 'H-MODE' : 'L-MODE', on: plasma, cls: s?.in_hmode ? 'ok' : 'blue' },
+    { text: s?.in_hmode ? 'H-MODE' : 'L-MODE', on: plasma, cls: s?.in_hmode ? 'ok' : 'blue', fit: ['H-MODE', 'L-MODE'] },
     { text: 'ELMING', on: plasma && !!s?.elm_active, cls: 'warn' },
-    { text: s?.is_limited ? 'LIMITED' : configCode(s?.magnetic_config), on: plasma, cls: 'blue' },
+    { text: s?.is_limited ? 'LIMITED' : configCode(s?.magnetic_config), on: plasma, cls: 'blue', fit: ['LIMITED', 'DIVERTED', 'LSN', 'USN', 'DN'] },
     { text: 'OH SATURATED', on: !!s?.oh_saturated, cls: 'warn' },
     { text: 'FLUX', on: !!s?.flux_exhausted, cls: 'alarm' },
     { text: 'DISRUPTED', on: !!s?.disrupted, cls: 'alarm' },
@@ -136,14 +137,14 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         </span>
         <span className="jet-time">
           <span className="jet-pulse-lbl">t</span>
-          <span className="jet-digits">{tDisp.toFixed(2)}</span>
+          <Fx fit={digits8(ctx.duration.toFixed(2))} className="jet-digits">{tDisp.toFixed(2)}</Fx>
           <span className="jet-time-of">/ {ctx.duration.toFixed(1)} s</span>
         </span>
         <span className="jet-mode">{dev?.name ?? ctx.activeDevice} &nbsp;{simStatus.toUpperCase()}{ctx.scrubTime !== null ? ' REPLAY' : ''}</span>
         <span className="jet-grow" />
         <span className="jet-words">
           {words.map((w) => (
-            <span key={w.text} className={`jet-word${w.on ? ` on ${w.cls}` : ''}`}>{w.text}</span>
+            <span key={w.text} className={`jet-word${w.on ? ` on ${w.cls}` : ''}`}>{w.fit ? <Fx fit={w.fit} align="center">{w.text}</Fx> : w.text}</span>
           ))}
         </span>
       </div>

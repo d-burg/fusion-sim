@@ -13,6 +13,7 @@ import { usePhone } from './usePhone'
 import { useDiagnostics } from './useDiagnostics'
 import { reconstructionValid } from '../../lib/pulseLog'
 import { formatQ } from '../../lib/fusionPhysics'
+import { q95Disp } from './Fixed'
 import './apollo.css'
 
 /** Console arrangement: 'A' three modules side by side; 'B' an annunciator
@@ -169,7 +170,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
       ['Te0', v(snap?.te0), 'KEV'], ['POH', v(snap?.p_ohmic, 1), 'MW'], ['Ψ', v(snap?.flux_consumed, 1), 'VS'],
       ['τE', v(snap?.tau_e, 3), 'S'], ['Prad', v(snap?.p_rad, 1), 'MW'], ['Ψmax', v(snap?.flux_budget, 1), 'VS'],
       ['βN', v(snap?.beta_n), ''], ['Ploss', v(snap?.p_loss, 1), 'MW'], ['IBS', v(snap?.i_bootstrap), 'MA'],
-      ['q95', v(snap?.q95), ''], ['Pα', v(snap?.p_alpha, 2), 'MW'], ['ICD', v(snap?.i_cd), 'MA'],
+      ['q95', v(q95Disp(snap?.q95)), ''], ['Pα', v(snap?.p_alpha, 2), 'MW'], ['ICD', v(snap?.i_cd), 'MA'],
       ['fGW', v(snap?.f_greenwald), ''], ['Pfus', pfus, 'MW'], ['li', v(snap?.li), ''],
       ['Zeff', v(snap?.z_eff), ''], ['Q', q, ''], ['H98', v(snap?.h_factor), ''],
       ['λq', snap && diag.valid ? diag.lambdaQ.toFixed(1) : '-.--', 'MM'], ['fdet', snap && diag.valid ? diag.fDet.toFixed(2) : '-.--', ''], ['', '', ''],

@@ -11,6 +11,7 @@ import { clock, flatTopWindow, interpWaveform, parseProgram, pulsePhase, type Wa
 import { useDiagnostics } from '../useDiagnostics'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
+import { FIT, Fx, q95Disp } from '../Fixed'
 import { useSettings, DEFAULT_PHONE_TRACES } from '../../../lib/settingsContext'
 
 const WHITE = '#f2f2ee'
@@ -94,7 +95,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
   const essential: [string, string, string][] = [
     ['Ip', v(s?.ip), 'MA'], ['ne', v(s?.ne_bar), 'E20'],
     ['Wth', v(s?.w_th), 'MJ'], ['βN', rv(s?.beta_n), ''],
-    ['q95', rv(s?.q95), ''], ['fGW', rv(s?.f_greenwald), ''],
+    ['q95', rv(q95Disp(s?.q95)), ''], ['fGW', rv(s?.f_greenwald), ''],
   ]
   const rest: [string, string, string][] = [
     ['Bt', v(s?.bt), 'T'], ['Te0', v(s?.te0), 'KEV'],
@@ -128,7 +129,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
       { key: 'q95', cap: 'Q95', title: <>q<sub>95</sub></>, unit: '', series: [one('q95', <>q<sub>95</sub></>, '')] },
       { key: 'v_loop', cap: 'VLOOP', title: <>V<sub>LOOP</sub></>, unit: 'V', series: [one('v_loop', <>V<sub>LOOP</sub></>, 'V')] },
       { key: 'te0', cap: 'TE0', title: <>T<sub>E0</sub></>, unit: 'KEV', series: [one('te0', <>T<sub>E0</sub></>, 'KEV')] },
-      { key: 'tau_e', cap: 'TAU E', title: <>τ<sub>E</sub></>, unit: 'S', series: [one('w_th', <>τ<sub>E</sub></>, 'S', f3, { get: (h) => (h.p_loss > 0.01 ? h.w_th / h.p_loss : 0) })] },
+      { key: 'tau_e', cap: 'TAU E', title: <>τ<sub>E</sub></>, unit: 'S', series: [one('w_th', <>τ<sub>E</sub></>, 'S', f3, { get: (h) => (h.p_loss > 0.01 ? h.w_th / h.p_loss : 0), fit: '8.888' })] },
       { key: 'h_factor', cap: 'H98', title: <>H<sub>98</sub></>, unit: '', series: [one('h_factor', <>H<sub>98</sub></>, '')] },
       { key: 'psi_oh', cap: 'PSI OH', title: <>Ψ<sub>OH</sub></>, unit: 'VS', series: [one('psi_oh', <>Ψ<sub>OH</sub></>, 'VS', f1)] },
       { key: 'disruption_risk', cap: 'HAZARD', title: <>HAZARD</>, unit: '%/S', series: [
@@ -233,12 +234,12 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
           <div className="ap-crt-screen app-crt-screen">
             <PhoneDiagLines d={diag} live={!!s} />
             <div className="app-fus">
-              <span>PFUS <b>{pfus}</b> <i>MW</i></span>
-              <span>Q <b>{qStr}</b></span>
+              <span>PFUS <b><Fx fit="888.8">{pfus}</Fx></b> <i>MW</i></span>
+              <span>Q <b><Fx fit={FIT.Q}>{qStr}</Fx></b></span>
             </div>
             <div className="app-fus">
-              <span>HAZARD <b data-tone={hazTone}>{s ? (hazard * 100).toFixed(2) : '-.--'}</b> <i>%/S</i></span>
-              <span>Ψ <b data-tone={fluxTone}>{v(s?.flux_consumed, 1)}/{v(s?.flux_budget, 1)}</b> <i>VS</i></span>
+              <span>HAZARD <b data-tone={hazTone}><Fx fit="88.88">{s ? (hazard * 100).toFixed(2) : '-.--'}</Fx></b> <i>%/S</i></span>
+              <span>Ψ <b data-tone={fluxTone}><Fx fit="888.8">{v(s?.flux_consumed, 1)}</Fx>/<Fx fit="888.8" align="start">{v(s?.flux_budget, 1)}</Fx></b> <i>VS</i></span>
             </div>
             <div className="app-tele-grid">
               {(more ? [...essential, ...rest] : essential).map(([k, val, u]) => (

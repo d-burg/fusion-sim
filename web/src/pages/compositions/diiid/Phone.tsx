@@ -11,6 +11,7 @@ import { useDiagnostics } from '../useDiagnostics'
 import { flatTopWindow, parseProgram, pulsePhase } from '../kaldera/phase'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
+import { Fx, q95Disp } from '../Fixed'
 import { useSettings } from '../../../lib/settingsContext'
 
 const SEV: Record<string, string> = { info: '#bbbbbb', ok: GREEN, minor: YELLOW, major: RED, invalid: MAGENTA }
@@ -67,7 +68,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
   const essential: [string, string, string][] = [
     ['Ip', f(s?.ip), 'MA'], ['n̄e', f(s?.ne_bar), 'e20/m3'],
     ['Wth', f(s?.w_th), 'MJ'], ['βN', f(rv(s?.beta_n)), ''],
-    ['q95', f(rv(s?.q95)), ''], ['fGW', f(rv(s?.f_greenwald)), ''],
+    ['q95', f(rv(q95Disp(s?.q95))), ''], ['fGW', f(rv(s?.f_greenwald)), ''],
   ]
   const rest: [string, string, string][] = [
     ['Bt', f(s?.bt), 'T'], ['Te0', f(s?.te0), 'keV'],
@@ -122,7 +123,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
         {state.map((c) => (
           <div key={c.k} className="dc-cell" data-lamp={c.lamp}>
             <span className="dc-cell-k">{c.k}</span>
-            <span className="dc-cell-v">{c.v}</span>
+            <span className="dc-cell-v">{c.fit ? <Fx fit={c.fit}>{c.v}</Fx> : c.v}</span>
           </div>
         ))}
       </div>

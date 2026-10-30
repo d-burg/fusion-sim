@@ -44,8 +44,11 @@ export interface Diagnostics {
 /** "1.1E13" — plain figures, no superscripts (illegible at 8 px). */
 export function sci(v: number): string {
   if (v <= 0) return '—'
-  const e = Math.floor(Math.log10(v))
-  return `${(v / Math.pow(10, e)).toFixed(1)}E${e}`
+  let e = Math.floor(Math.log10(v))
+  // carry a mantissa that rounds to 10: 9.96e12 is 1.0E13, never 10.0E12 (constant length)
+  let m = Math.round((v / Math.pow(10, e)) * 10) / 10
+  if (m >= 10) { m /= 10; e += 1 }
+  return `${m.toFixed(1)}E${e}`
 }
 
 /** "420 KW" / "12.3 MW" / "—". Unit case is the caller's. */

@@ -11,12 +11,16 @@ import { equilibriumInfo, plasmaParamsInfo, traceDescriptions } from '../../comp
 import InfoHint from './kaldera/InfoHint'
 import Diagnostics from './kaldera/Diagnostics'
 import { f1, f2, PRESET_WORD, sumWaveforms, Readout, useEma, useDisplayClock, band, G, hazardPct, ReportPanel, STAB, POWER, configWord, Link } from './kaldera/shared'
+import { FIT, Fx, q95Disp } from './Fixed'
+import { CONFIG_WORDS, STATE_WORDS } from './kaldera/words'
 import { usePhone } from './usePhone'
 import Phone from './kaldera/Phone'
 import './kaldera.css'
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const { displaySnapshot: s, history, running, finished, scrubTime, time, duration, programJson } = ctx
+  // Readout slot widths: large machines (JET, ITER) carry two-digit MA and three-digit MJ.
+  const big = (ctx.devices.find((d) => d.id === ctx.activeDevice)?.r0 ?? 0) > 2.5
   const phone = usePhone()
 
   // The blue-black field for whatever shared chrome is mounted here (planner drawer, settings).
@@ -135,18 +139,18 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           <div className="kd-status" data-tutorial="status">
           <div className="kd-head"><span className="kd-num">01</span> . <InfoHint title="Plasma parameters" content={plasmaParamsInfo}>PLASMA</InfoHint></div>
           <div className="kd-scalars">
-            <Readout value={f2(s?.ip)} unit="MA" caption={<>I<sub>P</sub></>} {...ro('ip')} />
-            <Readout value={f2(s?.ne_bar)} unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} {...ro('ne')} />
-            <Readout value={f2(s?.w_th)} unit="MJ" caption={<>W<sub>TH</sub></>} {...ro('wth')} />
-            <Readout value={f2(rv(s?.beta_n))} caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={band(betaS, 2.5, 2.8)} />
-            <Readout value={f2(rv(s?.q95))} caption={<>Q<sub>95</sub></>} hint={STAB} tone={band(q95S, 2.5, 2.0, true)} />
-            <Readout value={f2(rv(s?.f_greenwald))} caption={<>F<sub>GW</sub></>} hint={STAB} tone={band(fgwS, 0.8, 0.9)} {...ro('ne')} />
-            <Readout value={f1(s?.p_input)} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} {...ro('pin')} />
-            <Readout value={f1(s?.p_rad)} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} {...ro('pin')} />
-            <Readout value={f2(rv(s?.te0))} unit="KEV" caption={<>T<sub>E0</sub></>} />
-            <Readout value={f2(rv(s?.tau_e))} unit="S" caption={<><G>τ</G><sub>E</sub></>} />
-            <Readout value={f2(rv(s?.h_factor))} caption={<>H<sub>98</sub></>} />
-            <Readout value={f2(s?.v_loop)} unit="V" caption={<>V<sub>LOOP</sub></>} />
+            <Readout value={f2(s?.ip)} fit={big ? "88.88" : "8.88"} unit="MA" caption={<>I<sub>P</sub></>} {...ro('ip')} />
+            <Readout value={f2(s?.ne_bar)} fit="8.88" unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} {...ro('ne')} />
+            <Readout value={f2(s?.w_th)} fit={big ? "888.88" : "8.88"} unit="MJ" caption={<>W<sub>TH</sub></>} {...ro('wth')} />
+            <Readout value={f2(rv(s?.beta_n))} fit="8.88" caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={band(betaS, 2.5, 2.8)} />
+            <Readout value={f2(q95Disp(rv(s?.q95)))} fit="88.88" caption={<>Q<sub>95</sub></>} hint={STAB} tone={band(q95S, 2.5, 2.0, true)} />
+            <Readout value={f2(rv(s?.f_greenwald))} fit="8.88" caption={<>F<sub>GW</sub></>} hint={STAB} tone={band(fgwS, 0.8, 0.9)} {...ro('ne')} />
+            <Readout value={f1(s?.p_input)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} {...ro('pin')} />
+            <Readout value={f1(s?.p_rad)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} {...ro('pin')} />
+            <Readout value={f2(rv(s?.te0))} fit={big ? "88.88" : "8.88"} unit="KEV" caption={<>T<sub>E0</sub></>} />
+            <Readout value={f2(rv(s?.tau_e))} fit="8.88" unit="S" caption={<><G>τ</G><sub>E</sub></>} />
+            <Readout value={f2(rv(s?.h_factor))} fit="8.88" caption={<>H<sub>98</sub></>} />
+            <Readout value={f2(s?.v_loop)} fit="-88.88" unit="V" caption={<>V<sub>LOOP</sub></>} />
           </div>
           <Diagnostics snapshot={s} valid={valid} />
           </div>
@@ -154,10 +158,10 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
             <div className="kd-title-cap">PULSE</div>
             <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> <span className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</span></h1>
             <div className="kd-state" data-state={stateWord}>
-              {stateWord}
+              <Fx fit={STATE_WORDS} align="start">{stateWord}</Fx>
               {s?.oh_saturated && <span className="kd-flag">OH SATURATED</span>}
               {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
-              <span className="kd-haz">HAZARD <span className="kd-haz-v" data-tone={band(hazS, 1, 10)}>{valid ? hazardPct(s?.disruption_risk) : '—'}</span>{valid ? ' %/S' : ''}</span>
+              <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={band(hazS, 1, 10)}>{valid ? hazardPct(s?.disruption_risk) : '—'}</Fx>{valid ? ' %/S' : ''}</span>
             </div>
           </div>
         </div>
@@ -165,7 +169,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         <div className="kd-eq" data-tutorial="equilibrium">
           <div className="kd-eq-cap">
             <div className="kd-head"><span className="kd-num">02</span> . <InfoHint title="Equilibrium" content={equilibriumInfo}>EQUILIBRIUM . R–Z</InfoHint></div>
-            <span className="kd-eq-sub">{configWord(s)}  .  B<sub>T</sub> {f2(s?.bt)} T</span>
+            <span className="kd-eq-sub"><Fx fit={CONFIG_WORDS} align="start">{configWord(s)}</Fx>  .  B<sub>T</sub> <Fx fit="8.88">{f2(s?.bt)}</Fx> T</span>
           </div>
           <Hero snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
         </div>

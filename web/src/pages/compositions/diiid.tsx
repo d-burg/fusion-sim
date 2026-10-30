@@ -13,6 +13,7 @@ import { useDiagnostics } from './useDiagnostics'
 import { usePhone } from './usePhone'
 import { reconstructionValid } from '../../lib/pulseLog'
 import { formatQ } from '../../lib/fusionPhysics'
+import { q95Disp } from './Fixed'
 import './diiid.css'
 
 const SEV: Record<string, string> = { info: '#bbbbbb', ok: GREEN, minor: YELLOW, major: RED, invalid: MAGENTA }
@@ -50,7 +51,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
     ['Ip', f(snap.ip), 'MA'], ['Bt', f(snap.bt), 'T'],
     ['Pin', f(snap.p_input, 1), 'MW'], ['POH', f(snap.p_ohmic), 'MW'],
     ['Prad', f(snap.p_rad), 'MW'], ['Pα', f(snap.p_alpha, 3), 'MW'],
-    ['βN', f(snap.beta_n), ''], ['q95', f(snap.q95), ''],
+    ['βN', f(snap.beta_n), ''], ['q95', f(q95Disp(snap.q95)), ''],
     ['Pfus', diag.pFus > 0.001 ? f(diag.pFus, diag.pFus < 10 ? 3 : 1) : '--', 'MW'], ['Q', diag.rate > 0 ? formatQ(diag.qPlasma) : '--', ''],
     ['λq', diag.valid ? f(diag.lambdaQ, 1) : '--', 'mm'], ['fdet', diag.valid ? f(diag.fDet) : '--', ''],
   ] : []
