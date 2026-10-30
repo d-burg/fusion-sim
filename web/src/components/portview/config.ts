@@ -167,7 +167,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     camR: 8.65, camZ: 0.06, camPhi: 0,
     lookR: 4.00, lookZ: -0.03, lookPhi: 0.22, fov: 80,
     // ITER's divertor sits about 3.5 m below the port; the generic phone tilt is too shallow.
-    wide: { fov: 92, camZ: 0.45, lookZ: -1.55 },
+    wide: { fov: 88, camZ: 0.35, lookZ: -1.15 },
     tileColor: [38, 36, 32],
     tileGridSpacing: { poloidal: 0.15, toroidal: 0.12 },
     tileGridDarken: 0.15,
