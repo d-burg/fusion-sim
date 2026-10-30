@@ -7,6 +7,8 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
   const { units, look, sound, setUnits, setLook, setSound } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  // Opens upward when the button sits in the lower half of the viewport (a key row along the bottom).
+  const [up, setUp] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close on click outside
@@ -34,7 +36,13 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
   return (
     <div ref={dropdownRef} className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open && dropdownRef.current) {
+            const r = dropdownRef.current.getBoundingClientRect()
+            setUp(r.top + r.height / 2 > window.innerHeight / 2)
+          }
+          setOpen(!open)
+        }}
         className="settings-btn px-1.5 py-1 rounded text-gray-400 hover:text-gray-200
                    transition-colors cursor-pointer flex items-center gap-1"
         title="Settings"
@@ -60,9 +68,9 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
       </button>
 
       {open && (
-        <div className="settings-panel absolute right-0 top-full mt-1 w-60 z-50
+        <div className={`settings-panel absolute right-0 ${up ? 'bottom-full mb-1' : 'top-full mt-1'} w-60 z-50
                         rounded-md shadow-xl border p-3 space-y-3
-                        bg-gray-900 border-gray-700">
+                        bg-gray-900 border-gray-700`}>
           {/* Header */}
           <div className="settings-heading text-sm font-medium text-gray-300">
             Settings

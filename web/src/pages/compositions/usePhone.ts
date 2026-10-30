@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 
-const QUERY = '(max-width: 767px)'
+/** Portrait phones by width; landscape phones by their short height. */
+const QUERY = '(max-width: 767px), ((max-height: 500px) and (orientation: landscape))'
 
-/** True on narrow (phone) viewports; follows the media query live. */
+/** True on phone viewports in either orientation; follows the media query live. */
 export function usePhone(): boolean {
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(QUERY).matches)
   useEffect(() => {

@@ -1,43 +1,19 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import type { ControlRoomContext } from './types'
-import type { TracePoint } from '../../lib/types'
-import type { PulseProgram, WaveformPoint } from '../../lib/wasm'
-import { getDevice } from '../../lib/wasm'
-import { computeTargetTraces } from '../../lib/targetTraces'
 import EquilibriumCanvas from '../../components/EquilibriumCanvas'
 import PortView from '../../components/portview'
-import StripChart, { type Series } from './diiid/StripChart'
+import StripChart from './diiid/StripChart'
 import SevenSeg from './diiid/SevenSeg'
 import StatusGrid from './diiid/StatusGrid'
 import Console from './diiid/Console'
 import DiagBars from './diiid/DiagBars'
+import Phone from './diiid/Phone'
+import { useWallCharts, GREEN, YELLOW, CYAN, RED, MAGENTA } from './diiid/charts'
 import { useDiagnostics } from './useDiagnostics'
+import { usePhone } from './usePhone'
 import { reconstructionValid } from '../../lib/pulseLog'
 import { formatQ } from '../../lib/fusionPhysics'
 import './diiid.css'
-
-// The wall's primaries: chosen for separation on black, not for taste.
-const GREEN = '#00ff00', YELLOW = '#ffff00', CYAN = '#00ffff', MAGENTA = '#ff40ff', RED = '#ff3030', WHITE = '#ffffff'
-
-const pick = (h: TracePoint[], k: keyof TracePoint): [number, number][] =>
-  h.map((p) => [p.t, Number(p[k])] as [number, number])
-
-function sumWaveforms(ws: (WaveformPoint[] | undefined)[], T: number): [number, number][] {
-  const ts = new Set<number>([0, T])
-  for (const w of ws) if (w) for (const [t] of w) ts.add(t)
-  const times = [...ts].sort((a, b) => a - b)
-  const at = (w: WaveformPoint[] | undefined, t: number) => {
-    if (!w || !w.length) return 0
-    if (t <= w[0][0]) return w[0][1]
-    if (t >= w[w.length - 1][0]) return w[w.length - 1][1]
-    for (let i = 0; i < w.length - 1; i++) {
-      const [t0, v0] = w[i], [t1, v1] = w[i + 1]
-      if (t >= t0 && t <= t1) return v0 + ((t - t0) / (t1 - t0)) * (v1 - v0)
-    }
-    return w[w.length - 1][1]
-  }
-  return times.map((t) => [t, ws.reduce((s, w) => s + at(w, t), 0)])
-}
 
 const SEV: Record<string, string> = { info: '#bbbbbb', ok: GREEN, minor: YELLOW, major: RED, invalid: MAGENTA }
 
@@ -51,47 +27,14 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     el.setAttribute('data-theme', 'diiid')
     return () => { if (prev === null) el.removeAttribute('data-theme'); else el.setAttribute('data-theme', prev) }
   }, [])
+  const phone = usePhone()
+  return phone ? <Phone ctx={ctx} /> : <Desktop ctx={ctx} />
+}
 
-  const T = ctx.duration > 0 ? ctx.duration : 10
-  const refs = useMemo(() => {
-    try {
-      const p: PulseProgram = JSON.parse(ctx.programJson)
-      if (!p.ip) return null
-      const dev = getDevice(ctx.activeDevice)
-      const tt = dev ? computeTargetTraces(p, dev) : null
-      return {
-        ip: p.ip, ne: p.ne_target, pin: sumWaveforms([p.p_nbi, p.p_ech, p.p_ich], p.duration || T),
-        betaN: tt?.betaNTarget ?? undefined,
-      }
-    } catch { return null }
-  }, [ctx.programJson, ctx.activeDevice, T])
-
-  const h = ctx.history
+function Desktop({ ctx }: { ctx: ControlRoomContext }) {
+  const { T, charts } = useWallCharts(ctx)
   const snap = ctx.displaySnapshot
-  const fluxBudget = snap?.flux_budget ?? 0
-  const charts: { title: string; unit?: string; series: Series[]; yMin?: number; yMax?: number }[] = useMemo(() => [
-    { title: 'IP', unit: 'MA', series: [{ label: 'Ip', color: GREEN, pts: pick(h, 'ip'), ref: refs?.ip }], yMin: 0 },
-    { title: 'DENSV2', unit: '1e20 m-3', series: [{ label: 'ne', color: CYAN, pts: pick(h, 'ne_bar'), ref: refs?.ne }], yMin: 0 },
-    { title: 'WMHD', unit: 'MJ', series: [{ label: 'Wth', color: YELLOW, pts: pick(h, 'w_th') }], yMin: 0 },
-    { title: 'BETAN', series: [{ label: 'bN', color: MAGENTA, pts: pick(h, 'beta_n'), ref: refs?.betaN }], yMin: 0 },
-    { title: 'FS04 D-ALPHA', unit: 'a.u.', series: [{ label: 'Da', color: RED, pts: pick(h, 'd_alpha'), elm: h.map((p) => !!p.elm_active) }], yMin: 0 },
-    { title: 'PINJ / PRAD', unit: 'MW', series: [
-      { label: 'Pin', color: YELLOW, pts: pick(h, 'p_input'), ref: refs?.pin },
-      { label: 'Prad', color: MAGENTA, pts: pick(h, 'p_rad') },
-    ], yMin: 0 },
-    { title: 'Q95', series: [{ label: 'q95', color: CYAN, pts: pick(h, 'q95') }], yMin: 0, yMax: 10 },
-    { title: 'TE0 ECE', unit: 'keV', series: [{ label: 'Te0', color: GREEN, pts: pick(h, 'te0') }], yMin: 0 },
-    { title: 'VLOOP', unit: 'V', series: [{ label: 'Vl', color: WHITE, pts: pick(h, 'v_loop') }] },
-    { title: 'LI', series: [{ label: 'li', color: YELLOW, pts: pick(h, 'li') }], yMin: 0, yMax: 1.5 },
-    { title: 'H98Y2', series: [{ label: 'H98', color: GREEN, pts: pick(h, 'h_factor') }], yMin: 0 },
-    { title: 'PSI OH', unit: 'V·s', series: [{ label: 'psi', color: CYAN, pts: pick(h, 'psi_oh'), ref: fluxBudget > 0 ? [[0, fluxBudget], [T, fluxBudget]] : undefined }], yMin: 0 },
-    { title: 'FGW', series: [{ label: 'fGW', color: YELLOW, pts: pick(h, 'f_greenwald'), ref: [[0, 1], [T, 1]] }], yMin: 0 },
-    { title: 'TE PED', unit: 'keV', series: [{ label: 'Tped', color: MAGENTA, pts: pick(h, 'te_ped') }], yMin: 0 },
-    { title: 'I NI', unit: 'MA', series: [{ label: 'Ini', color: GREEN, pts: pick(h, 'i_ni') }], yMin: 0 },
-    { title: 'DISRUPT HAZARD', unit: '1/s', series: [{ label: 'h', color: RED, pts: pick(h, 'disruption_risk') }], yMin: 0 },
-  // history is mutated in place by the simulation hook, so key the memo on its length and last time, not its identity
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [h, h.length, h.length ? h[h.length - 1].t : 0, refs, fluxBudget, T])
+  const h = ctx.history
 
   const dev = ctx.devices.find((d) => d.id === ctx.activeDevice)
   const onScrub = ctx.finished ? ctx.controls.setScrubTime : undefined
@@ -117,14 +60,14 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
   return (
     <div data-layout="diiid" className="dc-root">
-      <div className="dc-wall">
-        <div className="dc-tile dc-eq">
+      <div className="dc-wall" data-tutorial="traces">
+        <div className="dc-tile dc-eq" data-tutorial="equilibrium">
           <EquilibriumCanvas snapshot={snap} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
           <span className="dc-tile-title">EFIT01</span>
         </div>
         {charts.map((c) => (
           <StripChart
-            key={c.title}
+            key={c.id}
             title={c.title}
             unit={c.unit}
             series={c.series}
@@ -153,16 +96,18 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           </div>
         </div>
 
-        <StatusGrid snapshot={snap} running={ctx.running} fuel={ctx.fuelType} elming={elming} />
+        <div className="dc-statusblock" data-tutorial="status">
+          <StatusGrid snapshot={snap} running={ctx.running} fuel={ctx.fuelType} elming={elming} />
 
-        <div className="dc-text">
-          {readout.map(([k, v, u]) => (
-            <div key={k} className="dc-text-row"><span>{k}</span><span>{v}</span><span>{u}</span></div>
-          ))}
-          {snap && <DiagBars d={diag} />}
+          <div className="dc-text">
+            {readout.map(([k, v, u]) => (
+              <div key={k} className="dc-text-row"><span>{k}</span><span>{v}</span><span>{u}</span></div>
+            ))}
+            {snap && <DiagBars d={diag} />}
+          </div>
         </div>
 
-        <div className="dc-tile dc-cam">
+        <div className="dc-tile dc-cam" data-tutorial="portview">
           <PortView
             snapshot={ctx.plasmaSnapshot}
             limiterPoints={ctx.limiterPoints}

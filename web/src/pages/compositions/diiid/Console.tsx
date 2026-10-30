@@ -4,7 +4,7 @@ import type { ControlRoomContext } from '../types'
 export default function Console({ ctx }: { ctx: ControlRoomContext }) {
   const speeds = [2, 1, 0.75, 0.5]
   return (
-    <div className="dc-console">
+    <div className="dc-console" data-tutorial="controls">
       <button className="dc-key dc-key-run" data-on={ctx.running} onClick={() => (ctx.running ? ctx.controls.pause() : ctx.controls.start())}>
         {ctx.running ? 'PAUSE' : 'START'}
       </button>

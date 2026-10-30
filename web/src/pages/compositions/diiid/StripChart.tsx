@@ -62,6 +62,8 @@ interface Props {
   liveTime: number
   /** Drag to scrub; only wired once the pulse has ended. */
   onScrub?: (t: number | null) => void
+  /** Target number of y intervals (fewer on short phone strips). */
+  yTicks?: number
 }
 
 export const FONT_PLOT = '11px Helvetica, Arial, sans-serif'
@@ -90,7 +92,7 @@ function fmt(v: number, step: number): string {
  * with inward ticks, a faint grid, the title inside the plot at top left and
  * the live value at top right in the trace colour.
  */
-export default function StripChart({ title, unit, series, tMax, yMin, yMax, scrubTime, liveTime, onScrub }: Props) {
+export default function StripChart({ title, unit, series, tMax, yMin, yMax, scrubTime, liveTime, onScrub, yTicks = 4 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
@@ -130,7 +132,7 @@ export default function StripChart({ title, unit, series, tMax, yMin, yMax, scru
       if (hi - lo < 1e-9) hi = lo + 1
       if (yMax === undefined) hi = lo + (hi - lo) * 1.12
     }
-    const ys = niceStep(hi - lo, 4)
+    const ys = niceStep(hi - lo, yTicks)
     if (yMax === undefined) hi = Math.ceil(hi / ys) * ys
     if (yMin === undefined) lo = Math.floor(lo / ys) * ys
     const ts = niceStep(T, 5)
@@ -242,7 +244,7 @@ export default function StripChart({ title, unit, series, tMax, yMin, yMax, scru
       g.fillText(texts[i], rx, ry)
       rx -= g.measureText(texts[i]).width + 10
     }
-  }, [title, unit, series, tMax, yMin, yMax, scrubTime, liveTime])
+  }, [title, unit, series, tMax, yMin, yMax, scrubTime, liveTime, yTicks])
 
   useEffect(() => { draw() }, [draw])
   useEffect(() => {
