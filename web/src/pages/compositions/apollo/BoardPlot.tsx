@@ -15,6 +15,13 @@ export interface Series {
   floor?: number
   /** Draw ELMs as vertical spikes (the published Dα rule) instead of joined points. */
   spikes?: boolean
+  /** Derived channel: read the value from the whole sample instead of `key`. */
+  get?: (h: TracePoint) => number
+}
+
+const valueOf = (s: Series, h: TracePoint): number => {
+  const v = s.get ? s.get(h) : (h[s.key] as number)
+  return typeof v === 'number' && isFinite(v) ? v : NaN
 }
 
 /**
@@ -89,6 +96,8 @@ interface Props {
   scrubTime: number | null
   onScrub: (t: number | null) => void
   xAxis?: boolean
+  /** Phone strip: no pointer scrubbing (vertical drags scroll the page), larger axis figures. */
+  phone?: boolean
 }
 
 const WHITE = '#f2f2ee'
@@ -96,6 +105,7 @@ const CYAN = '#5fd7ff'
 const GRID = 'rgba(95,215,255,0.22)'
 const GRID_MAJOR = 'rgba(95,215,255,0.42)'
 const FONT = '9px Helvetica, Arial, sans-serif'
+const FONT_PHONE = '10px Helvetica, Arial, sans-serif'
 
 const PAD_L = 36
 const PAD_R = 8
@@ -118,7 +128,7 @@ function niceMax(v: number): number {
 export default function BoardPlot(p: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { series, history, duration, time, running, finished, scrubTime, xAxis } = p
+  const { series, history, duration, time, running, finished, scrubTime, xAxis, phone } = p
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -171,8 +181,8 @@ export default function BoardPlot(p: Props) {
       let max = 0
       let min = s.floor ?? Infinity
       for (const h of history) {
-        const v = h[s.key] as number
-        if (typeof v === 'number' && isFinite(v)) { if (v > max) max = v; if (v < min) min = v }
+        const v = valueOf(s, h)
+        if (isFinite(v)) { if (v > max) max = v; if (v < min) min = v }
       }
       if (s.ref) for (const [, v] of s.ref) { if (v > max) max = v; if (v < min) min = v }
       if (!isFinite(min)) min = 0
@@ -188,7 +198,7 @@ export default function BoardPlot(p: Props) {
 
     // ── y figures on the primary series, inward ticks ──
     ctx.fillStyle = WHITE
-    ctx.font = FONT
+    ctx.font = phone ? FONT_PHONE : FONT
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
     const s0 = scales[0]
@@ -237,7 +247,7 @@ export default function BoardPlot(p: Props) {
       ctx.strokeStyle = s.color
       ctx.lineWidth = 1.3
       ctx.lineJoin = 'round'
-      const vals = history.map((h) => { const v = h[s.key] as number; return typeof v === 'number' && isFinite(v) ? v : 0 })
+      const vals = history.map((h) => { const v = valueOf(s, h); return isFinite(v) ? v : 0 })
       strokeSeries(ctx, history, vals, tx, (v) => ty(v, i), s.spikes ? elmSpikes(history, vals) : null)
     })
 
@@ -254,7 +264,7 @@ export default function BoardPlot(p: Props) {
     ctx.strokeStyle = 'rgba(255,255,255,0.45)'
     ctx.lineWidth = 1
     ctx.strokeRect(x0 + 0.5, y0 + 0.5, pw - 1, ph - 1)
-  }, [series, history, duration, time, running, finished, scrubTime, xAxis])
+  }, [series, history, duration, time, running, finished, scrubTime, xAxis, phone])
 
   useEffect(() => { draw() }, [draw])
   useEffect(() => {
@@ -266,7 +276,7 @@ export default function BoardPlot(p: Props) {
   }, [draw])
 
   const scrubAt = (e: PointerEvent<HTMLDivElement>) => {
-    if (!finished) return
+    if (!finished || phone) return
     const rect = wrapRef.current?.getBoundingClientRect()
     if (!rect) return
     const pw = rect.width - PAD_L - PAD_R
@@ -289,7 +299,7 @@ export default function BoardPlot(p: Props) {
   return (
     <div
       ref={wrapRef}
-      className={`ap-plot${finished ? ' ap-plot-scrub' : ''}`}
+      className={`ap-plot${finished && !phone ? ' ap-plot-scrub' : ''}`}
       onPointerDown={scrubAt}
       onPointerMove={(e) => { if (e.buttons & 1) scrubAt(e) }}
     >
@@ -299,7 +309,7 @@ export default function BoardPlot(p: Props) {
       <div className="ap-plot-vals">
         {series.map((s) => (
           <span key={String(s.key)} style={{ color: s.color }}>
-            {s.label} {sample ? s.fmt(sample[s.key] as number) : '—'}{s.unit ? ` ${s.unit}` : ''}
+            {s.label} {sample ? s.fmt(valueOf(s, sample)) : '—'}{s.unit ? ` ${s.unit}` : ''}
           </span>
         ))}
       </div>

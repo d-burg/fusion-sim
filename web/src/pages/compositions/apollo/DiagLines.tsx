@@ -31,3 +31,35 @@ export default function DiagLines({ d }: { d: Diagnostics | null }) {
     </div>
   )
 }
+
+const PHONE_CELLS = 16
+
+/** Phone bargraph: the label and its state word on one line, the cells and the value under them. */
+function PhoneLine({ k, fill, v, vTone, word, tone }: {
+  k: string; fill: number; v: string; vTone?: DiagTone; word: string; tone?: DiagTone
+}) {
+  const n = Math.round(Math.max(0, Math.min(1, fill)) * PHONE_CELLS)
+  return (
+    <div className="app-bar">
+      <div className="app-bar-top"><span>{k}</span><span className="ap-bar-w" data-tone={tone}>{word}</span></div>
+      <div className="app-bar-bot">
+        <span className="ap-bar-cells">{'█'.repeat(n)}<span className="ap-bar-off">{'░'.repeat(PHONE_CELLS - n)}</span></span>
+        <span className="ap-v" data-tone={vTone}>{v}</span>
+      </div>
+    </div>
+  )
+}
+
+/** The three bargraphs on a phone, full width, two lines each; dashes until there is a plasma. */
+export function PhoneDiagLines({ d, live }: { d: Diagnostics; live: boolean }) {
+  const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
+  return (
+    <div className="app-bars">
+      <PhoneLine k="DIVERTOR HEAT FLUX" fill={live ? d.qFill : 0} v={live ? `${d.q.toFixed(1)} MW/M2` : '-.- MW/M2'} vTone={live ? d.qTone : undefined}
+        word={!live || d.regime === '—' ? '----' : d.regime} tone={live ? d.regimeTone : undefined} />
+      {d.isW && <PhoneLine k="SURFACE TEMPERATURE" fill={live ? d.tFill : 0} v={live ? `${d.tSurf.toFixed(0)} DEG C` : '--- DEG C'} vTone={live ? d.tTone : undefined}
+        word={live ? tWord : '----'} tone={live ? d.tTone : undefined} />}
+      <PhoneLine k="NEUTRONS" fill={live ? d.nFill : 0} v={`${live && d.rate > 0 ? sci(d.rate) : '-.--'} /S`} word={live && d.active ? 'ACTIVE' : 'IDLE'} tone={live && d.active ? 'ok' : undefined} />
+    </div>
+  )
+}

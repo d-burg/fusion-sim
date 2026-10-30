@@ -79,9 +79,14 @@ html[data-theme="apollo"] {
 [data-layout="apollo"] .ap-clock-sub { display: flex; gap: 34px; height: 11px; }
 
 /* ── 06–13 big board ──────────────────────────────────────────── */
+/* The port view keeps 411 x 393 (about 1.05 : 1) wherever the board is tall enough for it and a log of
+   at least 64 px under it; on shorter screens (1280 x 720, 1366 x 768) it shrinks with the board, at the same
+   aspect, so it never spills over the console. 465 px = clock band 92 + console 300 + board padding 6 + gap 3
+   + the 64 px log. */
+[data-layout="apollo"].ap-root { --ap-port-h: min(393px, calc(100vh - 465px)); }
 [data-layout="apollo"] .ap-board {
   display: grid;
-  grid-template-columns: 300px 1fr 411px;
+  grid-template-columns: 300px minmax(0, 1fr) min(411px, calc(var(--ap-port-h) * 411 / 393));
   gap: 3px;
   padding: 3px;
   background: #262626;
@@ -99,7 +104,7 @@ html[data-theme="apollo"] {
 /* The port view keeps the proportion it has on the site (about 1.05 : 1);
    the log takes what is left under it. */
 [data-layout="apollo"] .ap-right {
-  display: grid; grid-template-rows: 393px 1fr; gap: 3px; min-height: 0;
+  display: grid; grid-template-rows: var(--ap-port-h) minmax(0, 1fr); gap: 3px; min-height: 0;
 }
 [data-layout="apollo"] .ap-plot { position: relative; background: #000; overflow: hidden; min-height: 0; }
 [data-layout="apollo"] .ap-plot-scrub { cursor: crosshair; }
@@ -140,7 +145,15 @@ html[data-theme="apollo"] {
   color: var(--ap-engr);
   min-height: 0;
 }
-[data-layout="apollo"] .ap-console-a { display: grid; grid-template-columns: 350px 1fr 530px; }
+[data-layout="apollo"] .ap-console-a { display: grid; grid-template-columns: 350px minmax(0, 1fr) 530px; }
+/* status and telemetry: one tour target laid on the console's own first two columns */
+[data-layout="apollo"] .ap-console-st { grid-column: 1 / 3; display: grid; grid-template-columns: subgrid; min-height: 0; }
+[data-layout="apollo"] .ap-console-st > .ap-mod:last-child { border-right: 2px solid var(--ap-sage-dark); }
+/* Below 1440 px the three modules shrink in proportion (1440 = 350 + 560 + 530), so the control keys
+   (REPORT, SETTINGS, the fuel keys) always fit. At 1440 and wider nothing changes. */
+@media (max-width: 1439px) {
+  [data-layout="apollo"] .ap-console-a { grid-template-columns: minmax(0, 350fr) minmax(0, 560fr) minmax(0, 530fr); }
+}
 [data-layout="apollo"] .ap-console-b { display: grid; grid-template-rows: 72px 1fr; }
 [data-layout="apollo"] .ap-console-b-lower { display: grid; grid-template-columns: 1fr 560px; min-height: 0; border-top: 2px solid var(--ap-sage-dark); }
 [data-layout="apollo"] .ap-annun { display: flex; flex-direction: column; padding: 6px 8px; min-height: 0; }
@@ -262,3 +275,184 @@ html[data-theme="apollo"] {
 [data-layout="apollo"] .ap-slot .settings-btn:hover { color: #000; }
 /* The console sits at the foot of the screen: the settings panel opens upward. */
 [data-layout="apollo"] .ap-slot .settings-panel { top: auto; bottom: calc(100% + 6px); left: auto; right: 0; margin-top: 0; border-radius: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHONE — the same room, less of it: one clock row, eight lamps, the pair,
+   a small CRT, the board plots, the control console pinned to the foot.
+   ═══════════════════════════════════════════════════════════════════ */
+[data-layout="apollo"][data-phone].ap-root {
+  --app-keys: 64px;
+  display: block; width: auto; height: auto; min-height: 0; overflow: visible;
+  padding-bottom: calc(var(--app-keys) + env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+[data-layout="apollo"][data-phone] .app-fill { flex: 1; }
+[data-layout="apollo"][data-phone] .ap-legend { font-size: 10px; letter-spacing: 0.14em; }
+[data-layout="apollo"][data-phone] .ap-engr { font-size: 10px; }
+[data-layout="apollo"][data-phone] .ap-plate { font-size: 10px; }
+
+/* clock band: PULSE, PET, PHASE, settings; one row, digits 18 px */
+[data-layout="apollo"][data-phone] .app-clocks {
+  height: 44px; display: flex; align-items: center; gap: 12px; padding-left: 8px;
+  background: #0a0a0a; border-bottom: 3px solid #3a3a38;
+}
+[data-layout="apollo"][data-phone] .app-clock { display: flex; flex-direction: column; gap: 3px; flex: none; }
+[data-layout="apollo"][data-phone] .app-clock-phase { flex: 1 1 auto; min-width: 0; }
+[data-layout="apollo"][data-phone] .app-phase {
+  font-size: 14px; line-height: 18px; letter-spacing: 0.12em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+[data-layout="apollo"][data-phone] .app-settings { display: flex; align-self: stretch; flex: none; position: relative; }
+[data-layout="apollo"][data-phone] .app-settings .settings-btn {
+  width: 44px; height: 44px; justify-content: center; border-radius: 0;
+  background: #bcc6b4; color: var(--ap-engr); border-left: 1px solid #7d877a; box-shadow: inset 0 0 0 1px #d6ddd0;
+}
+[data-layout="apollo"][data-phone] .app-settings .settings-btn svg { width: 20px; height: 20px; }
+[data-layout="apollo"][data-phone] .app-settings .settings-panel { left: auto; right: 0; border-radius: 0; }
+
+/* control keys on the phone: engraved sage caps, lit white when selected; 44 px tall */
+[data-layout="apollo"][data-phone] .ap-key-btn { font-size: 11px; letter-spacing: 0.06em; }
+[data-layout="apollo"][data-phone] .ap-key-btn.ap-key-off {
+  background: #bcc6b4; border-color: #7d877a; box-shadow: inset 0 0 0 1px #d6ddd0; color: var(--ap-engr);
+}
+[data-layout="apollo"][data-phone] .ap-key-btn:disabled.ap-key-off { color: #7a8476; background: #b3bdab; }
+[data-layout="apollo"][data-phone] .ap-key-btn.ap-key-white { background: #f4f3ec; border-color: #7d877a; box-shadow: inset 0 0 0 1px #fff; }
+[data-layout="apollo"][data-phone] .app-pick { position: relative; cursor: pointer; }
+[data-layout="apollo"][data-phone] .app-pick span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+[data-layout="apollo"][data-phone] .app-pick span::after { content: ' \25BE'; }
+/* the select takes the tap at 16 px so iOS does not zoom; the caption underneath is what shows */
+[data-layout="apollo"][data-phone] .app-pick select {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; border: 0; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+}
+
+/* status lamps (2 x 4, 60 x 36) beside the program keys */
+[data-layout="apollo"][data-phone] .app-status {
+  display: flex; align-items: center; gap: 8px; padding: 8px;
+}
+[data-layout="apollo"][data-phone] .app-lamps {
+  flex: none; display: grid; grid-template-columns: repeat(4, 60px); grid-auto-rows: 36px; gap: 6px;
+}
+[data-layout="apollo"][data-phone] .app-lamps .ap-key { font-size: 10px; letter-spacing: 0; line-height: 1.1; padding: 0 1px; }
+[data-layout="apollo"][data-phone] .app-program { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+[data-layout="apollo"][data-phone] .app-program .ap-key { height: 44px; padding: 0 6px; }
+
+/* the pair: R-Z map beside the port view (1.05 : 1) */
+[data-layout="apollo"][data-phone] .app-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3px; padding: 3px; background: #262626;
+}
+[data-layout="apollo"][data-phone] .app-port { aspect-ratio: 1.05; }
+[data-layout="apollo"][data-phone] .app-pair .panel-title { display: none; }
+[data-layout="apollo"][data-phone] .app-pair .ap-tile > div:first-child { min-height: 0; }
+[data-layout="apollo"][data-phone] .app-pair .ap-plot-title,
+[data-layout="apollo"][data-phone] .app-pair .ap-plot-num { z-index: 21; font-size: 11px; }
+[data-layout="apollo"][data-phone] .app-eq .ap-plot-title { left: 6px; }
+/* the shared canvas writes its legend bottom left, over the plasma on a half-width tile; widen the canvas
+   past both edges so the plot stays centered and the legend falls outside the clip. The configuration
+   word comes back as our own caption. */
+[data-layout="apollo"][data-phone] .app-eq > div:first-child {
+  position: absolute; top: 0; bottom: 0; left: -96px; right: -96px; width: auto; height: auto;
+}
+[data-layout="apollo"][data-phone] .app-eq-cfg {
+  position: absolute; left: 6px; bottom: 4px; z-index: 21; pointer-events: none;
+  font-size: 11px; letter-spacing: 0.08em; color: #bfe8ff;
+}
+
+/* telemetry CRT: the three bargraphs, Pfus and Q, hazard and flux, then the 2 x 3 grid */
+[data-layout="apollo"][data-phone] .app-tele { padding: 0 8px 8px; }
+[data-layout="apollo"][data-phone] .app-mod-head { display: flex; align-items: center; gap: 6px; height: 52px; }
+[data-layout="apollo"][data-phone] .app-mod-head .ap-plate { margin-right: 0; }
+[data-layout="apollo"][data-phone] .app-mod-head .ap-key,
+[data-layout="apollo"][data-phone] .app-board-head .ap-key { height: 44px; min-width: 52px; padding: 0 12px; }
+[data-layout="apollo"][data-phone] .ap-crt { padding: 4px; }
+[data-layout="apollo"][data-phone] .app-crt-screen { font-size: 17px; line-height: 1.05; padding: 6px 8px 8px; }
+[data-layout="apollo"][data-phone] .app-bar { padding: 2px 0 4px; }
+[data-layout="apollo"][data-phone] .app-bar-top,
+[data-layout="apollo"][data-phone] .app-bar-bot { display: flex; align-items: center; justify-content: space-between; gap: 8px; white-space: nowrap; }
+[data-layout="apollo"][data-phone] .app-bar .ap-bar-cells { font-size: 13px; letter-spacing: 1px; }
+[data-layout="apollo"][data-phone] .app-bar .ap-v { font-variant-numeric: tabular-nums; }
+[data-layout="apollo"][data-phone] .app-bar [data-tone="ok"],
+[data-layout="apollo"][data-phone] .app-fus [data-tone="ok"] { color: #8ef08e; }
+[data-layout="apollo"][data-phone] .app-bar [data-tone="warn"],
+[data-layout="apollo"][data-phone] .app-fus [data-tone="warn"] { color: #ffc04a; }
+[data-layout="apollo"][data-phone] .app-bar [data-tone="bad"],
+[data-layout="apollo"][data-phone] .app-fus [data-tone="bad"] { color: #ff6a5a; }
+[data-layout="apollo"][data-phone] .app-fus {
+  display: flex; justify-content: space-between; gap: 12px; white-space: nowrap; padding: 3px 0;
+  border-top: 1px dashed #2c4660;
+}
+[data-layout="apollo"][data-phone] .app-fus b { font-weight: 400; color: #f2f2ee; }
+[data-layout="apollo"][data-phone] .app-fus i { font-style: normal; color: #6fa3c9; }
+[data-layout="apollo"][data-phone] .app-tele-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; row-gap: 2px;
+  border-top: 1px dashed #2c4660; padding-top: 5px; margin-top: 1px;
+}
+[data-layout="apollo"][data-phone] .app-tele-grid .ap-tele-row { grid-template-columns: 6ch minmax(0, 1fr) 4ch; }
+
+/* the board: picked plots, 80 px each, full width; the last carries the time axis */
+[data-layout="apollo"][data-phone] .app-board { display: grid; gap: 2px; background: #262626; padding-bottom: 2px; }
+[data-layout="apollo"][data-phone] .app-board-head { display: flex; align-items: center; gap: 6px; height: 52px; padding: 0 8px; }
+[data-layout="apollo"][data-phone] .app-board-head .ap-plate { margin-right: 0; }
+[data-layout="apollo"][data-phone] .app-chan {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 44px; gap: 6px; padding: 0 8px 8px; border-top: 0;
+}
+[data-layout="apollo"][data-phone] .app-chan .ap-key { white-space: nowrap; }
+[data-layout="apollo"][data-phone] .app-board .ap-plot { height: 80px; touch-action: pan-y; }
+[data-layout="apollo"][data-phone] .app-board .ap-plot:last-child { height: 96px; }
+[data-layout="apollo"][data-phone] .app-board .ap-plot-title,
+[data-layout="apollo"][data-phone] .app-board .ap-plot-vals { font-size: 11px; }
+[data-layout="apollo"][data-phone] .app-board .ap-plot-num { font-size: 10px; }
+
+/* log: two lines; the report on its key */
+[data-layout="apollo"][data-phone] .app-log { border-top: 3px solid #262626; }
+[data-layout="apollo"][data-phone] .app-log-head { height: 18px; }
+[data-layout="apollo"][data-phone] .app-log-head .ap-plot-title { left: 8px; font-size: 11px; }
+[data-layout="apollo"][data-phone] .app-log-head .ap-plot-num { font-size: 10px; }
+[data-layout="apollo"][data-phone] .app-log-lines { position: static; padding: 0 8px 8px; font-size: 17px; line-height: 18px; }
+[data-layout="apollo"][data-phone] .app-log-lines .ap-log-t { width: 6ch; }
+[data-layout="apollo"][data-phone] .app-log-x { overflow: hidden; text-overflow: ellipsis; }
+[data-layout="apollo"][data-phone] .app-log-k { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+[data-layout="apollo"][data-phone] .app-log-keys { display: flex; justify-content: flex-end; padding: 4px 8px; }
+[data-layout="apollo"][data-phone] .app-log-keys .ap-key { height: 44px; padding: 0 14px; }
+
+/* the control console, pinned: a thin timeline with its playhead, then the keys */
+[data-layout="apollo"][data-phone] .app-keys {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; box-sizing: border-box;
+  height: calc(var(--app-keys) + env(safe-area-inset-bottom, 0px)); padding: 0 8px env(safe-area-inset-bottom, 0px);
+  border-top: 2px solid #8d978a;
+}
+[data-layout="apollo"][data-phone] .app-line { position: relative; height: 12px; margin: 0 14px; }
+[data-layout="apollo"][data-phone] .app-line::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 5px; height: 3px; background: var(--ap-glass); box-shadow: inset 0 0 0 1px #1c201b;
+}
+[data-layout="apollo"][data-phone] .app-line-fill { position: absolute; left: 0; top: 5px; height: 3px; background: var(--ap-white); }
+[data-layout="apollo"][data-phone] .app-line-tick { position: absolute; top: 2px; width: 1px; height: 9px; background: var(--ap-engr); }
+[data-layout="apollo"][data-phone] .app-handle {
+  position: absolute; top: -30px; width: 44px; height: 44px; transform: translateX(-50%);
+  pointer-events: none; touch-action: none;
+}
+[data-layout="apollo"][data-phone] .app-handle::after {
+  content: ''; position: absolute; left: 50%; top: 30px; width: 3px; height: 11px; transform: translateX(-50%); background: var(--ap-engr);
+}
+[data-layout="apollo"][data-phone] .app-handle[data-scrub="true"] { pointer-events: auto; cursor: ew-resize; }
+[data-layout="apollo"][data-phone] .app-handle[data-scrub="true"]::after { width: 10px; background: var(--ap-white); box-shadow: 0 0 0 1px var(--ap-engr); }
+[data-layout="apollo"][data-phone] .app-keyrow { display: grid; grid-template-columns: 1.2fr 1fr 1.2fr 1fr; gap: 6px; height: 44px; }
+[data-layout="apollo"][data-phone] .app-keyrow .ap-key { height: 44px; }
+
+/* a phone on its side: the same stack, wider; one row of eight lamps, the pair capped */
+@media (orientation: landscape) {
+  [data-layout="apollo"][data-phone] .app-lamps { grid-template-columns: repeat(8, 60px); }
+  [data-layout="apollo"][data-phone] .app-program { flex-direction: row; }
+  [data-layout="apollo"][data-phone] .app-program .ap-key { flex: 1 1 0; min-width: 0; }
+  [data-layout="apollo"][data-phone] .app-pair { grid-template-columns: minmax(0, 1fr) 252px; }
+  /* the map tile is wide here: the shared canvas keeps its own legend, so no widening and no caption of ours */
+  [data-layout="apollo"][data-phone] .app-eq > div:first-child { left: 0; right: 0; }
+  [data-layout="apollo"][data-phone] .app-eq-cfg { display: none; }
+  [data-layout="apollo"][data-phone] .app-tele-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-layout="apollo"][data-phone] .app-tele-grid .ap-tele-row { grid-template-columns: 6ch 10ch 4ch; }
+  /* each bargraph on one line: label and word, then the cells and the value */
+  [data-layout="apollo"][data-phone] .app-bar { display: flex; align-items: center; gap: 24px; }
+  [data-layout="apollo"][data-phone] .app-bar-top,
+  [data-layout="apollo"][data-phone] .app-bar-bot { flex: 1 1 0; min-width: 0; }
+  [data-layout="apollo"][data-phone] .app-chan { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  [data-layout="apollo"][data-phone] .app-keyrow { max-width: 640px; margin: 0 auto; }
+}

@@ -8,6 +8,8 @@ import BoardPlot, { type Series } from './apollo/BoardPlot'
 import LampKey, { type Lamp } from './apollo/LampKey'
 import { clock, interpWaveform, parseProgram, pulsePhase, type Waveform } from './apollo/phase'
 import DiagLines from './apollo/DiagLines'
+import Phone from './apollo/Phone'
+import { usePhone } from './usePhone'
 import { useDiagnostics } from './useDiagnostics'
 import { reconstructionValid } from '../../lib/pulseLog'
 import { formatQ } from '../../lib/fusionPhysics'
@@ -51,9 +53,7 @@ function Clock({ n, label, digits, word, sub, color = LCD }: {
 }
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
-  const { displaySnapshot: s, history, running, finished, scrubTime, time, duration, programJson } = ctx
-  const [showReport, setShowReport] = useState(false)
-
+  const phone = usePhone()
   // The big board and the shared canvases take the MOCR field: black.
   // The settings provider re-asserts its own theme on mount and on change,
   // so the attribute is held for as long as this composition is mounted.
@@ -69,6 +69,13 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       if (prev) el.setAttribute('data-theme', prev); else el.removeAttribute('data-theme')
     }
   }, [])
+
+  return phone ? <Phone ctx={ctx} /> : <Desktop ctx={ctx} />
+}
+
+function Desktop({ ctx }: { ctx: ControlRoomContext }) {
+  const { displaySnapshot: s, history, running, finished, scrubTime, time, duration, programJson } = ctx
+  const [showReport, setShowReport] = useState(false)
 
   // The report takes the log screen once it exists; a new pulse goes back to the log.
   // Derived state: when the report appears it takes the log screen; when a new
@@ -199,7 +206,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   )
 
   const ctlModule = (
-    <div className="ap-mod ap-mod-ctl">
+    <div className="ap-mod ap-mod-ctl" data-tutorial="controls">
       <div className="ap-mod-head"><span className="ap-plate">16</span><span className="ap-engr">CONTROL</span></div>
       <div className="ap-ctl-rows">
         <div className="ap-ctl-row ap-ctl-row-6">
@@ -251,12 +258,12 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
       {/* ── 06–13 big board ── */}
       <section className="ap-board">
-        <div className="ap-tile ap-map">
+        <div className="ap-tile ap-map" data-tutorial="equilibrium">
           <EquilibriumCanvas snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
           <div className="ap-plot-title">R-Z <span className="ap-unit">M</span></div>
           <div className="ap-plot-num">06</div>
         </div>
-        <div className="ap-plots">
+        <div className="ap-plots" data-tutorial="traces">
           {plots.map((pl) => (
             <BoardPlot
               key={pl.number}
@@ -276,7 +283,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           ))}
         </div>
         <div className="ap-right">
-          <div className="ap-tile ap-port">
+          <div className="ap-tile ap-port" data-tutorial="portview">
             <PortView
               snapshot={ctx.plasmaSnapshot}
               limiterPoints={ctx.limiterPoints}
@@ -314,16 +321,19 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       {/* ── 14–16 console ── */}
       {CONSOLE === 'A' ? (
         <section className="ap-console ap-console-a">
-          <div className="ap-mod ap-mod-status">
-            <div className="ap-mod-head"><span className="ap-plate">14</span><span className="ap-engr">STATUS</span></div>
-            <div className="ap-keys ap-keys-status">{statusKeys}</div>
+          {/* lamps and telemetry are one tour target: a subgrid spanning the first two columns */}
+          <div className="ap-console-st" data-tutorial="status">
+            <div className="ap-mod ap-mod-status">
+              <div className="ap-mod-head"><span className="ap-plate">14</span><span className="ap-engr">STATUS</span></div>
+              <div className="ap-keys ap-keys-status">{statusKeys}</div>
+            </div>
+            {teleModule}
           </div>
-          {teleModule}
           {ctlModule}
         </section>
       ) : (
         <section className="ap-console ap-console-b">
-          <div className="ap-annun">
+          <div className="ap-annun" data-tutorial="status">
             <div className="ap-mod-head"><span className="ap-plate">14</span><span className="ap-engr">STATUS</span></div>
             <div className="ap-keys ap-keys-strip">{statusKeys}</div>
           </div>
