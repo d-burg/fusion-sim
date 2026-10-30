@@ -29,6 +29,15 @@ export interface SeriesDef {
   scale?: number
   /** Dα: draw each ELM as a vertical spike (up and back down at one x). */
   spikes?: boolean
+  /** A value derived from the point instead of read at `key` (e.g. τ_E = W_th / P_loss). */
+  value?: (p: TracePoint) => number
+}
+
+/** One point's value for a series, scaled. */
+function sv(s: SeriesDef, p: TracePoint): number {
+  if (s.value) return s.value(p) * (s.scale ?? 1)
+  const v = p[s.key]
+  return (typeof v === 'number' ? v : v ? 1 : 0) * (s.scale ?? 1)
 }
 
 export interface RowDef {
@@ -52,7 +61,10 @@ interface Props {
   time: number
   scrubTime: number | null
   finished: boolean
-  onScrub: (t: number | null) => void
+  /** Pointer scrubbing on the plot after the pulse; left out on phones, where the page scrolls instead. */
+  onScrub?: (t: number | null) => void
+  /** Phone sizing: 11 px tick labels and readouts. */
+  phone?: boolean
 }
 
 /**
@@ -188,7 +200,7 @@ export function sumWaveforms(ws: (WaveformPoint[] | undefined)[]): WaveformPoint
   return ts.map((t) => [t, defined.reduce((s, w) => s + interp(w, t), 0)])
 }
 
-function valueAt(history: TracePoint[], key: keyof TracePoint, t: number, scale: number): number | null {
+function valueAt(history: TracePoint[], s: SeriesDef, t: number): number | null {
   if (history.length === 0) return null
   let lo = 0
   let hi = history.length - 1
@@ -197,11 +209,10 @@ function valueAt(history: TracePoint[], key: keyof TracePoint, t: number, scale:
     if (history[mid].t < t) lo = mid + 1
     else hi = mid
   }
-  const v = history[lo][key]
-  return typeof v === 'number' ? v * scale : v ? 1 : 0
+  return sv(s, history[lo])
 }
 
-export default function JScope({ rows, history, programJson, duration, time, scrubTime, finished, onScrub }: Props) {
+export default function JScope({ rows, history, programJson, duration, time, scrubTime, finished, onScrub, phone }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef(false)
@@ -244,7 +255,8 @@ export default function JScope({ rows, history, programJson, duration, time, scr
     const cursorT = scrubTime !== null ? scrubTime : (history.length > 0 ? history[history.length - 1].t : null)
 
     g.lineWidth = 1
-    g.font = '10px Arial, Helvetica, sans-serif'
+    const AX = phone ? '11px Arial, Helvetica, sans-serif' : '10px Arial, Helvetica, sans-serif'
+    g.font = AX
 
     rows.forEach((row, i) => {
       const y0 = Math.round(TOP + i * rowH) + 0.5
@@ -258,10 +270,8 @@ export default function JScope({ rows, history, programJson, duration, time, scr
       const autoHi = row.yMax === undefined
       if (autoLo || autoHi) {
         for (const s of row.series) {
-          const sc = s.scale ?? 1
           for (const p of history) {
-            const v = p[s.key]
-            const x = (typeof v === 'number' ? v : v ? 1 : 0) * sc
+            const x = sv(s, p)
             if (!isFinite(x)) continue
             if (autoLo && x < lo) lo = x
             if (autoHi && x > hi) hi = x
@@ -332,12 +342,8 @@ export default function JScope({ rows, history, programJson, duration, time, scr
       }
 
       row.series.forEach((s, si) => {
-        const sc = s.scale ?? 1
         g.strokeStyle = s.color ?? (si === 0 ? JS.trace : si === 1 ? JS.second : JS.third)
-        const vals = history.map((p) => {
-          const raw = p[s.key]
-          return (typeof raw === 'number' ? raw : raw ? 1 : 0) * sc
-        })
+        const vals = history.map((p) => sv(s, p))
         strokeSeries(g, history, vals, toX, toY, s.spikes ? elmSpikes(history, vals) : null)
       })
 
@@ -352,16 +358,16 @@ export default function JScope({ rows, history, programJson, duration, time, scr
       g.restore()
 
       // signal title top-left, readout top-right
-      const TF = 'bold 11px Arial, Helvetica, sans-serif'
+      const TF = phone ? 'bold 12px Arial, Helvetica, sans-serif' : 'bold 11px Arial, Helvetica, sans-serif'
       g.font = TF
       g.textAlign = 'left'
       g.textBaseline = 'top'
       g.fillStyle = JS.trace
       const title = row.unit ? `${row.label} [${row.unit}]` : row.label
-      drawRich(g, title, LEFT + 5, y0 + 3, TF, 'bold 8px Arial, Helvetica, sans-serif', 4)
+      drawRich(g, title, LEFT + 5, y0 + 3, TF, phone ? 'bold 9px Arial, Helvetica, sans-serif' : 'bold 8px Arial, Helvetica, sans-serif', 4)
 
-      const RF = '10px Arial, Helvetica, sans-serif'
-      const RSF = '7px Arial, Helvetica, sans-serif'
+      const RF = phone ? '11px Arial, Helvetica, sans-serif' : '10px Arial, Helvetica, sans-serif'
+      const RSF = phone ? '8px Arial, Helvetica, sans-serif' : '7px Arial, Helvetica, sans-serif'
       g.font = RF
       g.textAlign = 'right'
       let rx = LEFT + plotW - 4
@@ -369,7 +375,7 @@ export default function JScope({ rows, history, programJson, duration, time, scr
       const parts: { text: string; color: string }[] = []
       if (cursorT !== null) {
         row.series.forEach((s, si) => {
-          const v = valueAt(history, s.key, cursorT, s.scale ?? 1)
+          const v = valueAt(history, s, cursorT)
           if (v === null) return
           const name = s.name ?? (si === 0 ? '' : s.key)
           parts.push({ text: `${name ? name + ' ' : ''}${v.toFixed(d)}`, color: s.color ?? (si === 0 ? JS.trace : si === 1 ? JS.second : JS.third) })
@@ -389,7 +395,7 @@ export default function JScope({ rows, history, programJson, duration, time, scr
     // time axis labels under the last row
     const yb = Math.round(TOP + n * rowH) + 0.5
     g.fillStyle = JS.tick
-    g.font = '10px Arial, Helvetica, sans-serif'
+    g.font = AX
     g.textAlign = 'center'
     g.textBaseline = 'top'
     for (let t = 0; t <= tMax + 1e-9; t += tStep) {
@@ -405,7 +411,7 @@ export default function JScope({ rows, history, programJson, duration, time, scr
       g.fillStyle = JS.ref
       g.beginPath(); g.moveTo(x, yb + 1); g.lineTo(x - 3, yb + 6); g.lineTo(x + 3, yb + 6); g.closePath(); g.fill()
     }
-  }, [rows, refs, history, duration, time, scrubTime, finished])
+  }, [rows, refs, history, duration, time, scrubTime, finished, phone])
 
   useEffect(() => { draw() }, [draw])
   useEffect(() => {
@@ -418,7 +424,7 @@ export default function JScope({ rows, history, programJson, duration, time, scr
 
   const scrubAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas || !onScrub) return
     const rect = canvas.getBoundingClientRect()
     const plotW = rect.width - LEFT - RIGHT
     const t = ((e.clientX - rect.left - LEFT) / plotW) * duration
@@ -427,14 +433,14 @@ export default function JScope({ rows, history, programJson, duration, time, scr
 
   return (
     <div ref={boxRef} className="jet-jscope">
-      <canvas
+      {!onScrub ? <canvas ref={canvasRef} /> : <canvas
         ref={canvasRef}
         style={{ cursor: finished ? 'crosshair' : 'default' }}
         onPointerDown={(e) => { if (!finished) return; dragRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); scrubAt(e) }}
         onPointerMove={(e) => { if (dragRef.current) scrubAt(e) }}
         onPointerUp={(e) => { dragRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId) }}
         onDoubleClick={() => onScrub(null)}
-      />
+      />}
     </div>
   )
 }

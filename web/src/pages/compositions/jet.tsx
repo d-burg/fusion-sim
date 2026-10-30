@@ -5,6 +5,8 @@ import EquilibriumCanvas from '../../components/EquilibriumCanvas'
 import PortView from '../../components/portview'
 import JScope, { sumWaveforms, type RowDef } from './jet/JScope'
 import InterlockTable from './jet/InterlockTable'
+import Phone from './jet/Phone'
+import { usePhone } from './usePhone'
 import './jet.css'
 
 /* ─── JET / CODAS wall, light direction ──────────────────────────
@@ -81,12 +83,15 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     { text: 'DISRUPTED', on: !!s?.disrupted, cls: 'alarm' },
   ], [s, plasma])
 
+  const phone = usePhone()
+  if (phone) return <Phone ctx={ctx} words={words} configCode={configCode} />
+
   const tDisp = ctx.scrubTime !== null ? ctx.scrubTime : ctx.time
 
   return (
     <div data-layout="jet" className="jet-root">
       {/* ── toolbar ── */}
-      <div className="jet-toolbar">
+      <div className="jet-toolbar" data-tutorial="controls">
         <button className="jet-btn" onClick={ctx.running ? ctx.controls.pause : ctx.controls.start}>
           {ctx.running ? 'Pause' : 'Start'}
         </button>
@@ -146,11 +151,11 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       {/* ── wall ── */}
       <div className="jet-wall">
         <div className="jet-col-left">
-          <div className="jet-panel jet-panel-table">
+          <div className="jet-panel jet-panel-table" data-tutorial="status">
             <div className="jet-title">{dev?.name ?? ''} scalars / interlocks</div>
             <InterlockTable snapshot={s} device={dev} />
           </div>
-          <div className="jet-panel jet-panel-eq">
+          <div className="jet-panel jet-panel-eq" data-tutorial="equilibrium">
             <div className="jet-title">Equilibrium  R-Z  {plasma ? configCode(s?.magnetic_config) : ''}</div>
             <div className="jet-eq">
               <EquilibriumCanvas snapshot={s} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
@@ -158,7 +163,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           </div>
         </div>
 
-        <div className="jet-col-mid">
+        <div className="jet-col-mid" data-tutorial="traces">
           <div className="jet-panel jet-panel-scope">
             <div className="jet-title">jScope  PLASMA  #{ctx.pulseNumber ?? '-'}</div>
             <JScope
@@ -188,7 +193,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         </div>
 
         <div className="jet-col-right">
-          <div className="jet-panel jet-panel-cam">
+          <div className="jet-panel jet-panel-cam" data-tutorial="portview">
             <div className="jet-title">Camera  KL1  port view</div>
             <div className="jet-cam">
               <PortView

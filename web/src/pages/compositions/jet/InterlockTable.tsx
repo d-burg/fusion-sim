@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Snapshot } from '../../../lib/types'
 import type { DeviceInfo } from '../types'
 import { reconstructionValid } from '../../../lib/pulseLog'
@@ -32,7 +32,7 @@ const LABEL: Record<string, ReactNode> = {
   tauE: <>τ<sub>E</sub></>, H98: <>H<sub>98</sub></>, betaN: <>β<sub>N</sub></>, q95: <>q<sub>95</sub></>, li: <>l<sub>i</sub></>,
   Pin: <>P<sub>in</sub></>, POH: <>P<sub>OH</sub></>, Prad: <>P<sub>rad</sub></>,
   q_perp: 'Divertor heat flux', lambdaQ: <>λ<sub>q</sub></>, fDet: <>f<sub>det</sub></>, T_surf: 'Surface temperature', Sn: 'Neutrons', Pfus: <>P<sub>fus</sub></>,
-  Vloop: <>V<sub>loop</sub></>, PsiOH: <>Ψ<sub>OH</sub></>, Zeff: <>Z<sub>eff</sub></>, hazard: 'Hazard',
+  Wth: <>W<sub>th</sub></>, Vloop: <>V<sub>loop</sub></>, PsiOH: <>Ψ<sub>OH</sub></>, Zeff: <>Z<sub>eff</sub></>, hazard: 'Hazard',
 }
 
 function f(v: number | undefined, d: number): string {
@@ -98,6 +98,69 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
   ]
 }
 
+function Cells({ r }: { r: Row }) {
+  return (
+    <>
+      <td className="sig">{LABEL[r.name] ?? r.name}</td>
+      <td className="num">
+        {r.bar === undefined ? r.value : (
+          <span className="databar">
+            <span className={`databar-fill state-${r.state}`} style={{ width: `${Math.max(0, Math.min(1, r.bar)) * 100}%` }} />
+            <span className="databar-v">{r.value}</span>
+          </span>
+        )}
+      </td>
+      <td className="unit">{r.unit}</td>
+      <td className={`state state-${r.state}${(r.word ?? '').length > 10 ? ' state-long' : ''}`}>{r.word ?? WORD[r.state]}</td>
+    </>
+  )
+}
+
+/** Phone order: the three diagnostics rows and the divertor/fusion rows first, then the six essential scalars. */
+const PHONE_TOP = ['q_perp', 'T_surf', 'Sn', 'lambdaQ', 'fDet', 'Pfus', 'Q', 'hazard', 'Ip', 'ne', 'Wth', 'betaN', 'q95', 'fGW']
+const DIAG = new Set(['q_perp', 'T_surf', 'Sn'])
+
+/** The compact table for phones: essential rows, then a MORE row that expands the rest. */
+export function PhoneInterlockTable({ snapshot, device, extra }: { snapshot: Snapshot | null; device: DeviceInfo | undefined; extra?: ReactNode }) {
+  const [more, setMore] = useState(false)
+  const diag = useDiagnostics(snapshot, reconstructionValid(snapshot))
+  const s = snapshot
+  const plasma = !!s && s.ip > 0.05 && !s.disrupted
+  const all = buildRows(s, device, diag)
+  all.push({ name: 'Wth', value: s ? f(s.w_th, 2) : '---', unit: 'MJ', state: s ? (plasma ? 'ok' : 'na') : 'na' })
+  const by = new Map(all.map((r) => [r.name, r]))
+  const top = PHONE_TOP.map((n) => by.get(n)).filter((r): r is Row => !!r)
+  const rest = all.filter((r) => !PHONE_TOP.includes(r.name))
+  return (
+    <table className="jet-table jet-table-phone">
+      <colgroup><col className="c-sig" /><col className="c-val" /><col className="c-unit" /><col className="c-state" /></colgroup>
+      <thead>
+        <tr>
+          <th>Signal</th>
+          <th className="num">Value</th>
+          <th>Unit</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {top.map((r) => <tr key={r.name} className={DIAG.has(r.name) ? 'diag' : undefined}><Cells r={r} /></tr>)}
+        <tr className="jet-more-row">
+          <td colSpan={4}>
+            <span className="jet-more-in">
+              {extra}
+              <span className="jet-grow" />
+              <button className="jet-btn jet-pbtn" aria-expanded={more} onClick={() => setMore(!more)}>
+                {more ? 'Less' : `More (${rest.length})`}
+              </button>
+            </span>
+          </td>
+        </tr>
+        {more && rest.map((r) => <tr key={r.name}><Cells r={r} /></tr>)}
+      </tbody>
+    </table>
+  )
+}
+
 export default function InterlockTable({ snapshot, device }: { snapshot: Snapshot | null; device: DeviceInfo | undefined }) {
   const diag = useDiagnostics(snapshot, reconstructionValid(snapshot))
   const rows = buildRows(snapshot, device, diag)
@@ -112,21 +175,7 @@ export default function InterlockTable({ snapshot, device }: { snapshot: Snapsho
         </tr>
       </thead>
       <tbody>
-        {rows.map((r) => (
-          <tr key={r.name}>
-            <td className="sig">{LABEL[r.name] ?? r.name}</td>
-            <td className="num">
-              {r.bar === undefined ? r.value : (
-                <span className="databar">
-                  <span className={`databar-fill state-${r.state}`} style={{ width: `${Math.max(0, Math.min(1, r.bar)) * 100}%` }} />
-                  <span className="databar-v">{r.value}</span>
-                </span>
-              )}
-            </td>
-            <td className="unit">{r.unit}</td>
-            <td className={`state state-${r.state}${(r.word ?? '').length > 10 ? ' state-long' : ''}`}>{r.word ?? WORD[r.state]}</td>
-          </tr>
-        ))}
+        {rows.map((r) => <tr key={r.name}><Cells r={r} /></tr>)}
       </tbody>
     </table>
   )
