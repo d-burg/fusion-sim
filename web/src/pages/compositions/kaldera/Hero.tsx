@@ -112,7 +112,8 @@ export default function Hero({ snapshot, wallJson, limiterPoints, bare }: Props)
         if (c.points.length < 3) return
         const t = n > 1 ? i / (n - 1) : 0.5
         g.strokeStyle = `rgba(255,255,255,${(0.10 + 0.14 * (1 - t)).toFixed(3)})`
-        g.lineWidth = 1
+        g.lineWidth = 1.25
+        g.lineJoin = 'round'; g.lineCap = 'round'
         tracePath(g, c, X, Y, jump)
       })
       g.restore()
@@ -124,8 +125,9 @@ export default function Hero({ snapshot, wallJson, limiterPoints, bare }: Props)
       g.lineCap = 'round'; g.lineJoin = 'round'
       const warm = hueRgb(box, '--kd-warm', '#f0a98a')
       g.strokeStyle = `rgba(${warm},0.12)`; g.lineWidth = 9; tracePath(g, snapshot.separatrix, X, Y, jump)
-      g.strokeStyle = `rgba(${warm},0.28)`; g.lineWidth = 3.5; tracePath(g, snapshot.separatrix, X, Y, jump)
-      g.strokeStyle = 'rgba(255,255,255,0.92)'; g.lineWidth = 1.2; tracePath(g, snapshot.separatrix, X, Y, jump)
+      g.strokeStyle = `rgba(${warm},0.28)`; g.lineWidth = 4; tracePath(g, snapshot.separatrix, X, Y, jump)
+      // 1.75 px, not 1.2: a thinner stroke straddles pixel rows unevenly and reads as beads.
+      g.strokeStyle = 'rgba(255,255,255,0.92)'; g.lineWidth = 1.75; tracePath(g, snapshot.separatrix, X, Y, jump)
       g.restore()
     }
 
