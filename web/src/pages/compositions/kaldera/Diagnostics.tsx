@@ -28,11 +28,11 @@ function Bar({ label, fill, tone, right }: { label: ReactNode; fill: number; ton
 export default function Diagnostics({ snapshot, valid }: { snapshot: Snapshot | null; valid: boolean }) {
   const d = useDiagnostics(snapshot, valid)
 
-  const divRight = <>{d.q.toFixed(1)} MW/M² . <span className="kd-g">λ</span>Q {valid ? d.lambdaQ.toFixed(1) : '—'} MM . F DET {valid ? d.fDet.toFixed(2) : '—'} . <span data-tone={d.regimeTone}>{d.regime}</span></>
-  const tWord = d.tTone === 'bad' ? 'RECRYST' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
+  const divRight = <>{d.q.toFixed(1)} MW/M² . <span className="kd-g">λ</span><sub>Q</sub> {valid ? d.lambdaQ.toFixed(1) : '—'} MM . F<sub>DET</sub> {valid ? d.fDet.toFixed(2) : '—'} . <span data-tone={d.regimeTone}>{d.regime}</span></>
+  const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
   const tRight = <>{d.tSurf.toFixed(0)} °C . W . <span data-tone={d.tTone}>{tWord}</span></>
   const pFusStr = d.pFus > 0.001 ? fmtPfus(d.pFus).toUpperCase() : '— MW'
-  const neuRight = <>{sci(d.rate)} N/S . Q <span data-tone={d.qPlasma >= 1 ? 'ok' : undefined}>{d.rate > 0 ? formatQ(d.qPlasma).toUpperCase() : '—'}</span> . P FUS {pFusStr} . <span data-tone={d.active ? 'ok' : undefined}>{d.active ? 'ACTIVE' : 'IDLE'}</span></>
+  const neuRight = <>{sci(d.rate)} N/S . Q <span data-tone={d.qPlasma >= 1 ? 'ok' : undefined}>{d.rate > 0 ? formatQ(d.qPlasma).toUpperCase() : '—'}</span> . P<sub>FUS</sub> {pFusStr} . <span data-tone={d.active ? 'ok' : undefined}>{d.active ? 'ACTIVE' : 'IDLE'}</span></>
 
   return (
     <div className="kd-bars">
@@ -44,7 +44,7 @@ export default function Diagnostics({ snapshot, valid }: { snapshot: Snapshot | 
       />
       {d.isW && (
         <Bar
-          label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>T SURFACE</InfoHint>}
+          label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>SURFACE TEMPERATURE</InfoHint>}
           fill={d.tFill}
           tone={d.tTone}
           right={tRight}

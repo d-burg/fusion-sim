@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { createPortal } from 'react-dom'
 
 interface Props {
-  title: string
+  title: ReactNode
   content: ReactNode
   children: ReactNode
   className?: string

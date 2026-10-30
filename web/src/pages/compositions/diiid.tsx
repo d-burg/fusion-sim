@@ -104,12 +104,12 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   // figures come from the shared diagnostics so they agree with every other look.
   const diag = useDiagnostics(snap, reconstructionValid(snap))
   const readout: [string, string, string][] = snap ? [
-    ['IP', f(snap.ip), 'MA'], ['BT', f(snap.bt), 'T'],
-    ['PIN', f(snap.p_input, 1), 'MW'], ['POH', f(snap.p_ohmic), 'MW'],
-    ['PRAD', f(snap.p_rad), 'MW'], ['PALF', f(snap.p_alpha, 3), 'MW'],
-    ['BETAN', f(snap.beta_n), ''], ['Q95', f(snap.q95), ''],
-    ['PFUS', diag.pFus > 0.001 ? f(diag.pFus, diag.pFus < 10 ? 3 : 1) : '--', 'MW'], ['Q', diag.rate > 0 ? formatQ(diag.qPlasma) : '--', ''],
-    ['LAMQ', diag.valid ? f(diag.lambdaQ, 1) : '--', 'mm'], ['FDET', diag.valid ? f(diag.fDet) : '--', ''],
+    ['Ip', f(snap.ip), 'MA'], ['Bt', f(snap.bt), 'T'],
+    ['Pin', f(snap.p_input, 1), 'MW'], ['POH', f(snap.p_ohmic), 'MW'],
+    ['Prad', f(snap.p_rad), 'MW'], ['Pα', f(snap.p_alpha, 3), 'MW'],
+    ['βN', f(snap.beta_n), ''], ['q95', f(snap.q95), ''],
+    ['Pfus', diag.pFus > 0.001 ? f(diag.pFus, diag.pFus < 10 ? 3 : 1) : '--', 'MW'], ['Q', diag.rate > 0 ? formatQ(diag.qPlasma) : '--', ''],
+    ['λq', diag.valid ? f(diag.lambdaQ, 1) : '--', 'mm'], ['fdet', diag.valid ? f(diag.fDet) : '--', ''],
   ] : []
   // ELM activity is a transient flag: hold it for the last 0.3 s of history so the cell reads ELMING, not a flicker.
   let elming = false

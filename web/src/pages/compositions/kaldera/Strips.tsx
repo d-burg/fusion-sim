@@ -18,7 +18,7 @@ export interface Strip {
   /** Programmed reference, the dotted companion. */
   ref?: Pts
   /** A second series in dim white. `own` scales it to its own maximum instead of the strip's. */
-  second?: { label: string; hint?: ReactNode; pts: Pts; own?: boolean }
+  second?: { label: string; node?: ReactNode; hint?: ReactNode; pts: Pts; own?: boolean }
   /** Per-point ELM latch, parallel to `pts`: ELMs are drawn as vertical spikes. */
   elm?: boolean[]
   /** Decimals for the live value. */
@@ -302,11 +302,11 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
             onMouseEnter={() => onHot(s.id)}
             onMouseLeave={() => onHot(null)}
           >
-            {s.hint ? <InfoHint title={s.label} content={s.hint}>{s.node ?? s.label}</InfoHint> : (s.node ?? s.label)}
+            {s.hint ? <InfoHint title={s.node ?? s.label} content={s.hint}>{s.node ?? s.label}</InfoHint> : (s.node ?? s.label)}
             {s.second && (
               <>
                 <span className="kd-dot">   .   </span>
-                {s.second.hint ? <InfoHint title={s.second.label} content={s.second.hint}>{s.second.label}</InfoHint> : s.second.label}
+                {s.second.hint ? <InfoHint title={s.second.node ?? s.second.label} content={s.second.hint}>{s.second.node ?? s.second.label}</InfoHint> : (s.second.node ?? s.second.label)}
               </>
             )}
           </span>

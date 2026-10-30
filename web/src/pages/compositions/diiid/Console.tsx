@@ -19,11 +19,11 @@ export default function Console({ ctx }: { ctx: ControlRoomContext }) {
       <span className="dc-sep" />
       <button className="dc-key" data-on={ctx.showPlanner} onClick={ctx.togglePlanner}>EDIT{ctx.hasCustomProgram ? '*' : ''}</button>
       <span className="dc-sep" />
-      <span className="dc-label">DEV</span>
+      <span className="dc-label">DEVICE</span>
       <select className="dc-sel" value={ctx.activeDevice} onChange={(e) => ctx.onDeviceChange(e.target.value)}>
         {ctx.devices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
       </select>
-      <span className="dc-label">SCN</span>
+      <span className="dc-label">SCENARIO</span>
       <select className="dc-sel" value={ctx.activePreset} onChange={(e) => ctx.onPresetChange(e.target.value as typeof ctx.activePreset)}>
         {ctx.presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
       </select>

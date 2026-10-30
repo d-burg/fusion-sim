@@ -229,10 +229,12 @@ html[data-theme="apollo"] {
 [data-layout="apollo"] .ap-tele-row { display: grid; grid-template-columns: 7ch 8ch 5ch; white-space: nowrap; }
 [data-layout="apollo"] .ap-tele-row .ap-v { text-align: right; font-variant-numeric: tabular-nums; }
 [data-layout="apollo"] .ap-tele-row .ap-u { color: #6fa3c9; padding-left: 1ch; }
+/* symbols keep their case (τE, βN, Zeff); the values and units stay in the screen's caps */
+[data-layout="apollo"] .ap-tele-row .ap-k { text-transform: none; }
 
 /* the divertor / neutron bargraphs at the foot of the screen: block cells in the screen colour, the state word after */
 [data-layout="apollo"] .ap-bars { flex: none; display: flex; flex-direction: column; gap: 3px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #2c4660; }
-[data-layout="apollo"] .ap-bar-row { display: grid; grid-template-columns: 6ch auto 1fr auto 8ch; column-gap: 1ch; align-items: center; white-space: nowrap; }
+[data-layout="apollo"] .ap-bar-row { display: grid; grid-template-columns: 19ch auto 1fr auto auto; column-gap: 1ch; align-items: center; white-space: nowrap; }
 /* VT323 has no block elements: draw the cells in a monospace that does, at a fixed cell pitch */
 [data-layout="apollo"] .ap-bar-cells { font-family: Menlo, Monaco, 'DejaVu Sans Mono', monospace; font-size: 13px; line-height: 1; letter-spacing: 1px; }
 [data-layout="apollo"] .ap-bar-off { color: #3a5a7a; }
@@ -248,7 +250,7 @@ html[data-theme="apollo"] {
   flex: 1; min-height: 0;
   display: grid; gap: 6px; align-items: stretch;
 }
-[data-layout="apollo"] .ap-ctl-row-6 { grid-template-columns: 46px repeat(6, 1fr); }
+[data-layout="apollo"] .ap-ctl-row-6 { grid-template-columns: 62px repeat(6, 1fr); }
 [data-layout="apollo"] .ap-ctl-row > .ap-engr { align-self: center; }
 [data-layout="apollo"] .ap-ctl-row > .ap-engr-r { text-align: right; padding-right: 2px; }
 [data-layout="apollo"] .ap-slot {

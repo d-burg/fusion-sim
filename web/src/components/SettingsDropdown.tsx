@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, LOOKS, type Theme, type Units } from '../lib/settingsContext'
+import { useSettings, LOOKS, type Sound, type Theme, type Units } from '../lib/settingsContext'
+import { reopenFirstRun } from '../lib/firstRun'
 
 export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutorial?: () => void } = {}) {
-  const { theme, units, look, setTheme, setUnits, setLook } = useSettings()
+  const { theme, units, look, sound, setTheme, setUnits, setLook, setSound } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -129,8 +130,44 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
             </div>
           </div>
 
+          {/* Sound toggle */}
+          <div>
+            <div className="text-sm text-gray-400 mb-1.5">Sound</div>
+            <div className="flex rounded overflow-hidden border border-gray-700">
+              {(['on', 'off'] as Sound[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setSound(v)}
+                  className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer capitalize
+                    ${
+                      sound === v
+                        ? 'theme-toggle-active'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Divider */}
           <div className="border-t border-gray-700/50" />
+
+          {/* Re-show the first-run card (sound, look, tour) */}
+          <button
+            onClick={() => {
+              setOpen(false)
+              reopenFirstRun()
+            }}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-gray-400
+                       hover:bg-gray-800 hover:text-gray-200 transition-colors cursor-pointer text-left"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+            </svg>
+            First-run setup
+          </button>
 
           {/* Restart tutorial */}
           {onRestartTutorial && (

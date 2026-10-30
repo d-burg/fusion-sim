@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { Snapshot } from '../../../lib/types'
 import type { DeviceInfo } from '../types'
 import { reconstructionValid } from '../../../lib/pulseLog'
@@ -23,7 +24,16 @@ interface Row {
   bar?: number
 }
 
-const WORD: Record<State, string> = { ok: 'OK', hi: 'HI', lo: 'LO', alarm: 'ALARM', off: 'OFF', na: '' }
+const WORD: Record<State, string> = { ok: 'OK', hi: 'HIGH', lo: 'LOW', alarm: 'ALARM', off: 'OFF', na: '' }
+
+/** How each row's signal name is set: symbols with real subscripts, the diagnostics written out. */
+const LABEL: Record<string, ReactNode> = {
+  Ip: <>I<sub>p</sub></>, Bt: <>B<sub>t</sub></>, ne: <>n<sub>e</sub></>, fGW: <>f<sub>GW</sub></>,
+  tauE: <>τ<sub>E</sub></>, H98: <>H<sub>98</sub></>, betaN: <>β<sub>N</sub></>, q95: <>q<sub>95</sub></>, li: <>l<sub>i</sub></>,
+  Pin: <>P<sub>in</sub></>, POH: <>P<sub>OH</sub></>, Prad: <>P<sub>rad</sub></>,
+  q_perp: 'Divertor heat flux', T_surf: 'Surface temperature', Sn: 'Neutrons', Pfus: <>P<sub>fus</sub></>,
+  Vloop: <>V<sub>loop</sub></>, PsiOH: <>Ψ<sub>OH</sub></>, Zeff: <>Z<sub>eff</sub></>, hazard: 'Hazard',
+}
 
 function f(v: number | undefined, d: number): string {
   return v === undefined || !isFinite(v) ? '---' : v.toFixed(d)
@@ -44,8 +54,8 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
       na('Ip', 'MA'), na('Bt', 'T'), na('ne', '1e20 m-3'), na('fGW', ''),
       na('tauE', 's'), na('H98', ''), na('betaN', ''), na('q95', ''), na('li', ''),
       na('Pin', 'MW'), na('POH', 'MW'), na('Prad', 'MW'),
-      na('q_perp', 'MW/m2'), ...(d.isW ? [na('T_surf', 'degC')] : []), na('Sn', 'n/s'), na('Pfus', 'MW'), na('Q', ''),
-      na('Vloop', 'V'), na('PsiOH', 'V.s'), na('Zeff', ''), na('hazard', '1/s'),
+      na('q_perp', 'MW/m2'), ...(d.isW ? [na('T_surf', '°C')] : []), na('Sn', 'n/s'), na('Pfus', 'MW'), na('Q', ''),
+      na('Vloop', 'V'), na('PsiOH', 'V·s'), na('Zeff', ''), na('hazard', '1/s'),
     ]
   }
   const ipMax = dev?.ip_max ?? Infinity
@@ -74,14 +84,14 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
     // Te0, Wth, Ploss and Palpha are left out for room: Te0 and Wth are always-OK rows the jScope already plots,
     // Pin and Prad bracket the power balance, and Pfus carries the fusion power.
     { name: 'q_perp', value: f(d.q, 1), unit: 'MW/m2', state: st(toneState(d.qTone)), bar: plasma ? d.qFill : undefined },
-    ...(d.isW ? [{ name: 'T_surf', value: f(d.tSurf, 0), unit: 'degC', state: st(toneState(d.tTone)), bar: plasma ? d.tFill : undefined }] : []),
-    { name: 'Sn', value: d.rate > 0 ? d.rate.toExponential(2) : '0', unit: 'n/s', state: st(d.active ? 'ok' : 'off'), word: plasma && !d.active ? 'IDLE' : undefined, bar: plasma ? d.nFill : undefined },
+    ...(d.isW ? [{ name: 'T_surf', value: f(d.tSurf, 0), unit: '°C', state: st(toneState(d.tTone)), bar: plasma ? d.tFill : undefined }] : []),
+    { name: 'Sn', value: d.rate > 0 ? d.rate.toExponential(2).replace('+', '') : '0', unit: 'n/s', state: st(d.active ? 'ok' : 'off'), word: plasma && !d.active ? 'IDLE' : undefined, bar: plasma ? d.nFill : undefined },
     { name: 'Pfus', value: f(d.pFus, d.pFus < 10 ? 3 : 1), unit: 'MW', state: st('ok') },
     { name: 'Q', value: d.rate > 0 ? formatQ(d.qPlasma) : '0', unit: '', state: st('ok') },
-    { name: 'Vloop', value: f(s.v_loop, 2), unit: 'V', state: st(vMax ? band(Math.abs(s.v_loop ?? 0) / vMax, 0.9, 0.999) : 'ok'), word: s.oh_saturated ? 'SAT' : undefined },
-    { name: 'PsiOH', value: fluxBudget ? `${fluxUsed.toFixed(1)}/${fluxBudget.toFixed(0)}` : f(fluxUsed, 1), unit: 'V.s', state: s.flux_exhausted ? 'alarm' : st(band(fluxFrac, 0.8, 0.95)), word: s.flux_exhausted ? 'EMPTY' : undefined },
+    { name: 'Vloop', value: f(s.v_loop, 2), unit: 'V', state: st(vMax ? band(Math.abs(s.v_loop ?? 0) / vMax, 0.9, 0.999) : 'ok'), word: s.oh_saturated ? 'SATURATED' : undefined },
+    { name: 'PsiOH', value: fluxBudget ? `${fluxUsed.toFixed(1)}/${fluxBudget.toFixed(0)}` : f(fluxUsed, 1), unit: 'V·s', state: s.flux_exhausted ? 'alarm' : st(band(fluxFrac, 0.8, 0.95)), word: s.flux_exhausted ? 'EMPTY' : undefined },
     { name: 'Zeff', value: f(s.z_eff, 2), unit: '', state: st(band(s.z_eff ?? 1, 2.5, 4)) },
-    { name: 'hazard', value: f(s.disruption_risk, 3), unit: '1/s', state: s.disrupted ? 'alarm' : st(band(s.disruption_risk, 0.05, 0.2)), word: s.disrupted ? 'DISR' : undefined },
+    { name: 'hazard', value: f(s.disruption_risk, 3), unit: '1/s', state: s.disrupted ? 'alarm' : st(band(s.disruption_risk, 0.05, 0.2)), word: s.disrupted ? 'DISRUPTED' : undefined },
   ]
 }
 
@@ -101,7 +111,7 @@ export default function InterlockTable({ snapshot, device }: { snapshot: Snapsho
       <tbody>
         {rows.map((r) => (
           <tr key={r.name}>
-            <td>{r.name}</td>
+            <td className="sig">{LABEL[r.name] ?? r.name}</td>
             <td className="num">
               {r.bar === undefined ? r.value : (
                 <span className="databar">

@@ -31,7 +31,7 @@ export interface SeriesDef {
 }
 
 export interface RowDef {
-  /** Signal title, e.g. "Ip" */
+  /** Signal title, e.g. "I_{p}" (subscripts as `_{...}`) */
   label: string
   unit: string
   series: SeriesDef[]
@@ -111,6 +111,40 @@ function elmSpikes(pts: TracePoint[], vals: number[]): boolean[] | null {
     }
   }
   return isSpike
+}
+
+/**
+ * Signal names carry their subscripts as `P_{rad}`: the canvas has no <sub>,
+ * so the subscript runs are drawn smaller and dropped by a third of the size.
+ */
+function richRuns(text: string): { t: string; sub: boolean }[] {
+  const out: { t: string; sub: boolean }[] = []
+  const re = /_\{([^}]*)\}|([^_]+|_)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) out.push(m[1] !== undefined ? { t: m[1], sub: true } : { t: m[2], sub: false })
+  return out
+}
+
+function richWidth(g: CanvasRenderingContext2D, text: string, font: string, subFont: string): number {
+  let w = 0
+  for (const r of richRuns(text)) { g.font = r.sub ? subFont : font; w += g.measureText(r.t).width }
+  g.font = font
+  return w
+}
+
+/** Draw `text` left-aligned at x (textBaseline top); returns the width drawn. */
+function drawRich(g: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, subFont: string, drop: number): number {
+  const align = g.textAlign
+  g.textAlign = 'left'
+  let cx = x
+  for (const r of richRuns(text)) {
+    g.font = r.sub ? subFont : font
+    g.fillText(r.t, cx, y + (r.sub ? drop : 0))
+    cx += g.measureText(r.t).width
+  }
+  g.font = font
+  g.textAlign = align
+  return cx - x
 }
 
 const LEFT = 44
@@ -317,14 +351,17 @@ export default function JScope({ rows, history, programJson, duration, time, scr
       g.restore()
 
       // signal title top-left, readout top-right
-      g.font = 'bold 11px Arial, Helvetica, sans-serif'
+      const TF = 'bold 11px Arial, Helvetica, sans-serif'
+      g.font = TF
       g.textAlign = 'left'
       g.textBaseline = 'top'
       g.fillStyle = JS.trace
       const title = row.unit ? `${row.label} [${row.unit}]` : row.label
-      g.fillText(title, LEFT + 5, y0 + 3)
+      drawRich(g, title, LEFT + 5, y0 + 3, TF, 'bold 8px Arial, Helvetica, sans-serif', 4)
 
-      g.font = '10px Arial, Helvetica, sans-serif'
+      const RF = '10px Arial, Helvetica, sans-serif'
+      const RSF = '7px Arial, Helvetica, sans-serif'
+      g.font = RF
       g.textAlign = 'right'
       let rx = LEFT + plotW - 4
       const d = row.digits ?? 2
@@ -336,14 +373,15 @@ export default function JScope({ rows, history, programJson, duration, time, scr
           const name = s.name ?? (si === 0 ? '' : s.key)
           parts.push({ text: `${name ? name + ' ' : ''}${v.toFixed(d)}`, color: s.color ?? (si === 0 ? JS.trace : si === 1 ? JS.second : JS.third) })
         })
-        if (ref.length > 1) parts.push({ text: `prog ${interp(ref, cursorT).toFixed(d)}`, color: JS.ref })
+        if (ref.length > 1) parts.push({ text: `program ${interp(ref, cursorT).toFixed(d)}`, color: JS.ref })
       } else if (ref.length > 1) {
-        parts.push({ text: 'prog', color: JS.ref })
+        parts.push({ text: 'program', color: JS.ref })
       }
       for (let k = parts.length - 1; k >= 0; k--) {
         g.fillStyle = parts[k].color
-        g.fillText(parts[k].text, rx, y0 + 4)
-        rx -= g.measureText(parts[k].text).width + 10
+        const w = richWidth(g, parts[k].text, RF, RSF)
+        drawRich(g, parts[k].text, rx - w, y0 + 4, RF, RSF, 4)
+        rx -= w + 10
       }
     })
 

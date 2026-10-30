@@ -75,7 +75,7 @@ html[data-theme="diiid"] body { background: #000; }
   min-width: 0; overflow: hidden;
 }
 [data-layout="diiid"] .dc-cell-k { font-size: 10px; letter-spacing: 0.04em; }
-[data-layout="diiid"] .dc-cell-v { font-size: 13px; font-weight: 700; white-space: nowrap; }
+[data-layout="diiid"] .dc-cell-v { font-size: 13px; font-weight: 700; text-align: center; max-width: 100%; white-space: normal; }
 [data-layout="diiid"] .dc-cell[data-lamp="info"] { background: #4a4a4a; color: #fff; }
 [data-layout="diiid"] .dc-cell[data-lamp="ok"]   { background: #00a000; color: #000; }
 [data-layout="diiid"] .dc-cell[data-lamp="warn"] { background: #e0d000; color: #000; }
@@ -92,12 +92,18 @@ html[data-theme="diiid"] body { background: #000; }
 [data-layout="diiid"] .dc-text-row span:nth-child(3) { color: #00c000; padding-left: 6px; font-weight: 400; }
 
 /* the divertor / neutron bars: full-width text-mode tracks, the lit cells coloured like the status grid */
-[data-layout="diiid"] .dc-bar { grid-column: 1 / -1; display: grid; grid-template-columns: 44px auto 1fr 66px; column-gap: 6px; white-space: nowrap; }
-[data-layout="diiid"] .dc-bar:first-of-type { margin-top: 3px; }
+/* one line each at 11 px so the written-out names fit the 391 px column: name, an 8-cell track, value . state */
+[data-layout="diiid"] .dc-bar {
+  grid-column: 1 / -1; display: grid; grid-template-columns: 19ch 10ch 1fr; column-gap: 1ch; white-space: nowrap;
+  font-size: 11px; line-height: 1.3;
+}
+[data-layout="diiid"] .dc-bar:first-of-type { margin-top: 4px; }
+[data-layout="diiid"] .dc-bar-k { color: #00ff00; }
+[data-layout="diiid"] .dc-bar-dot { color: #00c000; font-weight: 400; }
 [data-layout="diiid"] .dc-bar-track { color: #006000; font-weight: 400; }
 [data-layout="diiid"] .dc-bar-track [data-lamp] { font-weight: 700; }
 [data-layout="diiid"] .dc-bar-v { text-align: right; color: #ffffff; }
-[data-layout="diiid"] .dc-bar-u { color: #00c000; font-weight: 400; padding-left: 5px; }
+[data-layout="diiid"] .dc-bar-u { color: #00c000; font-weight: 400; }
 [data-layout="diiid"] .dc-bar [data-lamp="ok"] { color: #00ff00; }
 [data-layout="diiid"] .dc-bar [data-lamp="warn"] { color: #ffff00; }
 [data-layout="diiid"] .dc-bar [data-lamp="bad"] { color: #ff3030; }

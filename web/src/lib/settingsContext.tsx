@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 
 export type Theme = 'signature' | 'retro'
 export type Units = 'metric' | 'imperial'
+/** Control-room audio. Stored under `tok-sym-sound`; off until the user turns it on. */
+export type Sound = 'on' | 'off'
 /** Control-room look: which composition renders /run/:device. */
 export type Look = 'kaldera' | 'diiid' | 'apollo' | 'jet'
 export const LOOKS: { id: Look; label: string; blurb: string }[] = [
@@ -23,18 +25,22 @@ interface Settings {
   theme: Theme
   units: Units
   look: Look
+  sound: Sound
   setTheme: (t: Theme) => void
   setUnits: (u: Units) => void
   setLook: (l: Look) => void
+  setSound: (s: Sound) => void
 }
 
 const SettingsContext = createContext<Settings>({
   theme: 'signature',
   units: 'metric',
   look: 'kaldera',
+  sound: 'off',
   setTheme: () => {},
   setUnits: () => {},
   setLook: () => {},
+  setSound: () => {},
 })
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -48,6 +54,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('tok-sym-look', look)
   }, [look])
+  const [sound, setSound] = useState<Sound>(() => (localStorage.getItem('tok-sym-sound') === 'on' ? 'on' : 'off'))
+  useEffect(() => {
+    localStorage.setItem('tok-sym-sound', sound)
+  }, [sound])
 
   // Sync theme to DOM and localStorage
   useEffect(() => {
@@ -66,7 +76,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <SettingsContext.Provider value={{ theme, units, look, setTheme, setUnits, setLook }}>
+    <SettingsContext.Provider value={{ theme, units, look, sound, setTheme, setUnits, setLook, setSound }}>
       {children}
     </SettingsContext.Provider>
   )

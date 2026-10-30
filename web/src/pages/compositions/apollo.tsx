@@ -108,7 +108,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       number: '11', title: <>D<sub>α</sub></>, unit: 'AU', xAxis: true,
       series: [
         { key: 'd_alpha', color: WHITE, fmt: f2, unit: '', label: <>D<sub>α</sub></>, floor: 0, spikes: true },
-        { key: 'disruption_risk', color: CYAN, fmt: (v) => (isFinite(v) ? (v * 100).toFixed(2) : '—'), unit: '%/S', label: <>HAZ</>, floor: 0 },
+        { key: 'disruption_risk', color: CYAN, fmt: (v) => (isFinite(v) ? (v * 100).toFixed(2) : '—'), unit: '%/S', label: <>HAZARD</>, floor: 0 },
       ],
     },
   ], [prog])
@@ -118,7 +118,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const pulse = ctx.pulseNumber !== null ? String(ctx.pulseNumber).padStart(4, '0') : '----'
   const deviceName = device?.name ?? ctx.activeDevice
   const presetLabel = (ctx.presets.find((p) => p.id === ctx.activePreset)?.label ?? ctx.activePreset)
-    .replace(/density limit/i, 'DENS LIM')
+    
   const phaseColor = phase === 'DISRUPT' ? '#ff5a4a' : LCD
 
   // ── status lamps: real state only; anything a telemetry row already says is left out ──
@@ -134,16 +134,16 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const lamps: [string, Lamp][] = [
     ['H-MODE', s?.in_hmode ? 'green' : 'off'],
     ['ELM', s?.elm_active ? 'amber' : s?.elm_suppressed && s?.in_hmode ? 'white' : 'off'],
-    ['DIVERT', ipOn && s && !s.is_limited ? 'green' : 'off'],
+    ['DIVERTED', ipOn && s && !s.is_limited ? 'green' : 'off'],
     ['HAZARD', hazard > 0.05 ? 'red' : hazard > 0.01 ? 'amber' : 'off'],
     ['DENSITY', ipOn && fgw >= 1 ? 'red' : ipOn && fgw >= 0.8 ? 'amber' : 'off'],
     ['Q95', ipOn && q95 < 2.5 ? 'red' : ipOn && q95 < 3 ? 'amber' : 'off'],
     ['BETA', riskBeta > 0.5 ? 'red' : riskBeta > 0.15 ? 'amber' : 'off'],
-    ['RAD', ipOn && radFrac > 0.8 ? 'red' : ipOn && radFrac > 0.5 ? 'amber' : 'off'],
-    ['OH SAT', s?.oh_saturated ? 'amber' : 'off'],
+    ['RADIATION', ipOn && radFrac > 0.8 ? 'red' : ipOn && radFrac > 0.5 ? 'amber' : 'off'],
+    ['OH\nSATURATED', s?.oh_saturated ? 'amber' : 'off'],
     ['FLUX', s?.flux_exhausted ? 'red' : fluxFrac > 0.85 ? 'amber' : 'off'],
     ['LOCKED', riskLocked > 0.5 ? 'red' : riskLocked > 0.15 ? 'amber' : 'off'],
-    ['DISRUPT', s?.disrupted ? 'red' : 'off'],
+    ['DISRUPTED', s?.disrupted ? 'red' : 'off'],
   ]
 
   // ── telemetry: 21 rows on a strict 3 x 7 grid of label / value / unit; IP, NE, WTH and HAZ are on the
@@ -154,13 +154,14 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     const pfus = !snap ? '-.--' : diag.pFus > 0.001 ? diag.pFus.toFixed(diag.pFus < 10 ? 3 : 1) : '0.000'
     const q = !snap ? '-.--' : diag.rate > 0 ? formatQ(diag.qPlasma).toUpperCase() : '0'
     return [
-      ['BT', v(snap?.bt), 'T'], ['PIN', v(snap?.p_input, 1), 'MW'], ['VLOOP', v(snap?.v_loop), 'V'],
-      ['TE0', v(snap?.te0), 'KEV'], ['POH', v(snap?.p_ohmic, 1), 'MW'], ['PSI', v(snap?.flux_consumed, 1), 'VS'],
-      ['TAUE', v(snap?.tau_e, 3), 'S'], ['PRAD', v(snap?.p_rad, 1), 'MW'], ['PSIMAX', v(snap?.flux_budget, 1), 'VS'],
-      ['BETAN', v(snap?.beta_n), ''], ['PLOSS', v(snap?.p_loss, 1), 'MW'], ['IBS', v(snap?.i_bootstrap), 'MA'],
-      ['Q95', v(snap?.q95), ''], ['PALPHA', v(snap?.p_alpha, 2), 'MW'], ['ICD', v(snap?.i_cd), 'MA'],
-      ['FGW', v(snap?.f_greenwald), ''], ['PFUS', pfus, 'MW'], ['LI', v(snap?.li), ''],
-      ['ZEFF', v(snap?.z_eff), ''], ['Q', q, ''], ['H98', v(snap?.h_factor), ''],
+      ['Bt', v(snap?.bt), 'T'], ['Pin', v(snap?.p_input, 1), 'MW'], ['Vloop', v(snap?.v_loop), 'V'],
+      ['Te0', v(snap?.te0), 'KEV'], ['POH', v(snap?.p_ohmic, 1), 'MW'], ['Ψ', v(snap?.flux_consumed, 1), 'VS'],
+      ['τE', v(snap?.tau_e, 3), 'S'], ['Prad', v(snap?.p_rad, 1), 'MW'], ['Ψmax', v(snap?.flux_budget, 1), 'VS'],
+      ['βN', v(snap?.beta_n), ''], ['Ploss', v(snap?.p_loss, 1), 'MW'], ['IBS', v(snap?.i_bootstrap), 'MA'],
+      ['q95', v(snap?.q95), ''], ['Pα', v(snap?.p_alpha, 2), 'MW'], ['ICD', v(snap?.i_cd), 'MA'],
+      ['fGW', v(snap?.f_greenwald), ''], ['Pfus', pfus, 'MW'], ['li', v(snap?.li), ''],
+      ['Zeff', v(snap?.z_eff), ''], ['Q', q, ''], ['H98', v(snap?.h_factor), ''],
+      ['λq', snap && diag.valid ? diag.lambdaQ.toFixed(1) : '-.--', 'MM'], ['fdet', snap && diag.valid ? diag.fDet.toFixed(2) : '-.--', ''], ['', '', ''],
     ]
   }
   const rows = tele(s)
@@ -182,8 +183,8 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
         <div className="ap-crt-screen ap-tele-screen">
           <div className="ap-tele-grid">
             {rows.map(([k, v, u]) => (
-              <div key={k} className="ap-tele-row">
-                <span>{k}</span><span className="ap-v">{v}</span><span className="ap-u">{u}</span>
+              <div key={k || 'blank'} className="ap-tele-row">
+                <span className="ap-k">{k}</span><span className="ap-v">{v}</span><span className="ap-u">{u}</span>
               </div>
             ))}
           </div>
@@ -204,14 +205,14 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           <LampKey caption="RESET" lamp="off" onClick={ctx.controls.reset} disabled={!canReset} />
           <LampKey caption="LIVE" lamp={scrubTime !== null ? 'white' : 'off'} onClick={() => ctx.controls.setScrubTime(null)} disabled={scrubTime === null} />
           <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} />
-          <LampKey caption="RPT" lamp={showReport ? 'white' : 'off'} onClick={() => setShowReport((v) => !v)} disabled={!ctx.report} />
+          <LampKey caption="REPORT" lamp={showReport ? 'white' : 'off'} onClick={() => setShowReport((v) => !v)} disabled={!ctx.report} />
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
           <span className="ap-engr">SPEED</span>
           {[2, 1, 0.75, 0.5].map((sp) => (
             <LampKey key={sp} caption={`${sp}X`} lamp={ctx.activeSpeed === sp ? 'white' : 'off'} onClick={() => ctx.onSpeedChange(sp)} />
           ))}
-          <span className="ap-engr ap-engr-r">SET</span>
+          <span className="ap-engr ap-engr-r">SETTINGS</span>
           <span className="ap-slot">{ctx.settingsNode}</span>
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
@@ -221,7 +222,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           ))}
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
-          <span className="ap-engr">SCEN</span>
+          <span className="ap-engr">SCENARIO</span>
           {ctx.presets.map((p) => (
             <LampKey key={p.id} caption={p.label.toUpperCase().replace(' ', '\n')} lamp={ctx.activePreset === p.id ? 'white' : 'off'} onClick={() => ctx.onPresetChange(p.id)} />
           ))}
@@ -239,9 +240,9 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       <header className="ap-clocks">
         <Clock n="01" label="PULSE" digits={pulse} />
         <Clock n="02" label="PET" digits={clock(time)} sub={['MIN', 'SEC', 'MS']} />
-        <Clock n="03" label="REM" digits={clock(duration - time)} sub={['MIN', 'SEC', 'MS']} />
+        <Clock n="03" label="REMAINING" digits={clock(duration - time)} sub={['MIN', 'SEC', 'MS']} />
         <Clock n="04" label="PHASE" word={phase} color={phaseColor} />
-        <Clock n="05" label="PROG" word={`${deviceName} ${presetLabel}`} />
+        <Clock n="05" label="PROGRAM" word={`${deviceName} ${presetLabel}`} />
       </header>
 
       {/* ── 06–13 big board ── */}

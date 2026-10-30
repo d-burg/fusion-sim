@@ -17,7 +17,7 @@ const f2 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixe
 const f1 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(1) : '—')
 
 /** Scenario names as abbreviations, never phrases. */
-const PRESET_WORD: Record<string, string> = { hmode: 'H-MODE', lmode: 'L-MODE', density_limit: 'N-LIMIT' }
+const PRESET_WORD: Record<string, string> = { hmode: 'H-MODE', lmode: 'L-MODE', density_limit: 'DENSITY LIMIT' }
 
 /** Sum of several programmed waveforms, sampled on the union of their knots. */
 function sumWaveforms(ws: (Waveform | undefined)[]): Waveform | undefined {
@@ -180,10 +180,10 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
   const pick = (k: keyof TracePoint): Pts => history.map((p) => [p.t, Number(p[k])] as [number, number])
   const strips: Strip[] = useMemo(() => [
-    { id: 'ip', label: 'IP', hint: traceDescriptions.ip, unit: 'MA', pts: pick('ip'), ref: program.ip },
-    { id: 'ne', label: 'N̄E', hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
-    { id: 'wth', label: 'W TH', hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
-    { id: 'pin', label: 'P IN', hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
+    { id: 'ip', label: 'IP', node: <>I<sub>P</sub></>, hint: traceDescriptions.ip, unit: 'MA', pts: pick('ip'), ref: program.ip },
+    { id: 'ne', label: 'N̄E', node: <>N̄<sub>E</sub></>, hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', node: <>F<sub>GW</sub></>, hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
+    { id: 'wth', label: 'W TH', node: <>W<sub>TH</sub></>, hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
+    { id: 'pin', label: 'P IN', node: <>P<sub>IN</sub></>, hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', node: <>P<sub>RAD</sub></>, hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
     { id: 'da', label: 'D α', node: <>D <G>α</G></>, hint: traceDescriptions.d_alpha, pts: pick('d_alpha'), elm: history.map((p) => !!p.elm_active) },
   // history is mutated in place by the simulation hook; key on its length and last time
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -257,7 +257,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
             <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> <span className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</span></h1>
             <div className="kd-state" data-state={stateWord}>
               {stateWord}
-              {s?.oh_saturated && <span className="kd-flag">OH SAT</span>}
+              {s?.oh_saturated && <span className="kd-flag">OH SATURATED</span>}
               {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
             </div>
           </div>

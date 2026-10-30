@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useSimulation } from '../lib/useSimulation'
 import { getDevices, type PresetId } from '../lib/wasm'
 import type { MagneticConfig, OverrideValue, ProgramHandoff } from '../lib/program'
-import { useSettings } from '../lib/settingsContext'
+import { useSettings, type Look } from '../lib/settingsContext'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
 import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
@@ -11,6 +11,8 @@ import PulsePlanner from '../components/PulsePlanner'
 import PortView from '../components/portview'
 import SettingsDropdown from '../components/SettingsDropdown'
 import TutorialOverlay from '../components/TutorialOverlay'
+import FirstRunCard from '../components/FirstRunCard'
+import { FIRSTRUN_EVENT, firstRunPending } from '../lib/firstRun'
 import EventLog from '../components/EventLog'
 import { buildReport } from '../lib/pulseLog'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
@@ -62,7 +64,9 @@ export default function ControlRoom() {
   // overrides it, and ?layout=classic shows the pre-composition page.
   const { look } = useSettings()
   const layoutParam = searchParams.get('layout')
-  const resolvedLayout = layoutParam ?? look
+  // The first-run card's hover preview overrides the look for rendering only; nothing is stored.
+  const [previewLook, setPreviewLook] = useState<Look | null>(null)
+  const resolvedLayout = layoutParam ?? previewLook ?? look
   const LayoutComponent = resolvedLayout === 'classic' ? undefined : (COMPOSITIONS[resolvedLayout] ?? COMPOSITIONS.kaldera)
 
   // A programme edited on the pulse page arrives as router state.
@@ -72,6 +76,23 @@ export default function ControlRoom() {
 
   // Local state so user can switch without navigating
   const [tutorialActive, setTutorialActive] = useState(showTutorial)
+  // The first-run card (sound, look, tour) shows until it has been dismissed once;
+  // the settings menu's "First-run setup" clears the key and fires FIRSTRUN_EVENT.
+  const [firstRunOpen, setFirstRunOpen] = useState(() => !showTutorial && firstRunPending())
+  useEffect(() => {
+    const reopen = () => { setTutorialActive(false); setFirstRunOpen(true) }
+    window.addEventListener(FIRSTRUN_EVENT, reopen)
+    return () => window.removeEventListener(FIRSTRUN_EVENT, reopen)
+  }, [])
+  // Warm the other looks' faces so the first hover preview on the card does not
+  // flash fallback type. The @font-face rules come from the compositions' CSS
+  // (diiid.css: Courier Prime, apollo.css: VT323, jet.css: Cousine); loading
+  // them here only fetches the files.
+  useEffect(() => {
+    if (!document.fonts?.load) return
+    const faces = ['400 13px "Courier Prime"', '700 13px "Courier Prime"', '17px "VT323"', '400 11px "Cousine"', '700 11px "Cousine"', '400 13px "Mona Sans"']
+    Promise.all(faces.map((f) => document.fonts.load(f))).catch(() => {})
+  }, [])
   const [activeDevice, setActiveDevice] = useState(routeDeviceId ?? 'diiid')
   const [activePreset, setActivePreset] = useState<PresetId>(routePreset)
   const [showPlanner, setShowPlanner] = useState(false)
@@ -242,7 +263,14 @@ export default function ControlRoom() {
       settingsNode: <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} />,
       tutorialNode: tutorialActive ? <TutorialOverlay onComplete={() => setTutorialActive(false)} /> : null,
     }
-    return <LayoutComponent ctx={ctx} />
+    return (
+      <>
+        <LayoutComponent ctx={ctx} />
+        {firstRunOpen && (
+          <FirstRunCard onClose={() => setFirstRunOpen(false)} onStartTour={() => setTutorialActive(true)} onPreview={setPreviewLook} />
+        )}
+      </>
+    )
   }
 
   return (

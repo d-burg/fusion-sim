@@ -98,7 +98,7 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
 [data-layout="jet"] .jet-wall {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: 280px 1fr 412px;
+  grid-template-columns: 320px 1fr 412px;
   background: #fff;
 }
 [data-layout="jet"] .jet-col-left, [data-layout="jet"] .jet-col-mid, [data-layout="jet"] .jet-col-right {
@@ -148,9 +148,12 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
 [data-layout="jet"] .jet-table .num { text-align: right; font-weight: 700; }
 [data-layout="jet"] .jet-table .unit { color: #404040; font-family: var(--jet-sans); font-size: 10px; }
 [data-layout="jet"] .jet-table col { width: 25%; }
-[data-layout="jet"] .jet-table th:nth-child(1), [data-layout="jet"] .jet-table td:nth-child(1) { width: 60px; }
-[data-layout="jet"] .jet-table th:nth-child(2), [data-layout="jet"] .jet-table td:nth-child(2) { width: 92px; }
-[data-layout="jet"] .jet-table th:nth-child(3), [data-layout="jet"] .jet-table td:nth-child(3) { width: 76px; }
+[data-layout="jet"] .jet-table th:nth-child(1), [data-layout="jet"] .jet-table td:nth-child(1) { width: 116px; }
+[data-layout="jet"] .jet-table th:nth-child(2), [data-layout="jet"] .jet-table td:nth-child(2) { width: 70px; }
+[data-layout="jet"] .jet-table th:nth-child(3), [data-layout="jet"] .jet-table td:nth-child(3) { width: 56px; }
+/* signal names: symbols with subscripts and the written-out diagnostics, in the sans */
+[data-layout="jet"] .jet-table .sig { font-family: var(--jet-sans); }
+[data-layout="jet"] .jet-table .sig sub { font-size: 8px; line-height: 0; }
 [data-layout="jet"] .jet-table .state { text-align: center; font: bold 10px/16px var(--jet-sans); background: #e0e0e0; }
 [data-layout="jet"] .jet-table .state-ok { background: var(--jet-green); color: #000; }
 [data-layout="jet"] .jet-table .state-hi, [data-layout="jet"] .jet-table .state-lo { background: var(--jet-amber); color: #000; }

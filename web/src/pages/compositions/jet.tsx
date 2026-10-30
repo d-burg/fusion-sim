@@ -35,20 +35,20 @@ function useJetTheme() {
 }
 
 const ROWS_A: RowDef[] = [
-  { label: 'Ip', unit: 'MA', series: [{ key: 'ip' }], ref: (p) => p.ip, yMin: 0 },
-  { label: 'ne', unit: '1e20 m-3', series: [{ key: 'ne_bar' }, { key: 'ne_ped', name: 'ped' }], ref: (p) => p.ne_target, yMin: 0 },
-  { label: 'Pin', unit: 'MW', series: [{ key: 'p_input' }, { key: 'p_rad', name: 'Prad' }], ref: (p) => sumWaveforms([p.p_nbi, p.p_ech, p.p_ich]), yMin: 0, digits: 1 },
-  { label: 'Wth', unit: 'MJ', series: [{ key: 'w_th' }], yMin: 0 },
-  { label: 'Te0', unit: 'keV', series: [{ key: 'te0' }, { key: 'te_ped', name: 'ped' }], yMin: 0 },
-  { label: 'Vloop', unit: 'V', series: [{ key: 'v_loop' }] },
+  { label: 'I_{p}', unit: 'MA', series: [{ key: 'ip' }], ref: (p) => p.ip, yMin: 0 },
+  { label: 'n_{e}', unit: '1e20 m-3', series: [{ key: 'ne_bar' }, { key: 'ne_ped', name: 'n_{e,ped}' }], ref: (p) => p.ne_target, yMin: 0 },
+  { label: 'P_{in}', unit: 'MW', series: [{ key: 'p_input' }, { key: 'p_rad', name: 'P_{rad}' }], ref: (p) => sumWaveforms([p.p_nbi, p.p_ech, p.p_ich]), yMin: 0, digits: 1 },
+  { label: 'W_{th}', unit: 'MJ', series: [{ key: 'w_th' }], yMin: 0 },
+  { label: 'T_{e0}', unit: 'keV', series: [{ key: 'te0' }, { key: 'te_ped', name: 'T_{e,ped}' }], yMin: 0 },
+  { label: 'V_{loop}', unit: 'V', series: [{ key: 'v_loop' }] },
 ]
 
 const ROWS_B: RowDef[] = [
-  { label: 'Dalpha', unit: 'a.u.', series: [{ key: 'd_alpha', spikes: true }], yMin: 0 },
-  { label: 'betaN', unit: '', series: [{ key: 'beta_n' }], yMin: 0 },
-  { label: 'q95', unit: '', series: [{ key: 'q95' }, { key: 'li', name: 'li' }], yMin: 0, yMax: 10 },
-  { label: 'H98', unit: '', series: [{ key: 'h_factor' }, { key: 'f_greenwald', name: 'fGW' }], yMin: 0 },
-  { label: 'PsiOH', unit: 'V.s', series: [{ key: 'psi_oh' }, { key: 'i_ni', name: 'Ini' }], yMin: 0, digits: 1 },
+  { label: 'D_{α}', unit: 'a.u.', series: [{ key: 'd_alpha', spikes: true }], yMin: 0 },
+  { label: 'β_{N}', unit: '', series: [{ key: 'beta_n' }], yMin: 0 },
+  { label: 'q_{95}', unit: '', series: [{ key: 'q95' }, { key: 'li', name: 'l_{i}' }], yMin: 0, yMax: 10 },
+  { label: 'H_{98}', unit: '', series: [{ key: 'h_factor' }, { key: 'f_greenwald', name: 'f_{GW}' }], yMin: 0 },
+  { label: 'Ψ_{OH}', unit: 'V·s', series: [{ key: 'psi_oh' }, { key: 'i_ni', name: 'I_{NI}' }], yMin: 0, digits: 1 },
   { label: 'hazard', unit: '1/s', series: [{ key: 'disruption_risk' }], yMin: 0, digits: 3 },
 ]
 
@@ -60,8 +60,8 @@ function configCode(cfg: string | undefined): string {
   if (c.includes('lowersingle')) return 'LSN'
   if (c.includes('uppersingle')) return 'USN'
   if (c.includes('double')) return 'DN'
-  if (c.includes('limit')) return 'LIM'
-  return (cfg ?? '').toUpperCase().slice(0, 6) || 'DIV'
+  if (c.includes('limit')) return 'LIMITED'
+  return (cfg ?? '').toUpperCase() || 'DIVERTED'
 }
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
@@ -76,7 +76,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
     { text: s?.in_hmode ? 'H-MODE' : 'L-MODE', on: plasma, cls: s?.in_hmode ? 'ok' : 'blue' },
     { text: 'ELMING', on: plasma && !!s?.elm_active, cls: 'warn' },
     { text: s?.is_limited ? 'LIMITED' : configCode(s?.magnetic_config), on: plasma, cls: 'blue' },
-    { text: 'OH SAT', on: !!s?.oh_saturated, cls: 'warn' },
+    { text: 'OH SATURATED', on: !!s?.oh_saturated, cls: 'warn' },
     { text: 'FLUX', on: !!s?.flux_exhausted, cls: 'alarm' },
     { text: 'DISRUPTED', on: !!s?.disrupted, cls: 'alarm' },
   ], [s, plasma])
