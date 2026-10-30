@@ -19,6 +19,8 @@ export interface PortConfig {
   lookZ: number
   lookPhi: number
   fov: number
+  /** Optional per-device values for the phone tiles' wide framing (see PortView framing="wide"). */
+  wide?: { fov?: number; camZ?: number; lookZ?: number }
   tileColor: [number, number, number]
   tileGridSpacing: { poloidal: number; toroidal: number }
   tileGridDarken: number
