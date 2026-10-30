@@ -48,7 +48,7 @@ export default function Diagnostics({ snapshot, valid, compact }: { snapshot: Sn
         />
         {d.isW && (
           <Bar
-            label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>SURFACE TEMP</InfoHint>}
+            label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>SURFACE TEMPERATURE</InfoHint>}
             fill={d.tFill}
             tone={d.tTone}
             right={<span data-tone={d.tTone}>{tWord}</span>}
