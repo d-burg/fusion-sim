@@ -5,6 +5,15 @@ export type Theme = 'signature' | 'retro'
 export type Units = 'metric' | 'imperial'
 /** Control-room audio. Stored under `tok-sym-sound`; off until the user turns it on. */
 export type Sound = 'on' | 'off'
+/** Trace channels shown on the phone layouts; stored under `tok-sym-phone-traces`. */
+export const DEFAULT_PHONE_TRACES = ['ip', 'w_th', 'd_alpha']
+function readPhoneTraces(): string[] {
+  try {
+    const raw = localStorage.getItem('tok-sym-phone-traces')
+    const arr = raw ? JSON.parse(raw) : null
+    return Array.isArray(arr) && arr.every((k) => typeof k === 'string') && arr.length > 0 ? arr : DEFAULT_PHONE_TRACES
+  } catch { return DEFAULT_PHONE_TRACES }
+}
 /** Control-room look: which composition renders /run/:device. */
 export type Look = 'kaldera' | 'diiid' | 'apollo' | 'jet'
 export const LOOKS: { id: Look; label: string }[] = [
@@ -27,10 +36,12 @@ interface Settings {
   units: Units
   look: Look
   sound: Sound
+  phoneTraces: string[]
   setTheme: (t: Theme) => void
   setUnits: (u: Units) => void
   setLook: (l: Look) => void
   setSound: (s: Sound) => void
+  setPhoneTraces: (keys: string[]) => void
 }
 
 const SettingsContext = createContext<Settings>({
@@ -38,10 +49,12 @@ const SettingsContext = createContext<Settings>({
   units: 'metric',
   look: 'kaldera',
   sound: 'off',
+  phoneTraces: DEFAULT_PHONE_TRACES,
   setTheme: () => {},
   setUnits: () => {},
   setLook: () => {},
   setSound: () => {},
+  setPhoneTraces: () => {},
 })
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -56,6 +69,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('tok-sym-look', look)
   }, [look])
   const [sound, setSound] = useState<Sound>(() => (localStorage.getItem('tok-sym-sound') === 'on' ? 'on' : 'off'))
+  const [phoneTraces, setPhoneTraces] = useState<string[]>(readPhoneTraces)
+  useEffect(() => {
+    try { localStorage.setItem('tok-sym-phone-traces', JSON.stringify(phoneTraces)) } catch { /* storage unavailable */ }
+  }, [phoneTraces])
   useEffect(() => {
     localStorage.setItem('tok-sym-sound', sound)
   }, [sound])
@@ -77,7 +94,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <SettingsContext.Provider value={{ theme, units, look, sound, setTheme, setUnits, setLook, setSound }}>
+    <SettingsContext.Provider value={{ theme, units, look, sound, phoneTraces, setTheme, setUnits, setLook, setSound, setPhoneTraces }}>
       {children}
     </SettingsContext.Provider>
   )
