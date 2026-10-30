@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, LOOKS, type Sound, type Theme, type Units } from '../lib/settingsContext'
+import { useSettings, LOOKS, type Sound, type Units } from '../lib/settingsContext'
 import { reopenFirstRun } from '../lib/firstRun'
 
 export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutorial?: () => void } = {}) {
-  const { theme, units, look, sound, setTheme, setUnits, setLook, setSound } = useSettings()
+  const { units, look, sound, setUnits, setLook, setSound } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -80,27 +80,6 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
                     ${look === l.id ? 'theme-toggle-active' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
                 >
                   {l.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Theme toggle */}
-          <div>
-            <div className="text-sm text-gray-400 mb-1.5">Theme</div>
-            <div className="flex rounded overflow-hidden border border-gray-700">
-              {(['signature', 'retro'] as Theme[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTheme(t)}
-                  className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer capitalize
-                    ${
-                      theme === t
-                        ? 'theme-toggle-active'
-                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-                    }`}
-                >
-                  {t}
                 </button>
               ))}
             </div>

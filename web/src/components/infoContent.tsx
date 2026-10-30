@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- this module exports helpers alongside its component by design */
 /**
  * Physics and engineering documentation for info popups.
  * Written at an undergraduate level with references to key review papers.

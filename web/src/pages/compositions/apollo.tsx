@@ -71,7 +71,11 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   }, [])
 
   // The report takes the log screen once it exists; a new pulse goes back to the log.
-  useEffect(() => { setShowReport(!!ctx.report) }, [ctx.report])
+  // Derived state: when the report appears it takes the log screen; when a new
+  // pulse clears it the log returns. Set during render, as React recommends for
+  // state derived from a prop, rather than in an effect.
+  const [seenReport, setSeenReport] = useState(ctx.report)
+  if (seenReport !== ctx.report) { setSeenReport(ctx.report); setShowReport(!!ctx.report) }
 
   const device = ctx.devices.find((d) => d.id === ctx.activeDevice)
   const prog = useMemo(() => parseProgram(programJson), [programJson])

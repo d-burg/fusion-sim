@@ -61,13 +61,18 @@ function Readout({ value, unit, caption, hint, tone, link, hot, onHot }: Readout
   )
 }
 
-/** EMA with a ~300 ms time constant at 60 fps, so a band tint does not flicker on ELMs. */
+/** EMA with a ~300 ms time constant at 60 fps, so a band tint does not flicker on ELMs.
+ *  The ref is a per-frame accumulator read and written in render on purpose: the
+ *  smoothed value is presentation state that must track every render without
+ *  scheduling another one. */
+/* eslint-disable react-hooks/refs */
 function useEma(raw: number | undefined, alpha = 0.05): number | undefined {
   const ref = useRef<number | null>(null)
   if (raw === undefined || !isFinite(raw)) { ref.current = null; return undefined }
   ref.current = ref.current === null ? raw : ref.current + alpha * (raw - ref.current)
   return ref.current
 }
+/* eslint-enable react-hooks/refs */
 
 /**
  * Presentation-side smoothing of the pulse time. The simulation hands over
@@ -87,6 +92,9 @@ function useDisplayClock(time: number, exact: number, live: boolean, speed: numb
   if (time !== last.current.sim) {
     const d = time - last.current.sim
     if (d > 0 && d < 0.5) last.current.step = Math.min(0.1, Math.max(0.015, d))
+    // Records the wall-clock instant this simulation time arrived; the display
+    // clock extrapolates from it. Intentionally impure.
+    // eslint-disable-next-line react-hooks/purity
     last.current = { wall: performance.now(), sim: time, step: last.current.step }
   }
   useEffect(() => { if (!live) clock.current?.set(exact) }, [live, exact])

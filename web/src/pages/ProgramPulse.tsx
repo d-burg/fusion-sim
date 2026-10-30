@@ -424,7 +424,7 @@ function ProgramPage({ deviceId }: { deviceId: string | undefined }) {
           <Section n={N.look} title="CONTROL ROOM LOOK">
             <div className="sp-list">
               {LOOKS.map((l) => (
-                <Row key={l.id} on={look === l.id} onClick={() => setLook(l.id)} word={l.label} cap={l.blurb.replace(/[,;]\s*/g, ' . ')} />
+                <Row key={l.id} on={look === l.id} onClick={() => setLook(l.id)} word={l.label} />
               ))}
             </div>
           </Section>

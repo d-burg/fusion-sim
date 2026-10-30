@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- the settings hook, its provider and the LOOKS table share one module by design */
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 
 export type Theme = 'signature' | 'retro'
@@ -6,11 +7,11 @@ export type Units = 'metric' | 'imperial'
 export type Sound = 'on' | 'off'
 /** Control-room look: which composition renders /run/:device. */
 export type Look = 'kaldera' | 'diiid' | 'apollo' | 'jet'
-export const LOOKS: { id: Look; label: string; blurb: string }[] = [
-  { id: 'kaldera', label: 'Modern', blurb: 'Sparse, cinematic; the default' },
-  { id: 'diiid', label: 'DIII-D', blurb: 'Wall of strip charts, status grid' },
-  { id: 'apollo', label: 'Apollo', blurb: 'Mission-control board and console' },
-  { id: 'jet', label: 'JET', blurb: 'White jScope panels and tables' },
+export const LOOKS: { id: Look; label: string }[] = [
+  { id: 'kaldera', label: 'Modern' },
+  { id: 'diiid', label: 'DIII-D' },
+  { id: 'apollo', label: 'Apollo' },
+  { id: 'jet', label: 'JET' },
 ]
 function normalizeLook(stored: string | null): Look {
   return LOOKS.some((l) => l.id === stored) ? (stored as Look) : 'kaldera'

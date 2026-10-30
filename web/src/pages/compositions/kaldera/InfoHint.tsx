@@ -47,6 +47,8 @@ export default function InfoHint({ title, content, children, className }: Props)
     if (left < 8) left = 8
     let top = r.bottom + 8
     if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - 8 - h)
+    // The popover's position depends on its measured height, so it is set after layout.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPos({ top, left })
   }, [open])
 

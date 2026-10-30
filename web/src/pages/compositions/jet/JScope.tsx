@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- this module exports helpers alongside its component by design */
 import { useRef, useEffect, useCallback, useMemo } from 'react'
 import type { TracePoint } from '../../../lib/types'
 import type { PulseProgram, WaveformPoint } from '../../../lib/wasm'

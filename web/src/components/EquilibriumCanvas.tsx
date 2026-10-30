@@ -412,7 +412,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
         ctx.fillText('Diverted', labelX, labelY)
       }
     }
-  }, [snapshot, wallJson, limiterPoints, isRetro, theme])
+  }, [snapshot, wallJson, limiterPoints, isRetro])
 
   // Redraw on data change
   useEffect(() => {

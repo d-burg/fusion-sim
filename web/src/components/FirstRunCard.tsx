@@ -82,7 +82,6 @@ export default function FirstRunCard({ onClose, onStartTour, onPreview }: Props)
                 >
                   {l.label.toUpperCase()}
                 </button>
-                <span className="fr-blurb">{l.blurb}</span>
               </div>
             ))}
           </div>
@@ -138,7 +137,6 @@ const FR_CSS = `
 .fr-choice[data-preview="true"] { color: var(--kd-warm, #f0a98a); }
 .fr-looks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .fr-look { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
-.fr-blurb { font-size: 11px; line-height: 1.4; color: rgba(255,255,255,0.5); }
 .fr-foot {
   display: flex; align-items: baseline; justify-content: flex-end;
   padding: 10px 20px 14px; border-top: 1px solid rgba(255,255,255,0.12); font-size: 9px;

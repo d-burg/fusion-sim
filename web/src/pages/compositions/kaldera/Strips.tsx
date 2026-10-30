@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- this module exports helpers alongside its component by design */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Station } from './Timeline'
 import InfoHint from './InfoHint'
