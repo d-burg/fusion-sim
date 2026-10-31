@@ -1,0 +1,311 @@
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+
+/* The DIII-D wall: pure black, white axes, saturated primaries. The shared
+   canvases read these tokens through themeColors(). */
+html[data-theme="diiid"] {
+  --c-base: #000000; --c-surface: #000000; --c-raised: #0a0a0a;
+  --c-line: #2a2a2a; --c-line-strong: #555555;
+  --c-ink: #ffffff; --c-ink-dim: #c0c0c0; --c-ink-faint: #909090;
+  --c-accent: #ffff00; --c-accent-hi: #ffff80;
+  --c-ok: #00ff00; --c-warn: #ffff00; --c-bad: #ff3030; --c-bad-ink: #ff6060;
+  --c-invalid: #ff40ff;
+}
+html[data-theme="diiid"] body { background: #000; }
+
+[data-layout="diiid"] {
+  --dc-bezel: #1c1c1c;
+  --dc-mono: 'Courier Prime', 'Courier New', Courier, monospace;
+  --dc-sans: Helvetica, Arial, sans-serif;
+  position: fixed;
+  inset: 0;
+  background: #000;
+  color: #fff;
+  font-family: var(--dc-sans);
+  display: grid;
+  grid-template-columns: 1fr 411px;
+  grid-template-rows: 1fr 20px 30px;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+}
+
+/* ── strip-chart wall ─────────────────────────────── */
+[data-layout="diiid"] .dc-wall {
+  grid-column: 1; grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 2px;
+  background: var(--dc-bezel);
+  min-height: 0;
+}
+[data-layout="diiid"] .dc-strip { position: relative; background: #000; min-width: 0; min-height: 0; overflow: hidden; }
+/* the equilibrium is one tile among the strip charts: a tall plain box, two rows high, top right of the wall */
+[data-layout="diiid"] .dc-wall .dc-eq { grid-column: 4 / 6; grid-row: 1 / 3; }
+
+/* ── right column ─────────────────────────────────── */
+[data-layout="diiid"] .dc-side {
+  grid-column: 2; grid-row: 1;
+  display: grid;
+  grid-template-rows: 96px 1fr 393px;
+  gap: 2px;
+  background: var(--dc-bezel);
+  border-left: 2px solid var(--dc-bezel);
+  min-height: 0;
+}
+/* the status table and the green block share one tour anchor */
+[data-layout="diiid"] .dc-statusblock { display: grid; grid-template-rows: 184px 1fr; gap: 2px; min-height: 0; }
+[data-layout="diiid"] .dc-clock { background: #000; padding: 6px 10px 4px; display: flex; flex-direction: column; justify-content: space-between; }
+[data-layout="diiid"] .dc-clock-row { display: flex; align-items: center; gap: 10px; }
+[data-layout="diiid"] .dc-clock-small { gap: 8px; }
+[data-layout="diiid"] .dc-clock-k { font-family: var(--dc-mono); font-weight: 700; font-size: 13px; color: #fff; letter-spacing: 0.04em; }
+[data-layout="diiid"] .dc-clock-dev { margin-left: auto; color: #00ffff; font-size: 12px; }
+
+/* status grid: 4 × 4 named cells, the background is the state */
+[data-layout="diiid"] .dc-status {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 1px;
+  background: #000;
+  padding: 1px;
+  font-family: var(--dc-mono);
+}
+[data-layout="diiid"] .dc-cell {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  background: #2a2a2a; color: #9a9a9a; line-height: 1.05;
+  min-width: 0; overflow: hidden;
+}
+[data-layout="diiid"] .dc-cell-k { font-size: 10px; letter-spacing: 0.04em; }
+[data-layout="diiid"] .dc-cell-v { font-size: 13px; font-weight: 700; text-align: center; max-width: 100%; white-space: normal; }
+[data-layout="diiid"] .dc-cell[data-lamp="info"] { background: #4a4a4a; color: #fff; }
+[data-layout="diiid"] .dc-cell[data-lamp="ok"]   { background: #00a000; color: #000; }
+[data-layout="diiid"] .dc-cell[data-lamp="warn"] { background: #e0d000; color: #000; }
+[data-layout="diiid"] .dc-cell[data-lamp="bad"]  { background: #e01010; color: #fff; }
+
+/* the scalar readout block: green monospace on black */
+[data-layout="diiid"] .dc-text {
+  background: #000; padding: 6px 10px; min-height: 0; overflow: hidden;
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; align-content: center; row-gap: 2px;
+  font: 700 13px/1.2 var(--dc-mono); color: #00ff00;
+}
+[data-layout="diiid"] .dc-text-row { display: grid; grid-template-columns: 52px 1fr 36px; white-space: nowrap; }
+[data-layout="diiid"] .dc-text-row span:nth-child(2) { text-align: right; color: #ffffff; }
+[data-layout="diiid"] .dc-text-row span:nth-child(3) { color: #00c000; padding-left: 6px; font-weight: 400; }
+
+/* the divertor / neutron bars: full-width text-mode tracks, the lit cells coloured like the status grid */
+/* one line each at 11 px so the written-out names fit the 391 px column: name, an 8-cell track, value . state */
+[data-layout="diiid"] .dc-bar {
+  grid-column: 1 / -1; display: grid; grid-template-columns: 19ch 10ch 1fr; column-gap: 1ch; white-space: nowrap;
+  font-size: 11px; line-height: 1.3;
+}
+[data-layout="diiid"] .dc-bar:first-of-type { margin-top: 4px; }
+[data-layout="diiid"] .dc-bar-k { color: #00ff00; }
+[data-layout="diiid"] .dc-bar-dot { color: #00c000; font-weight: 400; }
+[data-layout="diiid"] .dc-bar-track { color: #006000; font-weight: 400; }
+[data-layout="diiid"] .dc-bar-track [data-lamp] { font-weight: 700; }
+[data-layout="diiid"] .dc-bar-v { text-align: right; color: #ffffff; }
+[data-layout="diiid"] .dc-bar-u { color: #00c000; font-weight: 400; }
+[data-layout="diiid"] .dc-bar [data-lamp="ok"] { color: #00ff00; }
+[data-layout="diiid"] .dc-bar [data-lamp="warn"] { color: #ffff00; }
+[data-layout="diiid"] .dc-bar [data-lamp="bad"] { color: #ff3030; }
+[data-layout="diiid"] .dc-bar [data-lamp="off"] { color: #909090; }
+
+/* equilibrium and camera tiles */
+[data-layout="diiid"] .dc-tile { position: relative; background: #000; min-height: 0; overflow: hidden; }
+[data-layout="diiid"] .dc-tile > div { width: 100%; height: 100%; }
+[data-layout="diiid"] .dc-tile-title {
+  position: absolute; top: 4px; left: 6px; font: bold 11px var(--dc-sans); color: #fff; pointer-events: none;
+}
+/* the shared equilibrium canvas carries its own title and info button: not on this wall */
+[data-layout="diiid"] .dc-eq .panel-title { display: none; }
+[data-layout="diiid"] .dc-cam canvas { display: block; }
+
+/* ── ticker ───────────────────────────────────────── */
+[data-layout="diiid"] .dc-ticker {
+  grid-column: 1 / -1; grid-row: 2;
+  background: #000; border-top: 2px solid var(--dc-bezel);
+  display: flex; align-items: center; gap: 0;
+  font: 11px var(--dc-mono); white-space: nowrap; overflow: hidden; padding: 0 8px;
+}
+[data-layout="diiid"] .dc-ticker-k { color: #00ffff; font-weight: 700; margin-right: 14px; }
+[data-layout="diiid"] .dc-ev { margin-right: 22px; }
+[data-layout="diiid"] .dc-ev::before { content: '▌'; color: #444; margin-right: 6px; }
+
+/* ── console key row ──────────────────────────────── */
+[data-layout="diiid"] .dc-console {
+  grid-column: 1 / -1; grid-row: 3;
+  background: #101010; border-top: 1px solid #333;
+  display: flex; align-items: stretch; gap: 0;
+  font: 700 12px var(--dc-mono); letter-spacing: 0.06em;
+}
+[data-layout="diiid"] .dc-key {
+  background: none; border: 0; border-right: 1px solid #333; border-radius: 0;
+  color: #ddd; padding: 0 12px; font: inherit; letter-spacing: inherit; cursor: pointer; line-height: 1;
+}
+[data-layout="diiid"] .dc-key:hover { color: #fff; background: #1e1e1e; }
+[data-layout="diiid"] .dc-key[data-on="true"] { background: #e0d000; color: #000; }
+[data-layout="diiid"] .dc-key-run { min-width: 76px; background: #006000; color: #fff; }
+[data-layout="diiid"] .dc-key-run[data-on="true"] { background: #e0d000; color: #000; }
+[data-layout="diiid"] .dc-label { color: #888; padding: 0 8px; display: flex; align-items: center; font-size: 10px; }
+[data-layout="diiid"] .dc-sep { width: 10px; border-right: 1px solid #333; }
+[data-layout="diiid"] .dc-sel {
+  background: #101010; color: #fff; border: 0; border-right: 1px solid #333; border-radius: 0;
+  font: inherit; letter-spacing: inherit; padding: 0 8px; cursor: pointer; appearance: none; -webkit-appearance: none;
+}
+[data-layout="diiid"] .dc-sel option { background: #101010; }
+[data-layout="diiid"] .dc-fill { flex: 1; }
+[data-layout="diiid"] .dc-settings { display: flex; align-items: center; padding: 0 6px; border-left: 1px solid #333; }
+[data-layout="diiid"] .dc-settings .settings-btn { border-radius: 0; }
+
+/* ══ phone ═══════════════════════════════════════════
+   The same wall, stacked: header, state cells, the EFIT/TV pair, the green block with
+   the three bars, the scalars, the strips the user picked, the ticker, and the key row
+   pinned to the bottom. The page scrolls; the key row does not. */
+[data-layout="diiid"][data-phone] {
+  --dcp-keys: 64px;
+  position: relative; inset: auto;
+  display: block; overflow: visible;
+  padding-bottom: calc(var(--dcp-keys) + env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+[data-layout="diiid"][data-phone] .dcp-fill { flex: 1; }
+[data-layout="diiid"][data-phone] .dcp-k,
+[data-layout="diiid"][data-phone] .dcp-cap { font: 700 10px var(--dc-mono); letter-spacing: 0.06em; color: #fff; }
+[data-layout="diiid"][data-phone] .dcp-cap { color: #00c000; }
+
+/* header: device and scenario words, SHOT, the two small clocks, settings */
+[data-layout="diiid"][data-phone] .dcp-head {
+  height: 44px; display: flex; align-items: center; gap: 6px; padding-left: 4px;
+  border-bottom: 2px solid var(--dc-bezel);
+}
+[data-layout="diiid"][data-phone] .dcp-pick { position: relative; display: flex; align-items: center; height: 44px; padding: 0 4px; min-width: 0; cursor: pointer; }
+[data-layout="diiid"][data-phone] .dcp-pick-v { font: 700 12px var(--dc-mono); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-layout="diiid"][data-phone] .dcp-pick-v::after { content: ' ▾'; color: #888; }
+/* the select takes the tap at 16 px so iOS does not zoom; the word underneath is what shows */
+[data-layout="diiid"][data-phone] .dcp-pick select {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; border: 0; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+}
+[data-layout="diiid"][data-phone] .dcp-dev { color: #00ffff; flex: none; }
+[data-layout="diiid"][data-phone] .dcp-scn { color: #fff; flex: 0 1 auto; }
+[data-layout="diiid"][data-phone] .dcp-shot { display: flex; align-items: center; gap: 4px; flex: none; }
+[data-layout="diiid"][data-phone] .dcp-clocks { display: flex; flex-direction: column; gap: 3px; flex: none; }
+[data-layout="diiid"][data-phone] .dcp-clocks > div { display: flex; align-items: center; gap: 3px; }
+[data-layout="diiid"][data-phone] .dcp-clocks .dcp-k { width: 14px; }
+[data-layout="diiid"][data-phone] .dcp-settings { display: flex; align-items: center; flex: none; }
+[data-layout="diiid"][data-phone] .dcp-settings .settings-btn { width: 44px; height: 44px; justify-content: center; border-radius: 0; }
+[data-layout="diiid"][data-phone] .dcp-settings .settings-btn svg { width: 20px; height: 20px; }
+
+/* state line: 2 x 4 cells, the background is the state */
+[data-layout="diiid"][data-phone] .dcp-state {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 44px;
+  gap: 1px; padding: 1px; background: #000; font-family: var(--dc-mono);
+}
+[data-layout="diiid"][data-phone] .dcp-state .dc-cell-v { font-size: 12px; line-height: 1.05; }
+
+/* the pair: EFIT beside the TV view (1.05 : 1) */
+[data-layout="diiid"][data-phone] .dcp-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px;
+  background: var(--dc-bezel); border-top: 2px solid var(--dc-bezel); border-bottom: 2px solid var(--dc-bezel);
+}
+[data-layout="diiid"][data-phone] .dcp-pair .dc-cam { aspect-ratio: 1.05; }
+[data-layout="diiid"][data-phone] .dcp-pair .dc-tile > div { min-height: 0; }
+[data-layout="diiid"][data-phone] .dcp-pair .panel-title { display: none; }
+[data-layout="diiid"][data-phone] .dcp-pair .dc-tile-title { z-index: 1; }
+/* the shared canvas writes its legend (q95, beta, mode, Bt, diverted) bottom left, over the plasma on a
+   half-width tile; widen the canvas past both edges so the plot stays centered and the legend falls outside
+   the tile's clip. The configuration word comes back as our own caption, top right. */
+[data-layout="diiid"][data-phone] .dcp-pair .dc-eq > div:first-child {
+  position: absolute; top: 0; bottom: 0; left: -96px; right: -96px; width: auto; height: auto;
+}
+[data-layout="diiid"][data-phone] .dcp-eq-cfg {
+  position: absolute; top: 4px; right: 6px; z-index: 1; text-align: right; pointer-events: none;
+  font: 700 10px/1.2 var(--dc-mono); letter-spacing: 0.06em; color: #c0c0c0;
+}
+
+/* the green block: bars first, then the scalars */
+[data-layout="diiid"][data-phone] .dcp-green {
+  background: #000; padding: 6px 8px 0; font: 700 13px/1.25 var(--dc-mono); color: #00ff00;
+}
+[data-layout="diiid"][data-phone] .dcp-bar { padding: 4px 0 6px; border-bottom: 1px solid #1c1c1c; }
+[data-layout="diiid"][data-phone] .dcp-bar-top,
+[data-layout="diiid"][data-phone] .dcp-bar-bot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; white-space: nowrap; }
+[data-layout="diiid"][data-phone] .dcp-bar-k { font-size: 12px; color: #00ff00; letter-spacing: 0.02em; }
+[data-layout="diiid"][data-phone] .dcp-bar-w { font-size: 13px; }
+[data-layout="diiid"][data-phone] .dcp-bar-track { color: #006000; font-weight: 400; overflow: hidden; }
+[data-layout="diiid"][data-phone] .dcp-bar-track [data-lamp] { font-weight: 700; }
+[data-layout="diiid"][data-phone] .dcp-bar-v { color: #fff; }
+[data-layout="diiid"][data-phone] .dcp-bar-u { color: #00c000; font-weight: 400; font-size: 11px; }
+[data-layout="diiid"][data-phone] .dcp-bar-fus { display: flex; gap: 22px; font-size: 12px; color: #00ff00; margin-top: 2px; }
+[data-layout="diiid"][data-phone] .dcp-bar-fus b { color: #fff; }
+[data-layout="diiid"][data-phone] .dcp-bar [data-lamp="ok"] { color: #00ff00; }
+[data-layout="diiid"][data-phone] .dcp-bar [data-lamp="warn"] { color: #ffff00; }
+[data-layout="diiid"][data-phone] .dcp-bar [data-lamp="bad"] { color: #ff3030; }
+[data-layout="diiid"][data-phone] .dcp-bar [data-lamp="off"] { color: #909090; }
+[data-layout="diiid"][data-phone] .dcp-read-head { display: flex; align-items: center; height: 44px; gap: 0; }
+[data-layout="diiid"][data-phone] .dcp-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; row-gap: 3px; padding-bottom: 8px;
+}
+[data-layout="diiid"][data-phone] .dcp-grid .dc-text-row { grid-template-columns: 50px 1fr 50px; }
+[data-layout="diiid"][data-phone] .dcp-grid .dc-text-row span:nth-child(3) { font-size: 11px; }
+
+/* small text keys inside the page (MORE, + TRACES, fuel): 44 px tall hit area */
+[data-layout="diiid"][data-phone] .dcp-key-s {
+  height: 44px; padding: 0 12px; border: 0; border-left: 1px solid #333;
+  font: 700 12px var(--dc-mono); letter-spacing: 0.06em; background: #101010; color: #ddd;
+}
+[data-layout="diiid"][data-phone] .dcp-key-s[data-on="true"] { background: #e0d000; color: #000; }
+
+/* strip charts: the picked channels, 90 px each, full width */
+[data-layout="diiid"][data-phone] .dcp-traces { display: grid; gap: 2px; background: var(--dc-bezel); border-top: 2px solid var(--dc-bezel); }
+[data-layout="diiid"][data-phone] .dcp-traces-head { display: flex; align-items: center; background: #000; padding-left: 8px; }
+[data-layout="diiid"][data-phone] .dcp-chan {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 44px; gap: 1px; background: #333;
+  font: 700 11px var(--dc-mono); letter-spacing: 0.02em;
+}
+[data-layout="diiid"][data-phone] .dcp-chan .dc-key { background: #101010; border: 0; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-layout="diiid"][data-phone] .dcp-chan .dc-key[data-on="true"] { background: #e0d000; color: #000; }
+[data-layout="diiid"][data-phone] .dcp-traces .dc-strip { height: 90px; }
+[data-layout="diiid"][data-phone] .dcp-traces .dc-strip canvas { touch-action: pan-y; }
+
+/* ticker: the last events, wrapping */
+[data-layout="diiid"][data-phone] .dcp-ticker {
+  background: #000; border-top: 2px solid var(--dc-bezel); padding: 6px 8px 8px;
+  display: flex; flex-wrap: wrap; row-gap: 2px; font: 11px/1.35 var(--dc-mono);
+}
+
+/* the key row, pinned: a thin progress line with the playhead, then the keys */
+[data-layout="diiid"][data-phone] .dcp-keys {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  height: calc(var(--dcp-keys) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #101010; border-top: 1px solid #333; box-sizing: border-box;
+  font: 700 12px var(--dc-mono); letter-spacing: 0.06em;
+}
+[data-layout="diiid"][data-phone] .dcp-line { position: relative; height: 14px; margin: 0 22px; }
+[data-layout="diiid"][data-phone] .dcp-line::before { content: ''; position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: #333; }
+[data-layout="diiid"][data-phone] .dcp-line-fill { position: absolute; left: 0; top: 6px; height: 2px; background: #00ff00; }
+[data-layout="diiid"][data-phone] .dcp-line-tick { position: absolute; top: 3px; width: 1px; height: 8px; background: #888; }
+[data-layout="diiid"][data-phone] .dcp-handle {
+  position: absolute; top: -30px; width: 44px; height: 44px; transform: translateX(-50%);
+  pointer-events: none; touch-action: none;
+}
+[data-layout="diiid"][data-phone] .dcp-handle::after {
+  content: ''; position: absolute; left: 50%; top: 31px; width: 4px; height: 12px; transform: translateX(-50%); background: #fff;
+}
+[data-layout="diiid"][data-phone] .dcp-handle[data-scrub="true"] { pointer-events: auto; cursor: ew-resize; }
+[data-layout="diiid"][data-phone] .dcp-handle[data-scrub="true"]::after { width: 10px; background: #ffff00; }
+[data-layout="diiid"][data-phone] .dcp-keyrow { display: flex; height: 49px; border-top: 1px solid #333; }
+[data-layout="diiid"][data-phone] .dcp-key { flex: 1 1 0; min-width: 0; height: 48px; padding: 0 6px; display: flex; align-items: center; justify-content: center; }
+[data-layout="diiid"][data-phone] .dcp-keyrow .dc-key-run { flex-grow: 1.3; }
+[data-layout="diiid"][data-phone] .dcp-keyrow .dc-key:last-child { border-right: 0; }
+[data-layout="diiid"][data-phone] .dcp-speed .dcp-pick-v { font: inherit; letter-spacing: inherit; }
+[data-layout="diiid"][data-phone] .dcp-speed .dcp-pick-v::after { content: none; }
+
+/* a phone on its side: the same stack, wider; the pair is capped so the bars stay near the top */
+@media (orientation: landscape) {
+  [data-layout="diiid"][data-phone] .dcp-state { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  [data-layout="diiid"][data-phone] .dcp-pair { grid-template-columns: minmax(0, 1fr) 252px; }
+  [data-layout="diiid"][data-phone] .dcp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-layout="diiid"][data-phone] .dcp-chan { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}

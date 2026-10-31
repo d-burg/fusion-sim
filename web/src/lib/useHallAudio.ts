@@ -22,7 +22,13 @@ function hasActivation(): boolean {
 }
 
 export function useHallAudio(state: SimState, device: Device | null): HallAudioControls {
-  const { hallAudio, dAlphaAudio, pulseAudio, audioVolume } = useSettings()
+  const { sound, hallAudio: hallOn, dAlphaAudio: dAlphaOn, pulseAudio: pulseOn, audioVolume } = useSettings()
+  // The SOUND setting (first-run card, settings menu) is the master switch; the
+  // channel toggles only choose what plays while it is on.
+  const on = sound === 'on'
+  const hallAudio = on && hallOn
+  const dAlphaAudio = on && dAlphaOn
+  const pulseAudio = on && pulseOn
   const engineRef = useRef<HallAudio | null>(null)
   const prevRef = useRef({ disrupted: false, elmCount: 0 })
   const settingsRef = useRef({ hallAudio, dAlphaAudio, pulseAudio, audioVolume })

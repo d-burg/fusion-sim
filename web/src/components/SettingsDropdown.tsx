@@ -1,11 +1,23 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, type Theme, type Units } from '../lib/settingsContext'
+import { useSettings, LOOKS, type Sound, type Units } from '../lib/settingsContext'
+import { reopenFirstRun } from '../lib/firstRun'
 
-export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutorial?: () => void } = {}) {
-  const { theme, units, hallAudio, dAlphaAudio, pulseAudio, audioVolume, setTheme, setUnits, setHallAudio, setDAlphaAudio, setPulseAudio, setAudioVolume } = useSettings()
+interface Props {
+  onRestartTutorial?: () => void
+  /** Set when a ?layout= link overrides the stored look: names the layout and drops the parameter. */
+  layoutLock?: { slug: string; onRelease: () => void }
+}
+
+export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Props = {}) {
+  const {
+    units, look, sound, hallAudio, dAlphaAudio, pulseAudio, audioVolume,
+    setUnits, setLook, setSound, setHallAudio, setDAlphaAudio, setPulseAudio, setAudioVolume,
+  } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  // Opens upward when the button sits in the lower half of the viewport (a key row along the bottom).
+  const [up, setUp] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close on click outside
@@ -33,7 +45,13 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
   return (
     <div ref={dropdownRef} className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open && dropdownRef.current) {
+            const r = dropdownRef.current.getBoundingClientRect()
+            setUp(r.top + r.height / 2 > window.innerHeight / 2)
+          }
+          setOpen(!open)
+        }}
         className="settings-btn px-1.5 py-1 rounded text-gray-400 hover:text-gray-200
                    transition-colors cursor-pointer flex items-center gap-1"
         title="Settings"
@@ -59,33 +77,41 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
       </button>
 
       {open && (
-        <div className="settings-panel absolute right-0 top-full mt-1 w-64 z-50
+        <div className={`settings-panel absolute right-0 ${up ? 'bottom-full mb-1' : 'top-full mt-1'} w-60 z-50
                         rounded-md shadow-xl border p-3 space-y-3
-                        bg-gray-900 border-gray-700">
+                        bg-gray-900 border-gray-700`}>
           {/* Header */}
           <div className="settings-heading text-sm font-medium text-gray-300">
             Settings
           </div>
 
-          {/* Theme toggle */}
+          {/* Control-room look */}
           <div>
-            <div className="text-sm text-gray-400 mb-1.5">Theme</div>
-            <div className="flex rounded overflow-hidden border border-gray-700">
-              {(['signature', 'retro'] as Theme[]).map((t) => (
+            <div className="text-sm text-gray-400 mb-1.5">Control room look</div>
+            <div className="grid grid-cols-2 gap-px bg-gray-700 border border-gray-700 rounded overflow-hidden">
+              {LOOKS.map((l) => (
                 <button
-                  key={t}
-                  onClick={() => setTheme(t)}
-                  className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer capitalize
-                    ${
-                      theme === t
-                        ? 'theme-toggle-active'
-                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-                    }`}
+                  key={l.id}
+                  onClick={() => setLook(l.id)}
+                  className={`px-2 py-1 text-sm font-medium transition-colors cursor-pointer
+                    ${look === l.id ? 'theme-toggle-active' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
                 >
-                  {t}
+                  {l.label}
                 </button>
               ))}
             </div>
+            {layoutLock && (
+              <div className="settings-lock mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[9px] uppercase tracking-[0.12em] text-gray-400">
+                <span>LAYOUT FIXED BY LINK . {layoutLock.slug}</span>
+                <button
+                  type="button"
+                  onClick={() => { layoutLock.onRelease(); setOpen(false) }}
+                  className="shrink-0 uppercase tracking-[0.12em] text-gray-200 border-b border-dotted border-gray-500 hover:text-white cursor-pointer"
+                >
+                  USE MY LOOK
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Units toggle */}
@@ -112,42 +138,64 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
             </div>
           </div>
 
-          {/* Sound: machine sounds from the torus hall, off by default */}
+          {/* Sound toggle */}
           <div>
             <div className="text-sm text-gray-400 mb-1.5">Sound</div>
-            <OnOff label="Hall audio" value={hallAudio} onChange={setHallAudio} />
-            <div className="text-xs text-gray-500 mt-1 mb-2">
-              Torus-hall microphones: coil and converter hum, flywheel generators sagging under load,
-              beam lines, and the thud of a disruption. The plasma itself is silent.
+            <div className="flex rounded overflow-hidden border border-gray-700">
+              {(['on', 'off'] as Sound[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setSound(v)}
+                  className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer capitalize
+                    ${
+                      sound === v
+                        ? 'theme-toggle-active'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                >
+                  {v}
+                </button>
+              ))}
             </div>
-            <OnOff label={<>Sonified D<sub>α</sub></>} value={dAlphaAudio} onChange={setDAlphaAudio} />
-            <div className="text-xs text-gray-500 mt-1 mb-2">
-              One click per ELM. Not a sound the hall makes.
-            </div>
-            <OnOff label="Pulse sonification" value={pulseAudio} onChange={setPulseAudio} />
-            <div className="text-xs text-gray-500 mt-1 mb-2">
-              The pulse as sound, not a recording of one: a whine that climbs with the current
-              ramp, a roar that follows the divertor heat flux, and a neutron detector whose
-              crackle gates everything as the fusion power rises.
-            </div>
-            <label className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="w-14 shrink-0">Volume</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={Math.round(audioVolume * 100)}
-                onChange={(e) => setAudioVolume(Number(e.target.value) / 100)}
-                disabled={!hallAudio && !dAlphaAudio && !pulseAudio}
-                className="flex-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Audio volume"
-              />
-              <span className="font-mono tabular-nums w-8 text-right">{Math.round(audioVolume * 100)}</span>
-            </label>
+            {sound === 'on' && (
+              <div className="mt-2 space-y-1.5">
+                <OnOff label="Hall audio" value={hallAudio} onChange={setHallAudio} />
+                <OnOff label={<>Sonified D<sub>α</sub></>} value={dAlphaAudio} onChange={setDAlphaAudio} />
+                <OnOff label="Pulse sonification" value={pulseAudio} onChange={setPulseAudio} />
+                <label className="flex items-center gap-2 text-xs text-gray-500 pt-0.5">
+                  <span className="w-14 shrink-0">Volume</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(audioVolume * 100)}
+                    onChange={(e) => setAudioVolume(Number(e.target.value) / 100)}
+                    className="flex-1 cursor-pointer"
+                    aria-label="Audio volume"
+                  />
+                  <span className="font-mono tabular-nums w-8 text-right">{Math.round(audioVolume * 100)}</span>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Divider */}
           <div className="border-t border-gray-700/50" />
+
+          {/* Re-show the first-run card (sound, look, tour) */}
+          <button
+            onClick={() => {
+              setOpen(false)
+              reopenFirstRun()
+            }}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-gray-400
+                       hover:bg-gray-800 hover:text-gray-200 transition-colors cursor-pointer text-left"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+            </svg>
+            First-run setup
+          </button>
 
           {/* Restart tutorial */}
           {onRestartTutorial && (
@@ -191,13 +239,13 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
   )
 }
 
-/** A labeled Off/On segmented toggle, styled like the theme and units toggles. */
-function OnOff({ label, value, onChange }: { label: React.ReactNode; value: boolean; onChange: (on: boolean) => void }) {
+/** A labeled Off/On segmented toggle, styled like the units toggle, for one audio channel. */
+function OnOff({ label, value, onChange }: { label: ReactNode; value: boolean; onChange: (on: boolean) => void }) {
   return (
     <div className="flex items-center gap-2">
       <span className="flex-1 text-sm text-gray-300">{label}</span>
       <div className="flex rounded overflow-hidden border border-gray-700 w-24">
-        {([false, true] as const).map((on) => (
+        {([true, false] as const).map((on) => (
           <button
             key={String(on)}
             onClick={() => onChange(on)}

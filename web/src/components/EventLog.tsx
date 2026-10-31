@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LogEvent, ReportRow, Severity } from '../lib/pulseLog'
 import InfoPopup from './InfoPopup'
+import { safeGet, safeSet } from '../lib/safeStorage'
 import { eventLogInfo } from './infoContent'
 
 interface Props {
@@ -14,11 +15,9 @@ interface Props {
 const OPEN_KEY = 'tok-sym-log-open'
 
 function initialOpen(): boolean {
-  try {
-    const stored = localStorage.getItem(OPEN_KEY)
-    if (stored === '1') return true
-    if (stored === '0') return false
-  } catch { /* ignore */ }
+  const stored = safeGet(OPEN_KEY)
+  if (stored === '1') return true
+  if (stored === '0') return false
   // Default open only where the grid can spare the height: the status panel
   // needs about 380 px, which a 900 px window gives it only with the log
   // collapsed to its single status line.
@@ -54,7 +53,7 @@ export default function EventLog({ events, pulseNumber, running, report }: Props
   // on each visit so a laptop does not inherit a tall monitor's setting.
   const toggleOpen = () => {
     setOpen((v) => {
-      try { localStorage.setItem(OPEN_KEY, v ? '0' : '1') } catch { /* ignore */ }
+      safeSet(OPEN_KEY, v ? '0' : '1')
       return !v
     })
   }

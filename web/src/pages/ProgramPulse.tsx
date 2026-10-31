@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   getDevice,
+  getDevices,
   getPreset,
   type PresetId,
   type WaveformPoint,
@@ -19,60 +20,46 @@ import {
   channelAvailable,
 } from '../lib/program'
 import WaveformDrawer from '../components/WaveformDrawer'
+import { useSettings, LOOKS } from '../lib/settingsContext'
+import { StandardNav } from './DeviceSelect'
+import './standard.css'
 
-// ── Preset metadata ──────────────────────────────────────────────
-const ALL_PRESETS: { id: PresetId; name: string; desc: string; color: string }[] = [
-  {
-    id: 'hmode',
-    name: 'Standard H-mode',
-    desc: 'Ip ramp → NBI → L-H transition → H-mode flat-top → rampdown',
-    color: 'cyan',
-  },
-  {
-    id: 'lmode',
-    name: 'L-mode',
-    desc: 'Ohmic heating + modest NBI, stays in L-mode confinement',
-    color: 'amber',
-  },
-  {
-    id: 'density_limit',
-    name: 'Density limit',
-    desc: 'Over-fuelled plasma that pushes past the Greenwald limit. Will it disrupt?',
-    color: 'red',
-  },
+// ── Scenarios: a word each, with a few tracked-caps words as the caption ──
+type Scenario = { id: PresetId; name: string; cap: ReactNode }
+const G = ({ children }: { children: ReactNode }) => <span className="sp-g">{children}</span>
+
+const ALL_PRESETS: Scenario[] = [
+  { id: 'hmode', name: 'H-MODE', cap: 'NBI . L–H . FLAT-TOP' },
+  { id: 'lmode', name: 'L-MODE', cap: 'OHMIC . LOW NBI' },
+  { id: 'density_limit', name: 'N-LIMIT', cap: 'PAST GREENWALD' },
 ]
 
 // CENTAUR uses negative-triangularity edge mode, not conventional H/L-mode
-const CENTAUR_PRESETS: typeof ALL_PRESETS = [
-  {
-    id: 'hmode',
-    name: 'NT-edge',
-    desc: 'Negative-triangularity edge mode with ELM-free high confinement',
-    color: 'cyan',
-  },
-  {
-    id: 'density_limit',
-    name: 'Density limit',
-    desc: 'Over-fuelled plasma that pushes past the Greenwald limit. Will it disrupt?',
-    color: 'red',
-  },
+const CENTAUR_PRESETS: Scenario[] = [
+  { id: 'hmode', name: 'NT-EDGE', cap: <>NEG. <G>δ</G> . ELM-FREE</> },
+  { id: 'density_limit', name: 'N-LIMIT', cap: 'PAST GREENWALD' },
 ]
 
 function getPresets(deviceId: string) {
   return deviceId === 'centaur' ? CENTAUR_PRESETS : ALL_PRESETS
 }
 
+const CONFIGS: [MagneticConfig, string, string][] = [
+  ['LowerSingleNull', 'LOWER SINGLE NULL', 'LSN'],
+  ['DoubleNull', 'DOUBLE NULL', 'DN'],
+  ['UpperSingleNull', 'UPPER SINGLE NULL', 'USN'],
+]
+
 // ── Programmed-waveform strip chart ──────────────────────────────
-// A stack of time-aligned strips on one shared time axis, the way a pulse
-// schedule is shown on a plasma-control-system display. Each strip is
-// scaled from zero to its own peak so the shape of the programme is honest;
-// the breakpoints that define the piecewise-linear programme are drawn as
-// markers, because they are the data. The x-scale is shared, so ticks and
-// phase boundaries line up across every strip.
+// A stack of time-aligned strips on one shared time axis, as the control
+// room's strips: one hairline frame, hairline separators, the label inside
+// top-left and the value top-right, white lines with dot markers at the
+// breakpoints (they are the data), a faint grid at the phase boundaries,
+// and the phases as station words under the time axis.
 
 type Channel = {
   key: string
-  symbol: React.ReactNode
+  label: ReactNode
   unit: string
   title: string
   points: WaveformPoint[]
@@ -80,14 +67,7 @@ type Channel = {
   param?: ScalarParam
 }
 
-/** Shared column template: symbol, plot, readout. */
-const COLS = 'grid-cols-[2.75rem_1fr_4.5rem] md:grid-cols-[6rem_1fr_11rem]'
-
-/** Tick spacing that gives roughly 5–10 ticks across the pulse. */
-function tickStep(duration: number): number {
-  const candidates = [0.5, 1, 2, 5, 10, 20, 50]
-  return candidates.find((c) => duration / c <= 10) ?? 100
-}
+type Station = { label: string; t: number }
 
 /** Ramp-up end and ramp-down start, taken from the Ip programme. */
 function flatTop(ip: WaveformPoint[]): { start: number; end: number } | null {
@@ -101,12 +81,13 @@ function flatTop(ip: WaveformPoint[]): { start: number; end: number } | null {
 }
 
 const VB_W = 1000 // viewBox width; preserveAspectRatio="none" stretches it
-const STRIP_H = 36
+const STRIP_H = 60 // about the row height at 1440 x 900, so the top pad clears the label
+const PAD_TOP = 15
+const PAD_BOT = 5
 
 function Strip({
   ch,
   duration,
-  ticks,
   phases,
   edited,
   onEdit,
@@ -114,7 +95,6 @@ function Strip({
 }: {
   ch: Channel
   duration: number
-  ticks: number[]
   phases: { start: number; end: number } | null
   edited: boolean
   onEdit?: () => void
@@ -129,138 +109,58 @@ function Strip({
   const hi = Math.max(0, ...vals) * 1.08
   const range = hi - lo || 1
   const extremum = vals.reduce((a, v) => (Math.abs(v) > Math.abs(a) ? v : a), 0)
-  const padY = 4
   const toX = (t: number) => (t / duration) * VB_W
-  const toY = (v: number) => padY + (STRIP_H - 2 * padY) * (1 - (v - lo) / range)
+  const toY = (v: number) => PAD_TOP + (STRIP_H - PAD_TOP - PAD_BOT) * (1 - (v - lo) / range)
   const d = ch.points
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(2)}`)
     .join(' ')
-
-  const symbol = (
-    <div
-      className={`text-sm text-right ${onEdit ? '' : 'cursor-help'} ${programmed ? 'text-gray-300' : 'text-gray-600'} self-center`}
-      title={onEdit ? undefined : ch.unit ? `${ch.title} (${ch.unit})` : ch.title}
-    >
-      {ch.symbol}
-    </div>
-  )
-
-  const plot = (
-    <svg
-      viewBox={`0 0 ${VB_W} ${STRIP_H}`}
-      preserveAspectRatio="none"
-      className="w-full h-full block"
-      aria-label={`${ch.title} programme`}
-    >
-      {/* Shared time grid */}
-      {ticks.map((t) => (
-        <line
-          key={t}
-          x1={toX(t)} x2={toX(t)} y1={0} y2={STRIP_H}
-          stroke="var(--c-line)" vectorEffect="non-scaling-stroke"
-        />
-      ))}
-      {/* Flat-top boundaries, slightly stronger */}
-      {phases && [phases.start, phases.end].map((t) => (
-        <line
-          key={`ph-${t}`}
-          x1={toX(t)} x2={toX(t)} y1={0} y2={STRIP_H}
-          stroke="var(--c-line-strong)" vectorEffect="non-scaling-stroke"
-        />
-      ))}
-      {/* Zero baseline */}
-      <line
-        x1={0} x2={VB_W} y1={toY(0)} y2={toY(0)}
-        stroke="var(--c-line)" vectorEffect="non-scaling-stroke"
-      />
-      {programmed && (
-        <>
-          <path
-            d={d}
-            fill="none"
-            stroke={edited ? 'var(--c-accent)' : 'var(--c-ink-dim)'}
-            strokeWidth={1.25}
-            strokeLinejoin="miter"
-            vectorEffect="non-scaling-stroke"
-          />
-          {/* Breakpoints: zero-length round-capped dashes stay circular
-              under the non-uniform scaling, unlike <circle>. */}
-          {ch.points.map((p, i) => (
-            <path
-              key={i}
-              d={`M ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(2)} h 0.001`}
-              stroke={edited ? 'var(--c-accent)' : 'var(--c-ink)'}
-              strokeWidth={4}
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-        </>
-      )}
-    </svg>
-  )
+  const line = edited ? 'var(--sp-warm)' : 'rgba(255,255,255,0.85)'
 
   return (
-    <div className={`group grid ${COLS} items-stretch gap-2 md:gap-3 bg-gray-900 py-1 px-2 md:px-3 min-h-0`}>
-      {onEdit ? (
-        <button
-          type="button"
-          onClick={onEdit}
-          title={`Edit ${ch.title}`}
-          aria-label={`Edit ${ch.title}`}
-          className="col-span-2 grid grid-cols-subgrid items-stretch gap-2 md:gap-3 cursor-pointer min-h-0
-                     group-hover:bg-[var(--c-raised)] transition-colors"
-        >
-          {symbol}
-          {plot}
-        </button>
-      ) : (
-        <>
-          {symbol}
-          {plot}
-        </>
-      )}
-
-      <div className="flex items-center justify-end gap-2 md:gap-3 text-xs tabular-nums whitespace-nowrap self-center">
-        {programmed ? (
-          <span>
-            <span className="font-mono text-gray-300">{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}</span>
-            {ch.unit && <span className="hidden md:inline text-gray-500 ml-1">{ch.unit}</span>}
-          </span>
-        ) : (
+    <div className="sp-strip" data-editable={!!onEdit} data-edited={edited} data-off={!programmed}>
+      <svg viewBox={`0 0 ${VB_W} ${STRIP_H}`} preserveAspectRatio="none" className="sp-strip-svg" aria-hidden="true">
+        {/* The grid: the phase boundaries and the zero baseline only */}
+        {phases && [phases.start, phases.end].map((t) => (
+          <line key={`ph-${t}`} x1={toX(t)} x2={toX(t)} y1={0} y2={STRIP_H} stroke="rgba(255,255,255,0.14)" vectorEffect="non-scaling-stroke" />
+        ))}
+        <line x1={0} x2={VB_W} y1={toY(0)} y2={toY(0)} stroke="rgba(255,255,255,0.08)" vectorEffect="non-scaling-stroke" />
+        {programmed && (
           <>
-            <span className="hidden md:inline text-gray-600">not programmed</span>
-            <span className="md:hidden text-gray-600" aria-label="not programmed">–</span>
+            <path d={d} fill="none" stroke={line} strokeWidth={1} strokeLinejoin="miter" vectorEffect="non-scaling-stroke" />
+            {/* Breakpoints: zero-length round-capped dashes stay circular
+                under the non-uniform scaling, unlike <circle>. */}
+            {ch.points.map((p, i) => (
+              <path
+                key={i}
+                d={`M ${toX(p[0]).toFixed(1)} ${toY(p[1]).toFixed(2)} h 0.001`}
+                stroke={edited ? 'var(--sp-warm)' : '#fff'}
+                strokeWidth={3.5}
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
           </>
         )}
-        {/* Editable channels carry a visible Edit control at rest, so the
-            affordance is on the row itself rather than in a sentence
-            elsewhere. Display-only channels (Bt, P_ICH) simply lack it. */}
+      </svg>
+      {/* The whole strip opens the editor; the word at the right is the visible affordance. */}
+      {onEdit && <button type="button" className="sp-strip-hit" onClick={onEdit} aria-label={`Edit ${ch.title}`} />}
+      <div className="sp-strip-label" title={ch.unit ? `${ch.title} (${ch.unit})` : ch.title}>{ch.label}</div>
+      <div className="sp-strip-right">
+        <span className="sp-strip-v">
+          {programmed ? <>{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}{ch.unit ? ` ${ch.unit}` : ''}</> : '—'}
+        </span>
         {onEdit && !edited && (
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label={`Edit ${ch.title}`}
-            className="flex items-center gap-1 text-gray-500 group-hover:text-cyan-400
-                       hover:text-cyan-400 transition-colors cursor-pointer leading-none"
-          >
-            <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor"
-                 strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
-              <path d="M11.5 2.5l2 2L5.5 13H3.5v-2z" />
-            </svg>
-            <span className="hidden md:inline">Edit</span>
-          </button>
+          <button type="button" className="sp-edit" onClick={onEdit} aria-label={`Edit ${ch.title}`}>EDIT</button>
         )}
-        {edited && <span className="text-xs text-amber-400">edited</span>}
+        {edited && <span className="sp-edited">EDITED</span>}
         {edited && onReset && (
           <button
             type="button"
+            className="sp-edit"
             onClick={(e) => { e.stopPropagation(); onReset() }}
             aria-label={`Reset ${ch.title} to preset`}
-            title={`Reset ${ch.title} to preset`}
-            className="text-gray-500 hover:text-gray-300 transition-colors cursor-pointer leading-none"
           >
-            ↺
+            RESET
           </button>
         )}
       </div>
@@ -282,65 +182,42 @@ function ProgramChart({
   deviceId?: string
 }) {
   const duration = program.duration
-  const step = tickStep(duration)
-  const ticks: number[] = []
-  for (let t = 0; t <= duration + 1e-9; t += step) ticks.push(+t.toFixed(3))
   const phases = flatTop(program.ip)
   const pct = (t: number) => `${((t / duration) * 100).toFixed(2)}%`
+
+  const stations: Station[] = [{ label: 'RAMP-UP', t: 0 }]
+  if (phases) {
+    stations.push({ label: 'FLAT-TOP', t: phases.start })
+    if (phases.end < duration) stations.push({ label: 'RAMP-DOWN', t: phases.end })
+  }
+  stations.push({ label: 'END', t: duration })
+  const anchor = (i: number) => (i === 0 ? 'start' : i === stations.length - 1 ? 'end' : 'mid')
 
   const param = (key: string) => SCALAR_PARAMS.find((p) => p.key === key)
 
   const allChannels: Channel[] = [
-    { key: 'ip', symbol: <><i>I</i><sub>p</sub></>, unit: 'MA', title: 'Plasma current', points: program.ip, param: param('ip') },
-    { key: 'bt', symbol: <><i>B</i><sub>t</sub></>, unit: 'T', title: 'Toroidal magnetic field', points: program.bt },
-    { key: 'ne', symbol: <><i>n̄</i><sub>e</sub></>, unit: '10²⁰ m⁻³', title: 'Line-averaged electron density', points: program.ne_target, param: param('ne') },
-    { key: 'nbi', symbol: <><i>P</i><sub>NBI</sub></>, unit: 'MW', title: 'Neutral beam injection power', points: program.p_nbi, param: param('p_nbi') },
-    { key: 'ech', symbol: <><i>P</i><sub>ECH</sub></>, unit: 'MW', title: 'Electron cyclotron heating power', points: program.p_ech, param: param('p_ech') },
-    { key: 'ich', symbol: <><i>P</i><sub>ICH</sub></>, unit: 'MW', title: 'Ion cyclotron heating power', points: program.p_ich },
-    { key: 'd2_puff', symbol: <><i>Γ</i><sub>D₂</sub></>, unit: '10²⁰/s', title: 'Deuterium gas puff rate', points: program.d2_puff ?? [], param: param('d2_puff') },
-    { key: 'n2_puff', symbol: <><i>Γ</i><sub>N</sub></>, unit: '10²⁰ atoms/s', title: 'Nitrogen seeding rate', points: program.n2_puff ?? [], param: param('n2_puff') },
-    { key: 'neon_puff', symbol: <><i>Γ</i><sub>Ne</sub></>, unit: '10²⁰ atoms/s', title: 'Neon seeding rate', points: program.neon_puff ?? [], param: param('neon_puff') },
-    { key: 'argon_puff', symbol: <><i>Γ</i><sub>Ar</sub></>, unit: '10²⁰ atoms/s', title: 'Argon seeding rate', points: program.argon_puff ?? [], param: param('argon_puff') },
-    { key: 'kappa', symbol: <i>κ</i>, unit: '', title: 'Elongation', points: program.kappa, param: param('kappa') },
-    { key: 'delta', symbol: <i>δ</i>, unit: '', title: 'Triangularity', points: program.delta, param: param('delta') },
+    { key: 'ip', label: <>I<sub>P</sub></>, unit: 'MA', title: 'Plasma current', points: program.ip, param: param('ip') },
+    { key: 'bt', label: <>B<sub>T</sub></>, unit: 'T', title: 'Toroidal magnetic field', points: program.bt },
+    { key: 'ne', label: <>N̄<sub>E</sub></>, unit: '10²⁰ m⁻³', title: 'Line-averaged electron density', points: program.ne_target, param: param('ne') },
+    { key: 'nbi', label: <>P<sub>NBI</sub></>, unit: 'MW', title: 'Neutral beam injection power', points: program.p_nbi, param: param('p_nbi') },
+    { key: 'ech', label: <>P<sub>ECH</sub></>, unit: 'MW', title: 'Electron cyclotron heating power', points: program.p_ech, param: param('p_ech') },
+    { key: 'ich', label: <>P<sub>ICH</sub></>, unit: 'MW', title: 'Ion cyclotron heating power', points: program.p_ich },
+    { key: 'd2_puff', label: <><G>Γ</G> D<sub>2</sub></>, unit: '10²⁰/s', title: 'Deuterium gas puff rate', points: program.d2_puff ?? [], param: param('d2_puff') },
+    { key: 'n2_puff', label: <><G>Γ</G> N</>, unit: '10²⁰ atoms/s', title: 'Nitrogen seeding rate', points: program.n2_puff ?? [], param: param('n2_puff') },
+    { key: 'neon_puff', label: <><G>Γ</G> NE</>, unit: '10²⁰ atoms/s', title: 'Neon seeding rate', points: program.neon_puff ?? [], param: param('neon_puff') },
+    { key: 'argon_puff', label: <><G>Γ</G> AR</>, unit: '10²⁰ atoms/s', title: 'Argon seeding rate', points: program.argon_puff ?? [], param: param('argon_puff') },
+    { key: 'kappa', label: <G>κ</G>, unit: '', title: 'Elongation', points: program.kappa, param: param('kappa') },
+    { key: 'delta', label: <G>δ</G>, unit: '', title: 'Triangularity', points: program.delta, param: param('delta') },
   ]
   // Seeding strips only for the gas lines this machine has.
   const channels = allChannels.filter((c) => channelAvailable(c.key, deviceId))
 
   return (
-    <div className="border-y border-gray-800 flex flex-col h-full min-h-0">
-      {/* Phase header, aligned to the plot column */}
-      {phases && (
-        <div className={`grid ${COLS} gap-2 md:gap-3 px-2 md:px-3 pt-2 pb-1 text-xs text-gray-500`}>
-          <div />
-          {/* One box per phase band. Each box is a size container, and its
-              label only renders when the band is wide enough to hold it, so
-              labels can never overlap or wrap on a narrow plot. */}
-          <div className="relative h-4">
-            {([
-              ['ramp-up', 0, phases.start],
-              ['flat-top', phases.start, phases.end],
-              ['ramp-down', phases.end, duration],
-            ] as [string, number, number][]).map(([label, from, to]) => (
-              <div
-                key={label}
-                className="@container absolute top-0 bottom-0 overflow-hidden"
-                style={{ left: pct(from), width: pct(to - from) }}
-              >
-                <span className={`hidden @[4.25rem]:inline whitespace-nowrap ${from > 0 ? 'pl-1.5' : ''}`}>
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div />
-        </div>
-      )}
-
+    <div className="sp-chart">
       {/* Equal-height rows that fill whatever height the page gives the chart;
           the SVGs stretch with them (non-uniform scaling, non-scaling strokes).
           Below 1.75rem per row the chart scrolls rather than crushing. */}
-      <div className="flex-1 min-h-0 grid auto-rows-[minmax(1.75rem,1fr)] gap-px bg-[var(--c-line)] overflow-y-auto">
+      <div className="sp-rows">
         {channels.map((ch) => {
           const p = ch.param
           const ov = p ? overrides[p.key] : undefined
@@ -349,7 +226,6 @@ function ProgramChart({
               key={ch.key}
               ch={ch}
               duration={duration}
-              ticks={ticks}
               phases={phases}
               edited={ov !== undefined && ov !== null}
               onEdit={p ? () => onEdit(p) : undefined}
@@ -359,35 +235,59 @@ function ProgramChart({
         })}
       </div>
 
-      {/* Shared time axis */}
-      <div className={`grid ${COLS} gap-2 md:gap-3 px-2 md:px-3 pt-1.5 pb-2 text-xs text-gray-500`}>
-        <div className="text-right"><i>t</i> (s)</div>
-        <div className="relative h-4 font-mono tabular-nums">
-          {ticks.map((t, i) => (
-            <span
-              key={t}
-              className="absolute"
-              style={{
-                left: pct(t),
-                transform: i === ticks.length - 1 ? 'translateX(-100%)' : i === 0 ? 'none' : 'translateX(-50%)',
-              }}
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-        <div />
+      {/* Shared time axis: the station times, then the line with its stations */}
+      <div className="sp-axis">
+        {stations.map((s, i) => (
+          <span key={s.label} className="sp-axis-t" data-anchor={anchor(i)} style={{ left: pct(s.t) }}>
+            {s.t.toFixed(2)}{i === stations.length - 1 ? ' S' : ''}
+          </span>
+        ))}
+      </div>
+      <div className="sp-stations">
+        <div className="sp-stations-line" aria-hidden="true" />
+        {stations.map((s, i) => (
+          <div key={s.label} className="sp-station" data-anchor={anchor(i)} style={{ left: pct(s.t) }}>
+            <div className="sp-station-tick" aria-hidden="true" />
+            <div className="sp-station-label">{s.label}</div>
+          </div>
+        ))}
       </div>
     </div>
+  )
+}
+
+// ── Setup column pieces ──────────────────────────────────────────
+function Section({ n, title, children }: { n: string; title: ReactNode; children: ReactNode }) {
+  return (
+    <div className="sp-sec">
+      <div className="sp-head"><span className="sp-num">{n}</span> . {title}</div>
+      {children}
+    </div>
+  )
+}
+
+/** One list row: the word, a white square when active, a tiny caption at right. */
+function Row({ on, onClick, word, cap }: { on: boolean; onClick: () => void; word: ReactNode; cap?: ReactNode }) {
+  return (
+    <button type="button" className="sp-row" data-on={on} onClick={onClick} aria-pressed={on}>
+      <span className="sp-row-word">{word}</span>
+      {cap && <span className="sp-row-cap">{cap}</span>}
+    </button>
   )
 }
 
 // ── Main page ────────────────────────────────────────────────────
 export default function ProgramPulse() {
   const { deviceId } = useParams<{ deviceId: string }>()
+  // Keyed on the device so switching machines from the nav starts a fresh setup.
+  return <ProgramPage key={deviceId ?? ''} deviceId={deviceId} />
+}
+
+function ProgramPage({ deviceId }: { deviceId: string | undefined }) {
   const navigate = useNavigate()
 
   const device = useMemo(() => (deviceId ? getDevice(deviceId) : null), [deviceId])
+  const devices = useMemo(() => getDevices(), [])
   const [selected, setSelected] = useState<PresetId>('hmode')
 
   // Edits layered over the preset. An override is either a scalar flat-top
@@ -395,6 +295,7 @@ export default function ProgramPulse() {
   // rebuilt from the preset every render, so nothing is ever edited in place.
   const [overrides, setOverrides] = useState<Record<string, OverrideValue>>({})
   const [durationOverride, setDurationOverride] = useState<number | null>(null)
+  const { look, setLook } = useSettings()
   const [configOverride, setConfigOverride] = useState<MagneticConfig | null>(null)
   const [editing, setEditing] = useState<ScalarParam | null>(null)
 
@@ -458,105 +359,94 @@ export default function ProgramPulse() {
     navigate(`/run/${deviceId}?preset=${selected}`, { state: handoff })
   }
 
+  const deviceLinks = (
+    <span className="sp-group">
+      {devices.map((d) => (
+        <Link key={d.id} to={`/program/${d.id}`} className="sp-link" data-on={d.id === deviceId}>{d.name}</Link>
+      ))}
+    </span>
+  )
+
   if (!device) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-red-400">
-        Unknown device: {deviceId}
+      <div data-page="program" className="page-enter min-h-screen flex flex-col">
+        <StandardNav left={deviceLinks} />
+        <div className="sp-head" style={{ padding: '40px 64px' }}>UNKNOWN DEVICE . {deviceId}</div>
       </div>
     )
   }
 
+  // Numbered captions run down the setup column and on to the chart.
+  const hasConfig = deviceId === 'diiid'
+  const N = { scenario: '01', config: '02', look: hasConfig ? '03' : '02', duration: hasConfig ? '04' : '03', chart: hasConfig ? '05' : '04' }
+  const scenario = getPresets(deviceId ?? '').find((p) => p.id === selected)
+
   return (
-    <div className="page-enter min-h-screen md:tall:h-screen flex flex-col md:tall:overflow-hidden pb-20 md:tall:pb-0">
-      {/* ── Top nav ── */}
-      <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 shrink-0">
-        <button
-          onClick={() => navigate('/')}
-          className="text-sm text-gray-500 hover:text-cyan-400 transition-colors cursor-pointer"
-        >
-          ← Device selection
-        </button>
-        <span className="font-mono text-xs tracking-[0.16em] text-gray-300">
-          fusionsimulator<span className="text-gray-600">.io</span>
-        </span>
-      </nav>
+    <div data-page="program" className="page-enter min-h-screen md:tall:h-screen flex flex-col md:tall:overflow-hidden pb-20 md:tall:pb-0">
+      <StandardNav left={deviceLinks} />
 
       {/* Two columns from md up. The no-scroll, fills-the-viewport version needs
           height too (the `tall` variant): a landscape phone is md-wide but only
           ~390px tall, and there the page scrolls with Run fixed to the foot. */}
-      <main className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[17rem_1fr] gap-px bg-[var(--c-line)]">
-        <aside className="bg-[var(--c-base)] min-h-0 md:tall:overflow-y-auto flex flex-col px-5 pt-5 pb-5">
-          <h1 className="font-mono text-2xl font-bold tracking-tight text-white mb-5">
-            {device.name}
-          </h1>
-
-        {/* Scenario list — vertical hairline tiles; selection is the left bar */}
-        <div className="panel-title pb-2 mb-px">Scenario</div>
-        <div className="grid gap-px bg-[var(--c-line)] border-y border-gray-800 mb-5">
-          {getPresets(deviceId ?? '').map((p) => {
-            const isSelected = p.id === selected
-            return (
-              <button
-                key={p.id}
-                onClick={() => selectScenario(p.id)}
-                className={`relative px-3 py-2.5 text-left transition-colors cursor-pointer
-                  ${isSelected ? 'bg-[var(--c-raised)]' : 'bg-gray-900 hover:bg-[var(--c-raised)]'}`}
-              >
-                {isSelected && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-cyan-500" />}
-                <h3 className={`text-sm font-medium mb-1 ${isSelected ? 'text-white' : 'text-gray-400'}`}>
-                  {p.name}
-                </h3>
-                <p className={`text-xs leading-relaxed ${isSelected ? 'text-gray-400' : 'text-gray-500'}`}>{p.desc}</p>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Magnetic configuration — DIII-D runs all three divertor shapes */}
-        {deviceId === 'diiid' && (
-          <div className="mb-5">
-            <div className="panel-title pb-2 mb-px">Magnetic configuration</div>
-            <div className="grid gap-px bg-[var(--c-line)] border-y border-gray-800">
-              {([
-                ['LowerSingleNull', 'Lower single null'],
-                ['DoubleNull', 'Double null'],
-                ['UpperSingleNull', 'Upper single null'],
-              ] as [MagneticConfig, string][]).map(([cfg, label]) => {
-                const isSelected = (configOverride ?? 'LowerSingleNull') === cfg
-                return (
-                  <button
-                    key={cfg}
-                    type="button"
-                    onClick={() => setConfigOverride(cfg === 'LowerSingleNull' ? null : cfg)}
-                    className={`relative px-3 py-1.5 text-sm text-left transition-colors cursor-pointer
-                      ${isSelected ? 'bg-[var(--c-raised)] text-white' : 'bg-gray-900 text-gray-400 hover:bg-[var(--c-raised)]'}`}
-                  >
-                    {isSelected && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-cyan-500" />}
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
+      <main className="sp-main flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[23rem_1fr] gap-px">
+        <aside className="sp-aside min-h-0 md:tall:overflow-y-auto flex flex-col">
+          <div className="sp-title">
+            <div className="sp-title-cap">DEVICE</div>
+            <h1 className="sp-h1">{device.name} <span className="sp-h1-dot">.</span> PROGRAM</h1>
           </div>
-        )}
 
-          {/* Duration + reset */}
-          {program && (
-            <div className="mb-5">
-              <div className="panel-title pb-2 mb-px">Duration</div>
-              <div className="flex items-center justify-between gap-3 border-y border-gray-800 bg-gray-900 px-3 py-1.5">
-                <label className="flex items-center gap-1.5 text-xs text-gray-500">
-                  <input
-                    type="number"
-                    min={1}
-                    max={durationMax}
-                    step={0.5}
-                    value={program.duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    className="font-mono tabular-nums text-sm w-16 bg-gray-900 border border-gray-700 px-1.5 py-0.5
-                               text-gray-300 focus:outline-none focus:border-gray-500"
+          <Section n={N.scenario} title="SCENARIO">
+            <div className="sp-list">
+              {getPresets(deviceId ?? '').map((p) => (
+                <Row key={p.id} on={p.id === selected} onClick={() => selectScenario(p.id)} word={p.name} cap={p.cap} />
+              ))}
+            </div>
+          </Section>
+
+          {/* Magnetic configuration: DIII-D runs all three divertor shapes */}
+          {hasConfig && (
+            <Section n={N.config} title="MAGNETIC CONFIGURATION">
+              <div className="sp-list">
+                {CONFIGS.map(([cfg, word, cap]) => (
+                  <Row
+                    key={cfg}
+                    on={(configOverride ?? 'LowerSingleNull') === cfg}
+                    onClick={() => setConfigOverride(cfg === 'LowerSingleNull' ? null : cfg)}
+                    word={word}
+                    cap={cap}
                   />
-                  s
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Control-room look: which composition /run renders; remembered in settings */}
+          <Section n={N.look} title="CONTROL ROOM LOOK">
+            <div className="sp-list">
+              {LOOKS.map((l) => (
+                <Row key={l.id} on={look === l.id} onClick={() => setLook(l.id)} word={l.label} />
+              ))}
+            </div>
+          </Section>
+
+          {program && (
+            <Section n={N.duration} title="DURATION">
+              <div className="sp-dur">
+                <label className="sp-ro">
+                  <span className="sp-dur-v">
+                    <input
+                      type="number"
+                      min={1}
+                      max={durationMax}
+                      step={0.5}
+                      value={program.duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      className="sp-dur-in"
+                      aria-label="Pulse duration in seconds"
+                    />
+                    <span className="sp-ro-u">S</span>
+                  </span>
+                  <span className="sp-ro-c">T<sub>END</sub> . MAX {durationMax} S</span>
                 </label>
                 {/* Kept in the layout while hidden so nothing shifts. */}
                 <button
@@ -564,35 +454,32 @@ export default function ProgramPulse() {
                   onClick={resetAll}
                   aria-hidden={!modified}
                   tabIndex={modified ? 0 : -1}
-                  className={`text-xs text-gray-500 hover:text-gray-300 transition-colors cursor-pointer
-                    ${modified ? '' : 'invisible'}`}
+                  className={`sp-link sp-dotted${modified ? '' : ' sp-hidden'}`}
                 >
-                  Reset to preset
+                  RESET
                 </button>
               </div>
-            </div>
+            </Section>
           )}
 
-          {/* Run — always on screen. When the viewport is both md-wide and tall
-              it is pinned to the foot of this column. Otherwise (phones in either
-              orientation) it sits in an opaque bar fixed to the foot of the
-              viewport: the primary button is an outline with a transparent fill,
-              so floating it bare over the chart let the strips show through. */}
-          <div className="fixed bottom-0 inset-x-0 z-40 p-3 bg-[var(--c-base)] border-t border-gray-800
-                          md:tall:static md:tall:z-auto md:tall:p-0 md:tall:border-0 md:tall:bg-transparent md:tall:mt-auto">
-            <button
-              onClick={handleRun}
-              className="w-full bg-cyan-600 px-4 py-3 text-base cursor-pointer"
-            >
-              ▶ {modified ? 'Run edited pulse' : 'Run pulse'}
+          {/* Run: always on screen. When the viewport is both md-wide and tall it
+              is pinned to the foot of this column; otherwise (phones in either
+              orientation) it sits in an opaque bar fixed to the foot of the viewport. */}
+          <div className="sp-runbar fixed bottom-0 inset-x-0 z-40 p-3 md:tall:static md:tall:z-auto md:tall:p-0 md:tall:mt-auto">
+            <button type="button" className="sp-run" onClick={handleRun}>
+              <span className="sp-run-circle" aria-hidden="true"><span className="sp-run-glyph" /></span>
+              <span className="sp-run-word">RUN{modified && <> . <em>EDITED</em></>}</span>
             </button>
           </div>
         </aside>
 
-        <section className="bg-[var(--c-base)] min-h-0 flex flex-col px-3 md:px-6 pt-4 pb-4">
+        <section className="sp-chart-col min-h-0 flex flex-col">
           {program && base && (
             <>
-              <h2 className="panel-title pb-2 shrink-0">Programmed waveforms</h2>
+              <div className="sp-chart-head">
+                <div className="sp-head"><span className="sp-num">{N.chart}</span> . PROGRAMMED WAVEFORMS</div>
+                <div className="sp-head-r">{device.name} . {scenario?.name} . {program.duration.toFixed(1)} S</div>
+              </div>
               <div className="h-[30rem] md:tall:h-auto md:tall:flex-1 min-h-0">
                 <ProgramChart deviceId={deviceId}
                   key={selected}

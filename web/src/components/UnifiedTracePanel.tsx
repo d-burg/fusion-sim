@@ -6,6 +6,7 @@ import { getDevice } from '../lib/wasm'
 import { computeTargetTraces, type TargetTraces } from '../lib/targetTraces'
 import InfoPopup from './InfoPopup'
 import { traceInfoContent } from './infoContent'
+import { themeColors } from '../lib/themeColors'
 import { useSettings } from '../lib/settingsContext'
 
 /* ─── Full trace catalogue ───────────────────────────────── */
@@ -250,8 +251,9 @@ export default function UnifiedTracePanel({
     if (numTraces === 0) return
     const ROW_H = H / numTraces
 
+    const tc = themeColors()
     // Clear
-    ctx.fillStyle = isRetro ? '#000000' : '#0e0f11'
+    ctx.fillStyle = isRetro ? '#000000' : tc.base
     ctx.fillRect(0, 0, W, H)
 
     const plotW = W - MARGIN_LEFT - MARGIN_RIGHT
@@ -270,12 +272,12 @@ export default function UnifiedTracePanel({
       if (isRetro) {
         ctx.fillStyle = '#000000'
       } else {
-        ctx.fillStyle = row % 2 === 0 ? '#111316' : '#15171b'
+        ctx.fillStyle = row % 2 === 0 ? tc.base : tc.surface
       }
       ctx.fillRect(0, row * ROW_H, W, ROW_H)
 
       // Row separator
-      ctx.strokeStyle = isRetro ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.05)'
+      ctx.strokeStyle = isRetro ? 'rgba(255,255,255,0.25)' : tc.grid(tc.light ? 0.10 : 0.05)
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(MARGIN_LEFT, (row + 1) * ROW_H)
@@ -409,7 +411,7 @@ export default function UnifiedTracePanel({
 
       // ── Reference pulse (grey, behind everything) ──
       if (refVals && ref) {
-        ctx.strokeStyle = isRetro ? '#2a9d2a' : '#8a9096'
+        ctx.strokeStyle = isRetro ? '#2a9d2a' : tc.inkFaint
         ctx.lineWidth = 1.5
         ctx.globalAlpha = 0.5
         strokeSeries(ctx, ref.history, refVals, toX, toY, cfg.key === 'd_alpha' ? elmSpikes(ref.history, refVals) : null)
@@ -515,7 +517,7 @@ export default function UnifiedTracePanel({
     if (scrubTime !== null) {
       // Scrub cursor line — use time directly
       const sx = toX(scrubTime)
-      ctx.strokeStyle = '#ffffff'
+      ctx.strokeStyle = tc.ink
       ctx.lineWidth = 1.5
       ctx.globalAlpha = 0.8
       ctx.beginPath()
@@ -525,14 +527,14 @@ export default function UnifiedTracePanel({
       ctx.globalAlpha = 1
 
       // Time label at top of scrub line
-      ctx.fillStyle = '#ffffff'
+      ctx.fillStyle = tc.ink
       ctx.font = '10px monospace'
       ctx.textAlign = 'center'
       ctx.fillText(`${scrubTime.toFixed(2)}s`, sx, 12)
     } else if (history.length > 0) {
       // "Now" line (dashed white)
       const nowX = toX(history[history.length - 1].t)
-      ctx.strokeStyle = '#ffffff'
+      ctx.strokeStyle = tc.ink
       ctx.lineWidth = 1
       ctx.globalAlpha = 0.3
       ctx.setLineDash([4, 4])
@@ -545,7 +547,7 @@ export default function UnifiedTracePanel({
     }
 
     // ── X-axis time labels at bottom ──
-    ctx.fillStyle = '#6b7280'
+    ctx.fillStyle = tc.inkFaint
     ctx.font = '9px monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
@@ -558,9 +560,9 @@ export default function UnifiedTracePanel({
     }
     // X-axis unit label — to the left of the first tick
     ctx.textAlign = 'right'
-    ctx.fillStyle = '#4b5563'
+    ctx.fillStyle = tc.inkFaint
     ctx.fillText('[sec]', toX(0) - 12, totalH - 12)
-  }, [history, duration, targets, scrubTime, elmActive, activeTraces, isRetro, ref, showRef])
+  }, [history, duration, targets, scrubTime, elmActive, activeTraces, isRetro, theme, ref, showRef])
 
   // Redraw on data changes
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { themeColors } from '../lib/themeColors'
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { WaveformPoint } from '../lib/wasm'
@@ -121,7 +122,7 @@ export default function WaveformDrawer({
     const pts = rawPointsRef.current
     if (pts.length < 3) return
 
-    let dataPoints: WaveformPoint[] = pts.map(([px, py]) => pixelToData(px, py))
+    const dataPoints: WaveformPoint[] = pts.map(([px, py]) => pixelToData(px, py))
     if (dataPoints[0][0] > 0.01) dataPoints.unshift([0, dataPoints[0][1]])
     if (dataPoints[dataPoints.length - 1][0] < duration - 0.01) dataPoints.push([duration, dataPoints[dataPoints.length - 1][1]])
 
@@ -148,11 +149,12 @@ export default function WaveformDrawer({
     const ctx = canvas.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    ctx.fillStyle = '#0a0c10'
+    const tc = themeColors()
+    ctx.fillStyle = tc.base
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
 
     // Grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+    ctx.strokeStyle = tc.grid(tc.light ? 0.10 : 0.06)
     ctx.lineWidth = 0.5
     for (let i = 0; i <= 4; i++) {
       const x = MARGIN.left + (i / 4) * plotW
@@ -162,7 +164,7 @@ export default function WaveformDrawer({
     }
 
     // Axis labels
-    ctx.fillStyle = '#6b7280'
+    ctx.fillStyle = tc.inkFaint
     ctx.font = '10px monospace'
     ctx.textAlign = 'center'
     for (let i = 0; i <= 4; i++) {
@@ -187,7 +189,7 @@ export default function WaveformDrawer({
       ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash(dash)
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'
       ctx.beginPath()
-      wf.forEach(([t, v], i) => { const [x, y] = dataToPixel(t, v); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) })
+      wf.forEach(([t, v], i) => { const [x, y] = dataToPixel(t, v); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) })
       ctx.stroke(); ctx.setLineDash([])
     }
 
@@ -198,7 +200,7 @@ export default function WaveformDrawer({
     if (isDrawing && rawPointsRef.current.length > 1) {
       ctx.strokeStyle = `${color}80`; ctx.lineWidth = 1.5; ctx.setLineDash([2, 2])
       ctx.beginPath()
-      rawPointsRef.current.forEach(([x, y], i) => { i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) })
+      rawPointsRef.current.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) })
       ctx.stroke(); ctx.setLineDash([])
     }
   }, [displayWf, baseWaveform, duration, color, yMin, yMax, plotW, plotH, dataToPixel, isDrawing, drawTick, unit])

@@ -1,0 +1,355 @@
+@import url('https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@100..125,300..400&display=swap');
+
+/* The Standard grammar on the landing and program pages: the same flat blue-black
+   field, the same type and hairlines as the control room (compositions/kaldera.css).
+   Everything is scoped under the page's data-page attribute. */
+[data-page="landing"], [data-page="program"] {
+  --sp-caps: 'Mona Sans', sans-serif;
+  --sp-caps-weight: 400;
+  --sp-caps-stretch: 125%;
+  --sp-caps-track: 0.12em;
+  --sp-wide-weight: 300;
+  --sp-wide-track: 0.04em;
+  --sp-body: 'Mona Sans', system-ui, sans-serif;
+  --sp-warm: #f0a98a;
+  --sp-field: #0a0d14;
+  --sp-line: rgba(255,255,255,0.12);
+  --sp-line-strong: rgba(255,255,255,0.35);
+  --sp-x: 64px;
+  background: var(--sp-field);
+  color: #fff;
+  font-family: var(--sp-caps);
+  font-weight: var(--sp-caps-weight);
+  font-stretch: var(--sp-caps-stretch);
+  letter-spacing: var(--sp-caps-track);
+  text-transform: uppercase;
+  font-size: 9px;
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
+}
+[data-page="landing"] { min-height: 100vh; display: flex; flex-direction: column; }
+[data-page] .sp-g { text-transform: none; }
+[data-page] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
+[data-page] .sp-num { color: rgba(255,255,255,0.5); }
+[data-page] .sp-head { font-size: 9px; color: rgba(255,255,255,0.7); white-space: nowrap; }
+[data-page] .sp-head-r { font-size: 8px; color: rgba(255,255,255,0.5); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* every control is text; the reset applies to our own classes only, never to shared chrome */
+[data-page] .sp-link, [data-page] .sp-row, [data-page] .sp-tile, [data-page] .sp-edit,
+[data-page] .sp-run, [data-page] .sp-strip-hit, [data-page] .sp-strip-nav button {
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer; text-decoration: none;
+}
+[data-page] .sp-link:focus-visible, [data-page] .sp-row:focus-visible, [data-page] .sp-tile:focus-visible,
+[data-page] .sp-edit:focus-visible, [data-page] .sp-run:focus-visible, [data-page] .sp-strip-nav button:focus-visible {
+  outline: 1px solid rgba(255,255,255,0.7); outline-offset: 2px; box-shadow: none;
+}
+[data-page] .sp-brand:focus-visible, [data-page] .sp-strip-hit:focus-visible { outline: 1px solid rgba(255,255,255,0.7); outline-offset: -1px; box-shadow: none; }
+
+/* ── nav row, shared with the control room ──────────────────────── */
+[data-page] .sp-nav {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  padding: 0 var(--sp-x); height: 64px; flex-shrink: 0;
+}
+[data-page] .sp-nav-l { justify-self: start; display: flex; align-items: center; gap: 30px; min-width: 0; }
+[data-page] .sp-nav-r { justify-self: end; display: flex; align-items: center; gap: 26px; }
+[data-page] .sp-brand { color: rgba(255,255,255,0.92); white-space: nowrap; }
+[data-page] .sp-brand:hover { color: #fff; }
+[data-page] .sp-group { display: inline-flex; align-items: center; gap: 12px; }
+[data-page] .sp-link { color: rgba(255,255,255,0.78); padding: 2px 3px; line-height: 1; white-space: nowrap; }
+[data-page] .sp-link:hover { color: #fff; }
+[data-page] .sp-link[data-on="true"] { background: #fff; color: var(--sp-field); }
+[data-page] .sp-settings { display: inline-flex; align-items: center; }
+[data-page] .sp-settings .settings-btn { border-radius: 0; color: rgba(255,255,255,0.78); padding: 0; }
+[data-page] .sp-settings .settings-btn:hover { color: #fff; }
+[data-page] .sp-settings .settings-btn svg { width: 13px; height: 13px; }
+[data-page] .sp-settings .settings-panel {
+  border-radius: 0; letter-spacing: 0.08em; text-transform: none; font-family: var(--sp-body);
+  font-stretch: 100%; font-weight: 400; font-size: 12px; line-height: 1.4; box-shadow: none;
+  background: #0c1018; border-color: rgba(255,255,255,0.22);
+}
+
+/* readouts: VALUE over caption, as on the control room */
+[data-page] .sp-ro { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+[data-page] .sp-ro-v {
+  font-weight: var(--sp-wide-weight); font-size: 18px; line-height: 1; letter-spacing: var(--sp-wide-track);
+  color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+[data-page] .sp-ro-u { font-size: 9px; letter-spacing: 0.16em; font-weight: 400; color: rgba(255,255,255,0.85); }
+[data-page] .sp-ro-c { font-size: 8px; color: rgba(255,255,255,0.6); white-space: nowrap; }
+
+/* the dotted hairline is the whole affordance of a text control */
+[data-page] .sp-dotted { border-bottom: 1px dotted rgba(255,255,255,0.4); padding-bottom: 2px; color: rgba(255,255,255,0.78); }
+[data-page] .sp-dotted:hover, [data-page] .sp-tile:hover .sp-dotted { color: #fff; border-bottom-color: rgba(255,255,255,0.9); }
+
+/* ── landing: hero ───────────────────────────────────────────────── */
+/* the nav row sits on the picture, as on kaldera; the band is sized so the whole
+   first device row clears the fold at 1440 x 900 and never drops below 264 px */
+[data-page="landing"] .sp-hero {
+  position: relative; overflow: hidden; flex-shrink: 0;
+  height: max(264px, calc(100svh - 27rem));
+  display: flex; flex-direction: column; align-items: stretch;
+}
+[data-page="landing"] .sp-hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+[data-page="landing"] .sp-hero .sp-nav { position: relative; z-index: 1; }
+[data-page="landing"] .sp-hero-text { position: relative; z-index: 1; display: flex; flex-direction: column; align-self: flex-start; margin: auto 0 40px; padding: 0 var(--sp-x); }
+[data-page="landing"] .sp-wordmark {
+  margin: 0; font-weight: var(--sp-wide-weight); font-size: clamp(18px, 4.6vw, 54px); line-height: 1;
+  letter-spacing: 0.08em; color: #fff; white-space: nowrap;
+}
+[data-page="landing"] .sp-wordmark-tld { color: rgba(255,255,255,0.5); }
+[data-page="landing"] .sp-hero-rule { height: 1px; background: rgba(255,255,255,0.55); margin: 16px 0 12px; }
+[data-page="landing"] .sp-hero-line { font-size: 11px; letter-spacing: 0.1em; text-transform: none; color: rgba(255,255,255,0.78); }
+
+/* ── landing: the device section ─────────────────────────────────── */
+[data-page="landing"] .sp-section { padding: 30px var(--sp-x) 0; }
+[data-page="landing"] .sp-section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+[data-page="landing"] .sp-strip-nav { display: flex; gap: 18px; }
+[data-page="landing"] .sp-strip-nav button { color: rgba(255,255,255,0.78); }
+[data-page="landing"] .sp-strip-nav button:hover { color: #fff; }
+[data-page="landing"] .sp-strip-nav button:disabled { opacity: 0.3; cursor: default; }
+[data-page="landing"] .sp-strip {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr);
+  border-top: 1px solid var(--sp-line); border-bottom: 1px solid var(--sp-line);
+  overflow-x: auto; scroll-snap-type: x proximity;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.25) transparent;
+}
+[data-page="landing"] .sp-tile {
+  scroll-snap-align: start; text-align: left; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: 26px 24px 26px; border-left: 1px solid var(--sp-line);
+}
+[data-page="landing"] .sp-tile:first-child { border-left: 0; padding-left: 0; }
+[data-page="landing"] .sp-tile:focus-visible { outline-offset: -1px; }
+[data-page="landing"] .sp-sil { width: 100%; height: 96px; color: #fff; opacity: 0.35; transition: opacity 120ms linear; }
+[data-page="landing"] .sp-tile:hover .sp-sil { opacity: 0.6; }
+[data-page="landing"] .sp-tile-name { margin: 20px 0 0; font-size: 11px; font-weight: 400; letter-spacing: 0.16em; color: #fff; line-height: 1; }
+[data-page="landing"] .sp-tile-loc { margin-top: 8px; font-size: 8px; color: rgba(255,255,255,0.5); }
+[data-page="landing"] .sp-tile-params { display: grid; grid-template-columns: 1fr 1fr; row-gap: 16px; column-gap: 12px; margin-top: 22px; width: 100%; }
+[data-page="landing"] .sp-select { margin-top: 24px; }
+[data-page="landing"] .sp-foot {
+  margin-top: auto; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  padding: 36px var(--sp-x) 28px; font-size: 8px; color: rgba(255,255,255,0.5);
+}
+
+/* ── program page ────────────────────────────────────────────────── */
+[data-page="program"] .sp-main { background: var(--sp-line); }
+[data-page="program"] .sp-aside, [data-page="program"] .sp-chart-col { background: var(--sp-field); }
+[data-page="program"] .sp-aside { padding: 20px 24px 20px var(--sp-x); }
+[data-page="program"] .sp-chart-col { padding: 20px var(--sp-x) 20px 24px; }
+[data-page="program"] .sp-title { display: flex; flex-direction: column; gap: 7px; }
+[data-page="program"] .sp-title-cap { font-size: 8px; color: rgba(255,255,255,0.6); }
+[data-page="program"] .sp-h1 {
+  margin: 0; font-weight: var(--sp-wide-weight); font-size: 21px; line-height: 1;
+  letter-spacing: calc(var(--sp-wide-track) + 0.04em); color: #fff; white-space: nowrap;
+}
+[data-page="program"] .sp-h1-dot { color: rgba(255,255,255,0.55); font-size: 0.6em; vertical-align: 0.2em; }
+[data-page="program"] .sp-sec { margin-top: 18px; }
+[data-page="program"] .sp-sec .sp-head { margin-bottom: 8px; }
+[data-page="program"] .sp-list { border-top: 1px solid var(--sp-line); }
+[data-page="program"] .sp-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  width: 100%; height: 26px; border-bottom: 1px solid var(--sp-line); text-align: left;
+}
+[data-page="program"] .sp-row-word { color: rgba(255,255,255,0.7); padding: 2px 3px; margin-left: -3px; line-height: 1; white-space: nowrap; }
+[data-page="program"] .sp-row:hover .sp-row-word { color: #fff; }
+[data-page="program"] .sp-row[data-on="true"] .sp-row-word { background: #fff; color: var(--sp-field); }
+[data-page="program"] .sp-row-cap { font-size: 8px; color: rgba(255,255,255,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+[data-page="program"] .sp-dur {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
+  border-top: 1px solid var(--sp-line); border-bottom: 1px solid var(--sp-line); padding: 10px 0 10px;
+}
+[data-page="program"] .sp-dur-v { display: flex; align-items: baseline; gap: 6px; }
+[data-page="program"] .sp-dur-in {
+  font: inherit; font-weight: var(--sp-wide-weight); font-size: 18px; line-height: 1; letter-spacing: var(--sp-wide-track);
+  color: #fff; background: none; border: 0; border-bottom: 1px dotted rgba(255,255,255,0.4); border-radius: 0;
+  width: 3.6em; padding: 0 0 2px; outline: none; font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: textfield;
+}
+[data-page="program"] .sp-dur-in::-webkit-inner-spin-button, [data-page="program"] .sp-dur-in::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+[data-page="program"] .sp-dur-in:hover { border-bottom-color: rgba(255,255,255,0.9); }
+[data-page="program"] .sp-dur-in:focus, [data-page="program"] .sp-dur-in:focus-visible { border-bottom-style: solid; border-bottom-color: #fff; outline: none; box-shadow: none; }
+[data-page="program"] .sp-hidden { visibility: hidden; }
+
+/* the Run control: the control room's circle and glyph, the word beside it */
+[data-page="program"] .sp-runbar { background: var(--sp-field); border-top: 1px solid var(--sp-line); }
+@media (min-width: 48rem) and (min-height: 40rem) {
+  [data-page="program"] .sp-runbar { background: transparent; border-top: 0; padding-top: 22px; }
+}
+[data-page="program"] .sp-run { display: flex; align-items: center; gap: 16px; }
+[data-page="program"] .sp-run-circle {
+  width: 46px; height: 46px; border: 1px solid rgba(255,255,255,0.75); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+[data-page="program"] .sp-run:hover .sp-run-circle { border-color: #fff; }
+[data-page="program"] .sp-run-glyph {
+  width: 0; height: 0; border-left: 9px solid var(--sp-warm);
+  border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin-left: 2px;
+}
+[data-page="program"] .sp-run-word { font-size: 11px; letter-spacing: 0.16em; color: #fff; white-space: nowrap; }
+[data-page="program"] .sp-run-word em { font-style: normal; color: var(--sp-warm); }
+
+/* ── the strip chart: one hairline frame, hairline separators, labels inside ── */
+[data-page="program"] .sp-chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; flex-shrink: 0; }
+[data-page="program"] .sp-chart { display: flex; flex-direction: column; height: 100%; min-height: 0; border: 1px solid var(--sp-line); }
+[data-page="program"] .sp-rows { flex: 1; min-height: 0; display: grid; grid-auto-rows: minmax(1.75rem, 1fr); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.25) transparent; }
+[data-page="program"] .sp-strip { position: relative; min-height: 0; border-bottom: 1px solid var(--sp-line); }
+[data-page="program"] .sp-strip-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+[data-page="program"] .sp-strip-hit { position: absolute; inset: 0; width: 100%; height: 100%; }
+[data-page="program"] .sp-strip-label {
+  position: absolute; left: 8px; top: 5px; font-size: 8px; line-height: 1; color: rgba(255,255,255,0.7);
+  white-space: nowrap; pointer-events: none; transition: color 120ms linear;
+}
+[data-page="program"] .sp-strip[data-off="true"] .sp-strip-label { color: rgba(255,255,255,0.35); }
+[data-page="program"] .sp-strip[data-editable="true"]:hover .sp-strip-label { color: #fff; }
+[data-page="program"] .sp-strip[data-edited="true"] .sp-strip-label { color: var(--sp-warm); }
+[data-page="program"] .sp-strip-right {
+  position: absolute; right: 8px; top: 4px; display: flex; align-items: baseline; gap: 14px;
+  font-size: 8px; line-height: 1; white-space: nowrap;
+}
+[data-page="program"] .sp-strip-v { color: rgba(255,255,255,0.85); font-variant-numeric: tabular-nums; }
+[data-page="program"] .sp-strip[data-off="true"] .sp-strip-v { color: rgba(255,255,255,0.35); }
+[data-page="program"] .sp-edit { color: rgba(255,255,255,0.6); border-bottom: 1px dotted rgba(255,255,255,0.4); padding-bottom: 1px; }
+[data-page="program"] .sp-edit:hover, [data-page="program"] .sp-strip[data-editable="true"]:hover .sp-edit { color: #fff; border-bottom-color: rgba(255,255,255,0.9); }
+[data-page="program"] .sp-edited { color: var(--sp-warm); }
+
+/* the time axis: the station times, then the line with its ticks and station words */
+[data-page="program"] .sp-axis { position: relative; height: 18px; flex-shrink: 0; font-size: 8px; color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums; }
+[data-page="program"] .sp-axis-t { position: absolute; top: 5px; transform: translateX(-50%); white-space: nowrap; }
+[data-page="program"] .sp-axis-t[data-anchor="start"] { transform: none; margin-left: 8px; }
+[data-page="program"] .sp-axis-t[data-anchor="end"] { transform: translateX(-100%); margin-left: -8px; }
+[data-page="program"] .sp-stations { position: relative; height: 34px; flex-shrink: 0; }
+[data-page="program"] .sp-stations-line { position: absolute; left: 0; right: 0; top: 6px; height: 1px; background: var(--sp-line-strong); }
+[data-page="program"] .sp-station { position: absolute; top: 6px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 9px; }
+[data-page="program"] .sp-station-tick { width: 3px; height: 3px; background: #fff; margin-top: -1px; }
+[data-page="program"] .sp-station-label { font-size: 8px; color: rgba(255,255,255,0.6); white-space: nowrap; }
+[data-page="program"] .sp-station[data-anchor="start"] { transform: translateX(-1px); align-items: flex-start; margin-left: 8px; }
+[data-page="program"] .sp-station[data-anchor="end"] { transform: translateX(calc(-100% + 2px)); align-items: flex-end; margin-left: -8px; }
+
+/* ── narrow viewports: the same grammar, tighter margins, the nav wraps ──── */
+@media (max-width: 40rem) {
+  [data-page="landing"], [data-page="program"] { --sp-x: 24px; }
+  [data-page] .sp-nav { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; height: auto; min-height: 64px; padding: 16px var(--sp-x); row-gap: 14px; }
+  [data-page] .sp-nav > div:empty { display: none; }
+  [data-page] .sp-nav-l { gap: 18px; flex-wrap: wrap; row-gap: 10px; }
+  [data-page] .sp-nav-r { gap: 16px; }
+  [data-page="landing"] .sp-hero { height: max(264px, calc(100svh - 29rem)); }
+  [data-page="landing"] .sp-hero-text { margin-bottom: 28px; }
+  [data-page="landing"] .sp-tile { padding: 22px 18px; }
+  [data-page="program"] .sp-aside { padding: 20px var(--sp-x) 0; }
+  [data-page="program"] .sp-chart-col { padding: 20px var(--sp-x) 20px; }
+}
+
+/* ── bibliography: the reading page ──────────────────────────────── */
+/* Sentences live here. The field, nav and captions are the grammar's; the body
+   is Mona Sans at width 100, 16 px on a ~70-character measure. */
+[data-page="bibliography"] {
+  --sp-caps: 'Mona Sans', sans-serif;
+  --sp-caps-weight: 400;
+  --sp-caps-stretch: 125%;
+  --sp-caps-track: 0.12em;
+  --sp-wide-weight: 300;
+  --sp-wide-track: 0.04em;
+  --sp-body: 'Mona Sans', system-ui, sans-serif;
+  --sp-warm: #f0a98a;
+  --sp-field: #0a0d14;
+  --sp-line: rgba(255,255,255,0.12);
+  --sp-x: 64px;
+  min-height: 100vh;
+  background: var(--sp-field);
+  color: rgba(255,255,255,0.82);
+  font-family: var(--sp-body);
+  font-weight: 400;
+  font-stretch: 100%;
+  font-size: 16px;
+  line-height: 1.55;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+/* the caption voice, applied where the control pages inherit it from their root */
+[data-page="bibliography"] :is(.sp-nav, .sp-head, .sp-caps, .sp-toc, .sp-ref-n) {
+  font-family: var(--sp-caps); font-weight: var(--sp-caps-weight); font-stretch: var(--sp-caps-stretch);
+  letter-spacing: var(--sp-caps-track); text-transform: uppercase; font-size: 9px; line-height: 1.3;
+}
+[data-page="bibliography"] .sp-bib-main {
+  display: grid; grid-template-columns: 16rem minmax(0, 1fr); column-gap: 56px;
+  padding: 12px var(--sp-x) 0; align-items: start;
+}
+[data-page="bibliography"] .sp-toc { position: sticky; top: 24px; }
+[data-page="bibliography"] .sp-toc-head { margin-bottom: 10px; color: rgba(255,255,255,0.7); }
+[data-page="bibliography"] .sp-toc-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--sp-line); }
+[data-page="bibliography"] .sp-toc-list li { border-bottom: 1px solid var(--sp-line); }
+[data-page="bibliography"] .sp-toc-link {
+  display: block; padding: 6px 0 5px; color: rgba(255,255,255,0.62); text-decoration: none;
+  font-size: 8px; line-height: 1.5;
+}
+[data-page="bibliography"] .sp-toc-link:hover { color: #fff; }
+[data-page="bibliography"] .sp-bib-col { max-width: 70ch; min-width: 0; padding-bottom: 48px; }
+[data-page="bibliography"] .sp-bib-intro { margin-bottom: 40px; }
+[data-page="bibliography"] .sp-bib-h1 {
+  margin: 0; font-family: var(--sp-caps); font-weight: var(--sp-wide-weight); font-stretch: var(--sp-caps-stretch);
+  font-size: 28px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; color: #fff;
+}
+[data-page="bibliography"] .sp-bib-rule { height: 1px; background: rgba(255,255,255,0.55); margin: 16px 0 20px; }
+[data-page="bibliography"] .sp-bib-lede { margin: 0; color: rgba(255,255,255,0.82); }
+[data-page="bibliography"] .sp-note {
+  margin: 20px 0 0; padding: 2px 0 2px 16px; border-left: 1px solid rgba(255,255,255,0.35);
+  font-size: 14px; line-height: 1.55; color: rgba(255,255,255,0.62);
+}
+[data-page="bibliography"] .sp-note-cap {
+  display: block; margin-bottom: 4px; font-family: var(--sp-caps); font-weight: var(--sp-caps-weight); font-stretch: var(--sp-caps-stretch);
+  letter-spacing: var(--sp-caps-track); text-transform: uppercase; font-size: 8px; color: rgba(255,255,255,0.7);
+}
+[data-page="bibliography"] .sp-bib-sec { margin: 0 0 44px; }
+[data-page="bibliography"] .sp-bib-h2 { margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--sp-line); color: rgba(255,255,255,0.85); white-space: normal; font-size: 10px; }
+[data-page="bibliography"] .sp-bib-body > * { margin-top: 0; margin-bottom: 0; }
+[data-page="bibliography"] .sp-bib-body > * + * { margin-top: 14px; }
+[data-page="bibliography"] .sp-bib-body em { font-style: italic; color: #fff; }
+[data-page="bibliography"] .sp-bib-body strong { font-weight: 500; color: #fff; }
+[data-page="bibliography"] .sp-bib-body ul, [data-page="bibliography"] .sp-bib-body ol { margin: 0; padding-left: 1.4em; }
+[data-page="bibliography"] .sp-bib-body li { margin: 0; }
+[data-page="bibliography"] .sp-bib-body li::marker { color: rgba(255,255,255,0.5); }
+[data-page="bibliography"] .sp-bib-body sub, [data-page="bibliography"] .sp-bib-body sup { font-size: 0.75em; letter-spacing: 0; position: static; vertical-align: sub; }
+[data-page="bibliography"] .sp-bib-body sup { vertical-align: super; }
+/* equations: monochrome mono on a hairline left rule, set as they are */
+[data-page="bibliography"] .sp-eq {
+  margin: 14px 0; padding: 4px 0 4px 16px; border-left: 1px solid rgba(255,255,255,0.35);
+  font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.92); overflow-x: auto; white-space: pre-wrap;
+  letter-spacing: 0;
+}
+/* citations in the prose: a small figure, warm on hover */
+[data-page="bibliography"] .sp-ref {
+  font-family: var(--sp-caps); font-stretch: var(--sp-caps-stretch); letter-spacing: 0.06em;
+  font-size: 9px; vertical-align: super; margin-left: 2px; color: rgba(255,255,255,0.6); text-decoration: none;
+}
+[data-page="bibliography"] .sp-ref:hover { color: var(--sp-warm); }
+/* the reference list: rows separated by hairlines */
+[data-page="bibliography"] .sp-refs { list-style: none; margin: 0; padding: 0; }
+[data-page="bibliography"] .sp-ref-row {
+  display: grid; grid-template-columns: 3rem minmax(0, 1fr); column-gap: 8px; padding: 12px 0;
+  border-bottom: 1px solid var(--sp-line); font-size: 14px; line-height: 1.5; color: rgba(255,255,255,0.7);
+  scroll-margin-top: 24px;
+}
+[data-page="bibliography"] .sp-ref-row:target { color: rgba(255,255,255,0.92); }
+[data-page="bibliography"] .sp-ref-n { color: rgba(255,255,255,0.5); padding-top: 4px; }
+[data-page="bibliography"] .sp-ref-row:target .sp-ref-n { color: var(--sp-warm); }
+[data-page="bibliography"] .sp-ref-authors { color: rgba(255,255,255,0.88); }
+[data-page="bibliography"] .sp-ref-text em { font-style: italic; }
+[data-page="bibliography"] .sp-bib-sec { scroll-margin-top: 24px; }
+/* text links: the dotted hairline, warm only on hover */
+[data-page="bibliography"] .sp-bib-link {
+  color: rgba(255,255,255,0.78); text-decoration: none; border-bottom: 1px dotted rgba(255,255,255,0.4); padding-bottom: 1px;
+}
+[data-page="bibliography"] .sp-bib-link:hover { color: var(--sp-warm); border-bottom-color: var(--sp-warm); }
+[data-page="bibliography"] .sp-bib-foot {
+  display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--sp-line); color: rgba(255,255,255,0.5);
+}
+@media (max-width: 56rem) {
+  [data-page="bibliography"] .sp-bib-main { grid-template-columns: minmax(0, 1fr); row-gap: 32px; }
+  [data-page="bibliography"] .sp-toc { position: static; }
+  [data-page="bibliography"] .sp-toc-list { columns: 2; column-gap: 24px; }
+}
+@media (max-width: 40rem) {
+  [data-page="bibliography"] { --sp-x: 24px; }
+  [data-page="bibliography"] .sp-toc-list { columns: 1; }
+}
