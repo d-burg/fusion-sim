@@ -9,7 +9,8 @@ import Console from './diiid/Console'
 import DiagBars from './diiid/DiagBars'
 import Phone from './diiid/Phone'
 import { useWallCharts, GREEN, YELLOW, CYAN, RED, MAGENTA } from './diiid/charts'
-import { useDiagnostics } from './useDiagnostics'
+import { elmRecent, useDiagnostics } from './useDiagnostics'
+import { shotWords } from './diiid/statusCells'
 import { usePhone } from './usePhone'
 import { reconstructionValid } from '../../lib/pulseLog'
 import { formatQ } from '../../lib/fusionPhysics'
@@ -54,12 +55,11 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
     ['Pin', f(snap.p_input, 1), 'MW'], ['POH', f(snap.p_ohmic), 'MW'],
     ['Prad', f(snap.p_rad), 'MW'], ['Pα', f(snap.p_alpha, 3), 'MW'],
     ['βN', f(snap.beta_n), ''], ['q95', f(q95Disp(snap.q95)), ''],
-    ['Pfus', diag.pFus > 0.001 ? f(diag.pFus, diag.pFus < 10 ? 3 : 1) : '--', 'MW'], ['Q', diag.rate > 0 ? formatQ(diag.qPlasma) : '--', ''],
+    ['Pfus', diag.pFus > 0.001 ? f(diag.pFus, diag.pFus < 10 ? 3 : 1) : '--', 'MW'], ['Q', diag.rate > 0 && diag.qPlasma !== null ? formatQ(diag.qPlasma) : '--', ''],
     ['λq', diag.valid ? f(diag.lambdaQ, 1) : '--', 'mm'], ['fdet', diag.valid ? f(diag.fDet) : '--', ''],
   ] : []
   // ELM activity is a transient flag: hold it for the last 0.3 s of history so the cell reads ELMING, not a flicker.
-  let elming = false
-  for (let i = h.length - 1; i >= 0 && h[i].t > ctx.time - 0.3; i--) if (h[i].elm_active) { elming = true; break }
+  const elming = elmRecent(h, ctx.time)
 
   return (
     <div data-layout="diiid" className="dc-root">
@@ -100,7 +100,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
         </div>
 
         <div className="dc-statusblock" data-tutorial="status">
-          <StatusGrid snapshot={snap} running={ctx.running} fuel={ctx.fuelType} elming={elming} />
+          <StatusGrid snapshot={snap} running={ctx.running} fuel={ctx.fuelType} elming={elming} cause={ctx.state.disruptionCause} />
 
           <div className="dc-text">
             {readout.map(([k, v, u]) => (
@@ -128,12 +128,12 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
         {ctx.finished && ctx.report
           ? disruptionFirst(ctx.report).map((r, i) => (
             <span key={i} className="dc-ev" style={{ color: r.status === 'major' ? RED : r.status === 'minor' ? YELLOW : '#bbbbbb' }}>
-              {reportLabel(r.label)} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
+              {reportLabel(shotWords(r.label))} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
             </span>
           ))
           : lastEvents.map((e) => (
             <span key={e.id} className="dc-ev" style={{ color: SEV[e.severity] ?? '#bbbbbb' }}>
-              {e.t.toFixed(3)} {e.text}
+              {e.t.toFixed(3)} {shotWords(e.text)}
             </span>
           ))}
       </div>

@@ -50,7 +50,7 @@ const texts = (ev: LogEvent[]) => ev.map((e) => e.text)
   assert(warn[0].text.includes('91 % used') && warn[0].text.includes('6.8 of 7.5 V·s'), warn[0].text)
   const gone = ev.filter((e) => e.text.startsWith('Solenoid flux exhausted'))
   assert(gone.length === 1 && gone[0].severity === 'major' && gone[0].t === 7, `one exhaustion line, got ${JSON.stringify(texts(ev))}`)
-  assert(!!gone[0].detail && gone[0].detail.includes('resistive time'), 'exhaustion detail')
+  assert(!!gone[0].detail && gone[0].detail.includes('V·s'), 'exhaustion detail')
   assert(fluxFraction(seq[5]) === 1, 'fraction at the budget')
   assert(fluxFraction(snap({ flux_budget: 0 })) === 0, 'no budget → 0')
 }

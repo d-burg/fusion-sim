@@ -6,7 +6,7 @@ import { Fx } from '../Fixed'
 const FIT_Q = '888.8 MW/M2', FIT_T = '8888 DEG C', FIT_N = '8.8E88 /S'
 const REGIME = ['ATTACHED', 'PARTIAL', 'DETACHED', '----'] as const
 const T_WORDS = ['NOMINAL', 'HOT', 'RECRYSTALLIZATION', '----'] as const
-const N_WORDS = ['ACTIVE', 'IDLE'] as const
+const N_WORDS = ['ACTIVE', 'BACKGROUND'] as const
 
 const CELLS = 10
 
@@ -29,12 +29,12 @@ function Line({ k, fill, extra, v, fit, vTone, word, words, tone }: {
 /** The divertor and neutron bargraphs at the foot of the telemetry CRT; the surface temperature only on tungsten. */
 export default function DiagLines({ d }: { d: Diagnostics | null }) {
   if (!d) return null
-  const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
+  const tWord = d.tWord
   return (
     <div className="ap-bars">
       <Line k="DIVERTOR HEAT FLUX" fill={d.qFill} v={`${Math.min(d.q, 99.9).toFixed(1)} MW/M2`} fit={FIT_Q} vTone={d.qTone} words={REGIME} word={d.regime === '—' ? '----' : d.regime} tone={d.regimeTone} />
       {d.isW && <Line k="SURFACE TEMPERATURE" fill={d.tFill} v={`${d.tSurf.toFixed(0)} DEG C`} fit={FIT_T} vTone={d.tTone} words={T_WORDS} word={tWord} tone={d.tTone} />}
-      <Line k="NEUTRONS" fill={d.nFill} v={`${d.rate > 0 ? sci(d.rate) : '-.--'} /S`} fit={FIT_N} words={N_WORDS} word={d.active ? 'ACTIVE' : 'IDLE'} tone={d.active ? 'ok' : undefined} />
+      <Line k="NEUTRONS" fill={d.nFill} v={`${d.rate > 0 ? sci(d.rate) : '-.--'} /S`} fit={FIT_N} words={N_WORDS} word={d.nWord} tone={d.active ? 'ok' : undefined} />
     </div>
   )
 }
@@ -59,14 +59,14 @@ function PhoneLine({ k, fill, v, fit, vTone, word, words, tone }: {
 
 /** The three bargraphs on a phone, full width, two lines each; dashes until there is a plasma. */
 export function PhoneDiagLines({ d, live }: { d: Diagnostics; live: boolean }) {
-  const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
+  const tWord = d.tWord
   return (
     <div className="app-bars">
       <PhoneLine k="DIVERTOR HEAT FLUX" fill={live ? d.qFill : 0} v={live ? `${Math.min(d.q, 99.9).toFixed(1)} MW/M2` : '-.- MW/M2'} fit={FIT_Q} vTone={live ? d.qTone : undefined}
         words={REGIME} word={!live || d.regime === '—' ? '----' : d.regime} tone={live ? d.regimeTone : undefined} />
       {d.isW && <PhoneLine k="SURFACE TEMPERATURE" fill={live ? d.tFill : 0} v={live ? `${d.tSurf.toFixed(0)} DEG C` : '--- DEG C'} fit={FIT_T} vTone={live ? d.tTone : undefined}
         words={T_WORDS} word={live ? tWord : '----'} tone={live ? d.tTone : undefined} />}
-      <PhoneLine k="NEUTRONS" fill={live ? d.nFill : 0} v={`${live && d.rate > 0 ? sci(d.rate) : '-.--'} /S`} fit={FIT_N} words={N_WORDS} word={live && d.active ? 'ACTIVE' : 'IDLE'} tone={live && d.active ? 'ok' : undefined} />
+      <PhoneLine k="NEUTRONS" fill={live ? d.nFill : 0} v={`${live && d.rate > 0 ? sci(d.rate) : '-.--'} /S`} fit={FIT_N} words={N_WORDS} word={live ? d.nWord : 'BACKGROUND'} tone={live && d.active ? 'ok' : undefined} />
     </div>
   )
 }

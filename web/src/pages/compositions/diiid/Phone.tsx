@@ -5,9 +5,9 @@ import PortView from '../../../components/portview'
 import StripChart from './StripChart'
 import SevenSeg from './SevenSeg'
 import { PhoneBars } from './DiagBars'
-import { statusCells, type Cell } from './statusCells'
+import { shotWords, statusCells, type Cell } from './statusCells'
 import { useWallCharts, PHONE_CHANNELS, GREEN, YELLOW, CYAN, RED, MAGENTA } from './charts'
-import { useDiagnostics } from '../useDiagnostics'
+import { elmRecent, useDiagnostics } from '../useDiagnostics'
 import { flatTopWindow, parseProgram, pulsePhase } from '../kaldera/phase'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
@@ -45,16 +45,15 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
   const preset = ctx.presets.find((p) => p.id === ctx.activePreset)
 
   // ── state line: eight cells that carry real state ──
-  let elming = false
-  for (let i = h.length - 1; i >= 0 && h[i].t > ctx.time - 0.3; i--) if (h[i].elm_active) { elming = true; break }
+  const elming = elmRecent(h, ctx.time)
   const win = useMemo(() => flatTopWindow(parseProgram(ctx.programJson).ip), [ctx.programJson])
   const phase = pulsePhase(win, ctx.time, ctx.running, ctx.finished, snap, ctx.scrubTime !== null)
   const by: Record<string, Cell> = {}
-  for (const c of statusCells(snap, ctx.running, ctx.fuelType, elming)) by[c.k] = c
+  for (const c of statusCells(snap, ctx.running, ctx.fuelType, elming, ctx.state.disruptionCause)) by[c.k] = c
   const state: Cell[] = [
-    { k: 'PHASE', v: phase, lamp: phase === 'DISRUPT' ? 'bad' : phase === 'FLAT-TOP' ? 'ok' : phase === 'STANDBY' ? 'off' : 'info' },
+    { k: 'PHASE', v: phase, lamp: phase === 'DISRUPTED' ? 'bad' : phase === 'FLAT-TOP' ? 'ok' : phase === 'STANDBY' ? 'off' : 'info' },
     by.STATUS, by.MODE, by.ELM,
-    { ...by.CONFIGURATION, k: 'CONFIG' }, by.OH, { ...by['Ψ_OH'], k: 'FLUX Ψ_OH' }, { ...by.RISK, k: 'HAZARD' },
+    { ...by.CONFIGURATION, k: 'CONFIG' }, by.OH, { ...by['Ψ_OH'], k: 'FLUX Ψ_OH' }, by.HAZARD,
   ]
 
   // ── diagnostics and readouts ──
@@ -63,11 +62,11 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
   // Reconstructed quantities mean nothing without a plasma: blank them rather than show the engine's fill values.
   const rv = (v: number | undefined) => (valid ? v : undefined)
   const pfus = diag.pFus > 0.001 ? f(diag.pFus, diag.pFus < 10 ? 3 : 1) : '--'
-  const q = diag.rate > 0 ? formatQ(diag.qPlasma) : '--'
+  const q = diag.rate > 0 && diag.qPlasma !== null ? formatQ(diag.qPlasma) : '--'
   const [more, setMore] = useState(false)
   const s = snap
   const essential: [string, string, string][] = [
-    ['Ip', f(s?.ip), 'MA'], ['n̄e', f(s?.ne_bar), 'e20/m3'],
+    ['Ip', f(s?.ip), 'MA'], ['n̄e', f(s?.ne_bar), '1e20 m-3'],
     ['Wth', f(s?.w_th), 'MJ'], ['βN', f(rv(s?.beta_n)), ''],
     ['q95', f(rv(q95Disp(s?.q95))), ''], ['fGW', f(rv(s?.f_greenwald)), ''],
   ]
@@ -192,12 +191,12 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
         {ctx.finished && ctx.report
           ? ctx.report.map((r, i) => (
             <span key={i} className="dc-ev" style={{ color: r.status === 'major' ? RED : r.status === 'minor' ? YELLOW : '#bbbbbb' }}>
-              {reportLabel(r.label)} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
+              {reportLabel(shotWords(r.label))} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
             </span>
           ))
           : lastEvents.map((e) => (
             <span key={e.id} className="dc-ev" style={{ color: SEV[e.severity] ?? '#bbbbbb' }}>
-              {e.t.toFixed(3)} {e.text}
+              {e.t.toFixed(3)} {shotWords(e.text)}
             </span>
           ))}
       </div>

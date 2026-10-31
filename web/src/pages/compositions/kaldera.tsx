@@ -10,7 +10,8 @@ import { reconstructionValid } from '../../lib/pulseLog'
 import { equilibriumInfo, plasmaParamsInfo, traceDescriptions } from '../../components/infoContent'
 import InfoHint from './kaldera/InfoHint'
 import Diagnostics from './kaldera/Diagnostics'
-import { f1, f2, PRESET_WORD, sumWaveforms, Readout, useEma, useDisplayClock, band, G, hazardPct, ReportPanel, STAB, POWER, configWord, Link } from './kaldera/shared'
+import { f1, f2, PRESET_WORD, sumWaveforms, Readout, useEma, useDisplayClock, band, G, ReportPanel, STAB, POWER, configWord, Link } from './kaldera/shared'
+import { betaLimit, BETA_WARN_FRAC, elmRecent, fmtHazard, HAZARD_BAD, HAZARD_WARN } from './useDiagnostics'
 import { FIT, Fx, q95Disp } from './Fixed'
 import { CONFIG_WORDS, STATE_WORDS } from './kaldera/words'
 import { usePhone } from './usePhone'
@@ -40,8 +41,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const pulseNo = ctx.pulseNumber === null ? '— — — —' : String(ctx.pulseNumber).padStart(4, '0')
 
   // ELMs are transient: hold the word for the last 0.3 s of history.
-  let elming = false
-  for (let i = history.length - 1; i >= 0 && history[i].t > time - 0.3; i--) if (history[i].elm_active) { elming = true; break }
+  const elming = elmRecent(history, time)
   const valid = reconstructionValid(s)
   const clock = useDisplayClock(time, scrubTime ?? time, running && !finished && scrubTime === null, ctx.activeSpeed)
   const [hot, setHot] = useState<string | null>(null)
@@ -51,12 +51,18 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const q95S = useEma(valid ? s?.q95 : undefined)
   const fgwS = useEma(valid ? s?.f_greenwald : undefined)
   const hazS = useEma(valid ? (s?.disruption_risk ?? 0) * 100 : undefined)
+  // βN is banded against the no-wall limit 4·l_i, as in the log and the other looks
+  const betaLim = betaLimit(s)
+  const betaTone = band(betaS, BETA_WARN_FRAC * betaLim, betaLim)
+  const hazTone = band(hazS, HAZARD_WARN, HAZARD_BAD)
   // The report opens with each finished pulse; CLOSE hides it until the next one (or REPORT re-opens it).
   const [reportClosed, setReportClosed] = useState(false)
   const [wasFinished, setWasFinished] = useState(finished)
   if (finished !== wasFinished) { setWasFinished(finished); setReportClosed(false) }
   const showReport = finished && !!ctx.report && ctx.report.length > 0 && !reportClosed
-  const stateWord = s?.disrupted ? 'DISRUPTED' : elming ? 'ELMING' : s?.in_hmode ? 'H-MODE' : valid ? 'L-MODE' : finished && scrubTime === null ? 'COMPLETE' : 'STANDBY'
+  const stateWord = s?.disrupted ? 'DISRUPTED' : s?.in_hmode ? 'H-MODE' : valid ? 'L-MODE' : finished && scrubTime === null ? 'END' : 'STANDBY'
+  // ELMING rides beside H-MODE, never in its place
+  const elmWord = stateWord === 'H-MODE' && elming
   // Reconstructed quantities mean nothing without a plasma: blank them rather than show the engine's fill values.
   const rv = (v: number | undefined) => (valid ? v : undefined)
 
@@ -87,8 +93,8 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
       <Phone
         ctx={ctx}
         view={{
-          valid, clock, phase, pulseNo, stateWord, stations, T, program, pinRef, speeds,
-          tones: { beta: band(betaS, 2.5, 2.8), q95: band(q95S, 2.5, 2.0, true), fgw: band(fgwS, 0.8, 0.9), haz: band(hazS, 1, 10) },
+          valid, clock, phase, pulseNo, stateWord, elming: elmWord, stations, T, program, pinRef, speeds,
+          tones: { beta: betaTone, q95: band(q95S, 2.5, 2.0, true), fgw: band(fgwS, 0.8, 0.9), haz: hazTone },
           showReport, onCloseReport: () => setReportClosed(true), onToggleReport: () => setReportClosed(showReport),
         }}
       />
@@ -142,7 +148,7 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
             <Readout value={f2(s?.ip)} fit={big ? "88.88" : "8.88"} unit="MA" caption={<>I<sub>p</sub></>} {...ro('ip')} />
             <Readout value={f2(s?.ne_bar)} fit="8.88" unit="10²⁰ m⁻³" caption={<><G>n̄</G><sub>e</sub></>} {...ro('ne')} />
             <Readout value={f2(s?.w_th)} fit={big ? "888.88" : "8.88"} unit="MJ" caption={<>W<sub>th</sub></>} {...ro('wth')} />
-            <Readout value={f2(rv(s?.beta_n))} fit="8.88" caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={band(betaS, 2.5, 2.8)} />
+            <Readout value={f2(rv(s?.beta_n))} fit="8.88" caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={betaTone} />
             <Readout value={f2(q95Disp(rv(s?.q95)))} fit="88.88" caption={<><G>q</G><sub>95</sub></>} hint={STAB} tone={band(q95S, 2.5, 2.0, true)} />
             <Readout value={f2(rv(s?.f_greenwald))} fit="8.88" caption={<><G>f</G><sub>GW</sub></>} hint={STAB} tone={band(fgwS, 0.8, 0.9)} {...ro('ne')} />
             <Readout value={f1(s?.p_input)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>in</sub></>} hint={POWER} {...ro('pin')} />
@@ -156,12 +162,13 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
           </div>
           <div className="kd-title">
             <div className="kd-title-cap">PULSE</div>
-            <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> <span className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</span></h1>
+            <h1 className="kd-h1">{pulseNo} <span className="kd-h1-dot">.</span> <span className="kd-phase" data-tone={phase === 'DISRUPTED' ? 'bad' : undefined}>{phase}</span></h1>
             <div className="kd-state" data-state={stateWord}>
               <Fx fit={STATE_WORDS} align="start">{stateWord}</Fx>
+              <Fx fit="ELMING" align="start" className="kd-elm">{elmWord ? 'ELMING' : ''}</Fx>
               {s?.oh_saturated && <span className="kd-flag">OH SATURATED</span>}
-              {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
-              <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={band(hazS, 1, 10)}>{valid ? hazardPct(s?.disruption_risk) : '—'}</Fx>{valid ? <> <G>%/s</G></> : ''}</span>
+              {s?.flux_exhausted && <span className="kd-flag">FLUX EXHAUSTED</span>}
+              <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={hazTone}>{valid ? fmtHazard(s?.disruption_risk) : '—'}</Fx>{valid ? <> <G>%/s</G></> : ''}</span>
             </div>
           </div>
         </div>

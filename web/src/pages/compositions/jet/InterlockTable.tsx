@@ -4,7 +4,7 @@ import type { DeviceInfo } from '../types'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
 import { q95Disp } from '../Fixed'
-import { useDiagnostics, type Diagnostics, type DiagTone } from '../useDiagnostics'
+import { betaLimit, BETA_WARN_FRAC, fmtHazard, hazardPct, HAZARD_BAD, HAZARD_WARN, useDiagnostics, type Diagnostics, type DiagTone } from '../useDiagnostics'
 
 /* ─── Spreadsheet-style scalar / interlock table ──────────────────
    name | value | unit | state. The state cell is a coloured block the
@@ -56,27 +56,33 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
       na('tauE', 's'), na('H98', ''), na('betaN', ''), na('q95', ''), na('li', ''),
       na('Pin', 'MW'), na('POH', 'MW'), na('Prad', 'MW'),
       na('q_perp', 'MW/m2'), na('lambdaQ', 'mm'), na('fDet', ''), ...(d.isW ? [na('T_surf', '°C')] : []), na('Sn', 'n/s'), na('Pfus', 'MW'), na('Q', ''),
-      na('Vloop', 'V'), na('PsiOH', 'V·s'), na('Zeff', ''), na('hazard', '1/s'),
+      na('Vloop', 'V'), na('PsiOH', 'V·s'), na('Zeff', ''), na('hazard', '%/s'),
     ]
   }
   const ipMax = dev?.ip_max ?? Infinity
   const btMax = dev?.bt_max ?? Infinity
+  // Ip against this pulse's programmed flat-top (the device maximum when there is none): HIGH from 1.0 of it
+  // only where that is past 1.02 of the machine maximum, ALARM only past 1.02 of the maximum. The presets run
+  // at ip_max and bt_max by design, which is not an interlock condition.
+  const ipProg = (s.prog_ip_peak ?? 0) > 0 ? (s.prog_ip_peak as number) : ipMax
+  // ALARM above the machine maximum; HIGH when the current overshoots its program by 2 %.
+  const ipState = (ip: number): State => (ip > 1.02 * ipMax ? 'alarm' : ip > 1.02 * ipProg ? 'hi' : 'ok')
   const fluxBudget = s.flux_budget ?? dev?.flux_swing_vs
   const fluxUsed = s.flux_consumed ?? 0
   const fluxFrac = fluxBudget ? fluxUsed / fluxBudget : 0
   const vMax = dev?.v_loop_max
-  const betaLim = 4 * Math.max(s.li, 0.5)
+  const betaLim = betaLimit(s)
   const st = (x: State): State => (plasma ? x : 'na')
   /** Reconstructed quantities mean nothing without a plasma. */
   const fp = (v: number | undefined, d: number): string => (plasma ? f(v, d) : '---')
   return [
-    { name: 'Ip', value: f(s.ip, 2), unit: 'MA', state: s.disrupted ? 'alarm' : s.ip > 0.05 ? band(s.ip / ipMax, 0.9, 1.0) : 'off' },
-    { name: 'Bt', value: f(s.bt, 2), unit: 'T', state: s.bt > 0.05 ? band(s.bt / btMax, 0.95, 1.001) : 'off' },
+    { name: 'Ip', value: f(s.ip, 2), unit: 'MA', state: s.disrupted ? 'alarm' : s.ip > 0.05 ? ipState(s.ip) : 'off' },
+    { name: 'Bt', value: f(s.bt, 2), unit: 'T', state: s.bt > 0.05 ? (s.bt > 1.02 * btMax ? 'hi' : 'ok') : 'off' },
     { name: 'ne', value: f(s.ne_bar, 2), unit: '1e20 m-3', state: st('ok') },
     { name: 'fGW', value: fp(s.f_greenwald, 2), unit: '', state: st(band(s.f_greenwald, 0.8, 1.0)) },
     { name: 'tauE', value: fp(s.tau_e, 3), unit: 's', state: st('ok') },
     { name: 'H98', value: fp(s.h_factor, 2), unit: '', state: st(s.h_factor < 0.6 ? 'lo' : 'ok') },
-    { name: 'betaN', value: fp(s.beta_n, 2), unit: '', state: st(band(s.beta_n / betaLim, 0.8, 1.0)) },
+    { name: 'betaN', value: fp(s.beta_n, 2), unit: '', state: st(band(s.beta_n / betaLim, BETA_WARN_FRAC, 1.0)) },
     { name: 'q95', value: fp(q95Disp(s.q95), 2), unit: '', state: st(band(s.q95, 2.5, 2.0, 'lo')) },
     { name: 'li', value: fp(s.li, 2), unit: '', state: st(band(s.li, 1.2, 1.5)) },
     { name: 'Pin', value: f(s.p_input, 1), unit: 'MW', state: st('ok') },
@@ -88,14 +94,14 @@ function buildRows(s: Snapshot | null, dev: DeviceInfo | undefined, d: Diagnosti
     { name: 'q_perp', value: f(d.q, 1), unit: 'MW/m2', state: st(toneState(d.qTone)), bar: plasma ? d.qFill : undefined, word: plasma && d.regime !== '—' ? d.regime : undefined },
     { name: 'lambdaQ', value: plasma && d.valid ? f(d.lambdaQ, 1) : '---', unit: 'mm', state: st('ok') },
     { name: 'fDet', value: plasma && d.valid ? f(d.fDet, 2) : '---', unit: '', state: st(toneState(d.regimeTone)) },
-    ...(d.isW ? [{ name: 'T_surf', value: f(d.tSurf, 0), unit: '°C', state: st(toneState(d.tTone)), bar: plasma ? d.tFill : undefined, word: plasma ? (d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL') : undefined }] : []),
-    { name: 'Sn', value: d.rate > 0 ? d.rate.toExponential(2).replace('+', '') : '0', unit: 'n/s', state: st(d.active ? 'ok' : 'off'), word: plasma && !d.active ? 'IDLE' : undefined, bar: plasma ? d.nFill : undefined },
+    ...(d.isW ? [{ name: 'T_surf', value: f(d.tSurf, 0), unit: '°C', state: st(toneState(d.tTone)), bar: plasma ? d.tFill : undefined, word: plasma ? d.tWord : undefined }] : []),
+    { name: 'Sn', value: d.rate > 0 ? d.rate.toExponential(2).replace('+', '') : '0', unit: 'n/s', state: st(d.active ? 'ok' : 'off'), word: plasma && !d.active ? d.nWord : undefined, bar: plasma ? d.nFill : undefined },
     { name: 'Pfus', value: f(d.pFus, d.pFus < 10 ? 3 : 1), unit: 'MW', state: st('ok') },
-    { name: 'Q', value: d.rate > 0 ? formatQ(d.qPlasma) : '0', unit: '', state: st('ok') },
+    { name: 'Q', value: d.qPlasma === null ? '---' : d.rate > 0 ? formatQ(d.qPlasma) : '0', unit: '', state: st('ok') },
     { name: 'Vloop', value: f(s.v_loop, 2), unit: 'V', state: st(vMax ? band(Math.abs(s.v_loop ?? 0) / vMax, 0.9, 0.999) : 'ok'), word: s.oh_saturated ? 'SATURATED' : undefined },
-    { name: 'PsiOH', value: fluxBudget ? `${fluxUsed.toFixed(1)}/${fluxBudget.toFixed(0)}` : f(fluxUsed, 1), unit: 'V·s', state: s.flux_exhausted ? 'alarm' : st(band(fluxFrac, 0.8, 0.95)), word: s.flux_exhausted ? 'EMPTY' : undefined },
+    { name: 'PsiOH', value: fluxBudget ? `${fluxUsed.toFixed(1)}/${fluxBudget.toFixed(0)}` : f(fluxUsed, 1), unit: 'V·s', state: s.flux_exhausted ? 'alarm' : st(band(fluxFrac, 0.8, 0.95)), word: s.flux_exhausted ? 'FLUX EXHAUSTED' : undefined },
     { name: 'Zeff', value: f(s.z_eff, 2), unit: '', state: st(band(s.z_eff ?? 1, 2.5, 4)) },
-    { name: 'hazard', value: f(s.disruption_risk, 3), unit: '1/s', state: s.disrupted ? 'alarm' : st(band(s.disruption_risk, 0.05, 0.2)), word: s.disrupted ? 'DISRUPTED' : undefined },
+    { name: 'hazard', value: fmtHazard(s.disruption_risk, '---'), unit: '%/s', state: s.disrupted ? 'alarm' : st(band(hazardPct(s.disruption_risk), HAZARD_WARN, HAZARD_BAD)), word: s.disrupted ? 'DISRUPTED' : undefined },
   ]
 }
 

@@ -124,15 +124,6 @@ export function band(v: number | undefined, warn: number, bad: number, below = f
 /** Greek glyphs escape the page-wide uppercase transform (β would become B). */
 export const G = ({ children }: { children: ReactNode }) => <span className="kd-g">{children}</span>
 
-/** Hazard rate (probability per second) as percent per second, two significant figures. */
-export function hazardPct(p: number | undefined): string {
-  if (p === undefined || !isFinite(p)) return '—'
-  const v = p * 100
-  if (v <= 0) return '0'
-  if (v < 0.0001) return '< 0.0001'
-  return v.toFixed(Math.min(5, Math.max(0, 1 - Math.floor(Math.log10(v)))))
-}
-
 /** Units and Greek inside a report value keep their case; the words around them take the caps. */
 const KEEP = /^(s|V|V·s|MA|MJ|MW|kW|Hz)$|[α-ω]/
 function keepUnits(text: string): ReactNode {

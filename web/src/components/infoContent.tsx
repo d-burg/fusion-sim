@@ -434,8 +434,10 @@ export const stabilityInfo = (
     </p>
     <Heading>&beta;<sub>N</sub> &mdash; Normalized Beta</Heading>
     <p>
-      The Troyon limit at &beta;<sub>N</sub> &asymp; 2.8 bounds the
-      achievable plasma pressure. Warning above 2.5, danger above 2.8.
+      The no-wall limit bounds the achievable plasma pressure. The readouts
+      take it as &beta;<sub>N</sub> = 4&thinsp;l<sub>i</sub> (2.8, the Troyon
+      value, when l<sub>i</sub> is unavailable). Warning above 0.9 of the
+      limit, danger at it.
       Advanced tokamak scenarios push toward higher &beta;<sub>N</sub>
       with active feedback stabilization.{' '}
       <Cite doi="10.1088/0741-3335/26/1A/209">Troyon et al. (1984)</Cite>.
@@ -707,7 +709,7 @@ export const powerBalanceInfo = (
       neutrons escape to blanket modules.
     </p>
     <p className="font-mono text-gray-200 text-center my-1">
-      Q = P<sub>fus</sub> / P<sub>heat</sub>
+      Q = P<sub>fus</sub> / P<sub>ext</sub>, P<sub>ext</sub> = P<sub>NBI</sub> + P<sub>ECH</sub> + P<sub>ICH</sub> + P<sub>OH</sub>
     </p>
     <p>
       Q &gt; 1 means more fusion power out than heating power in. The ITER
@@ -750,8 +752,9 @@ export const eventLogInfo = (
     <p>
       Nominal sequence events are uncolored. A green dot marks a favorable
       transition. <b>MINOR</b> (amber) means a limit is being approached
-      (f<sub>GW</sub> &gt; 0.8, β<sub>N</sub> &gt; 2.5, q<sub>95</sub> &lt; 2.5,
-      hazard &gt; 30 %/s); <b>MAJOR</b> (red) means it has been reached.
+      (f<sub>GW</sub> &gt; 0.8, β<sub>N</sub> &gt; 0.9 of the no-wall limit
+      4&thinsp;l<sub>i</sub>, q<sub>95</sub> &lt; 2.5, hazard &ge; 1 %/s);
+      <b>MAJOR</b> (red) means it has been reached (hazard &ge; 10 %/s).
       <b>INVALID</b> (magenta) marks readouts that no longer mean anything,
       as when the plasma is gone. Alarms use hysteresis, so a noisy signal
       does not chatter.
@@ -760,8 +763,10 @@ export const eventLogInfo = (
     <p>
       When a disruption starts, the engine records which hazard term was
       dominant at the trigger: density limit, β limit, kink limit, radiative
-      collapse, locked mode, or wall contact. The log names it, gives one
-      sentence of physics, and the change an operator would make next pulse.
+      collapse, locked mode, or wall contact. The log names it only when that
+      term carried more than half of the hazard and the hazard exceeded
+      5 %/s; otherwise the line reads &ldquo;cause not resolved&rdquo;.
+      Hovering a line shows the numbers at the trigger.
     </p>
     <Heading>Pulse number and report</Heading>
     <p>

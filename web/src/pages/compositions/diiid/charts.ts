@@ -91,7 +91,7 @@ export function useWallCharts(ctx: ControlRoomContext) {
     { id: 'fgw', title: 'FGW', series: [{ label: 'fGW', color: YELLOW, pts: pick(h, 'f_greenwald'), ref: [[0, 1], [T, 1]] }], yMin: 0 },
     { id: 'te_ped', title: 'TE PED', unit: 'keV', series: [{ label: 'Tped', color: MAGENTA, pts: pick(h, 'te_ped') }], yMin: 0 },
     { id: 'i_ni', title: 'I NI', unit: 'MA', series: [{ label: 'Ini', color: GREEN, pts: pick(h, 'i_ni') }], yMin: 0 },
-    { id: 'disruption_risk', title: 'DISRUPT HAZARD', unit: '1/s', series: [{ label: 'h', color: RED, pts: pick(h, 'disruption_risk') }], yMin: 0 },
+    { id: 'disruption_risk', title: 'HAZARD', unit: '%/s', series: [{ label: 'h', color: RED, pts: h.map((p) => [p.t, p.disruption_risk * 100] as [number, number]) }], yMin: 0 },
   // history is mutated in place by the simulation hook, so key the memo on its length and last time, not its identity
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [h, h.length, h.length ? h[h.length - 1].t : 0, refs, fluxBudget, T])

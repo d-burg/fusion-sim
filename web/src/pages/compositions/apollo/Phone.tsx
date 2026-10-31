@@ -8,7 +8,7 @@ import BoardPlot, { type Series } from './BoardPlot'
 import LampKey, { type Lamp } from './LampKey'
 import { PhoneDiagLines } from './DiagLines'
 import { clock, crtLabel, flatTopWindow, interpWaveform, parseProgram, pulsePhase, type Waveform } from './phase'
-import { useDiagnostics } from '../useDiagnostics'
+import { fmtHazard, hazardTone, useDiagnostics } from '../useDiagnostics'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
 import { FIT, Fx, q95Disp } from '../Fixed'
@@ -70,12 +70,12 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
   const ipOn = !!s && s.ip > 0.05
   const fgw = s?.f_greenwald ?? 0
   const q95 = s?.q95 ?? 99
-  const hazard = s?.disruption_risk ?? 0
+  const hazTone = s ? hazardTone(s.disruption_risk) : undefined
   const lamps: [string, Lamp][] = [
     ['H-MODE', s?.in_hmode ? 'green' : 'off'],
     ['ELM', s?.elm_active ? 'amber' : s?.elm_suppressed && s?.in_hmode ? 'white' : 'off'],
     ['DIVERTED', ipOn && s && !s.is_limited ? 'green' : 'off'],
-    ['HAZARD', hazard > 0.05 ? 'red' : hazard > 0.01 ? 'amber' : 'off'],
+    ['HAZARD', hazTone === 'bad' ? 'red' : hazTone === 'warn' ? 'amber' : 'off'],
     ['DENSITY', ipOn && fgw >= 1 ? 'red' : ipOn && fgw >= 0.8 ? 'amber' : 'off'],
     ['Q95', ipOn && q95 < 2.5 ? 'red' : ipOn && q95 < 3 ? 'amber' : 'off'],
     ['OH\nSATURATED', s?.oh_saturated ? 'amber' : 'off'],
@@ -88,12 +88,11 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
   const v = (x: number | undefined, d = 2) => (s && x !== undefined && isFinite(x) ? x.toFixed(d) : '-.--')
   const rv = (x: number | undefined, d = 2) => (valid ? v(x, d) : '-.--')
   const pfus = !s ? '-.--' : diag.pFus > 0.001 ? diag.pFus.toFixed(diag.pFus < 10 ? 3 : 1) : '0.000'
-  const qStr = !s ? '-.--' : diag.rate > 0 ? formatQ(diag.qPlasma).toUpperCase() : '0'
+  const qStr = !s || diag.qPlasma === null ? '-.--' : diag.rate > 0 ? formatQ(diag.qPlasma).toUpperCase() : '0'
   const fluxFrac = s && s.flux_budget ? (s.flux_consumed ?? 0) / s.flux_budget : 0
   const fluxTone = s?.flux_exhausted ? 'bad' : fluxFrac > 0.85 ? 'warn' : undefined
-  const hazTone = hazard > 0.05 ? 'bad' : hazard > 0.01 ? 'warn' : undefined
   const essential: [string, string, string][] = [
-    ['Ip', v(s?.ip), 'MA'], ['ne', v(s?.ne_bar), 'E20'],
+    ['Ip', v(s?.ip), 'MA'], ['ne', v(s?.ne_bar), '10²⁰ m⁻³'],
     ['Wth', v(s?.w_th), 'MJ'], ['βN', rv(s?.beta_n), ''],
     ['q95', rv(q95Disp(s?.q95)), ''], ['fGW', rv(s?.f_greenwald), ''],
   ]
@@ -133,7 +132,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
       { key: 'h_factor', cap: 'H98', title: <>H<sub>98</sub></>, unit: '', series: [one('h_factor', <>H<sub>98</sub></>, '')] },
       { key: 'psi_oh', cap: 'PSI OH', title: <>Ψ<sub>OH</sub></>, unit: 'VS', series: [one('psi_oh', <>Ψ<sub>OH</sub></>, 'VS', f1)] },
       { key: 'disruption_risk', cap: 'HAZARD', title: <>HAZARD</>, unit: '%/S', series: [
-        one('disruption_risk', <>HAZ</>, '%/S', f2, { get: (h) => h.disruption_risk * 100 }),
+        one('disruption_risk', <>HAZ</>, '%/S', (v) => fmtHazard(v / 100), { get: (h) => h.disruption_risk * 100 }),
       ] },
       { key: 'li', cap: 'LI', title: <>l<sub>i</sub></>, unit: '', series: [one('li', <>l<sub>i</sub></>, '')] },
       { key: 'te_ped', cap: 'TE PED', title: <>T<sub>E,PED</sub></>, unit: 'KEV', series: [one('te_ped', <>T<sub>E,PED</sub></>, 'KEV')] },
@@ -180,7 +179,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
         </div>
         <div className="app-clock app-clock-phase">
           <span className="ap-legend">04 PHASE</span>
-          <span className="app-phase" style={{ color: phase === 'DISRUPT' ? '#ff5a4a' : LCD }}>{phase}</span>
+          <span className="app-phase" style={{ color: phase === 'DISRUPTED' ? '#ff5a4a' : LCD }}>{phase}</span>
         </div>
         <span className="app-settings">{ctx.settingsNode}</span>
       </header>
@@ -238,7 +237,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
               <span>Q <b><Fx fit={FIT.Q}>{qStr}</Fx></b></span>
             </div>
             <div className="app-fus">
-              <span>HAZARD <b data-tone={hazTone}><Fx fit="88.88">{s ? (hazard * 100).toFixed(2) : '-.--'}</Fx></b> <i>%/S</i></span>
+              <span>HAZARD <b data-tone={hazTone}><Fx fit="88.88">{s ? fmtHazard(s.disruption_risk) : '-.--'}</Fx></b> <i>%/S</i></span>
               <span>Ψ <b data-tone={fluxTone}><Fx fit="888.8">{v(s?.flux_consumed, 1)}</Fx>/<Fx fit="888.8" align="start">{v(s?.flux_budget, 1)}</Fx></b> <i>VS</i></span>
             </div>
             <div className="app-tele-grid">

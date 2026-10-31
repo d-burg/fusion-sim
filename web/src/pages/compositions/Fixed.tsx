@@ -55,11 +55,10 @@ export const FIT = {
   sci: '8.8E88',
   /** Every form formatQ() produces: 2E-6, 1.2E-3, 0.051, 1.23, 12.3, 123. */
   Q: ['8.8E-8', '0.888', '888'] as readonly string[],
-  /** Kaldera hazardPct(), two significant figures: sized down to 0.0010 %/s (the flat-top range); the rarer
-   *  0.00012 and "< 0.0001" of a cold start run one or two figures past it. */
-  hazardPct: '0.0088',
+  /** fmtHazard() in %/s, at most two decimals: 0.00–9.99, 10.0–99.9, 100 and up. */
+  hazardPct: '88.8',
 } as const
 
 export const REGIME_WORDS = ['ATTACHED', 'PARTIAL', 'DETACHED', '—'] as const
 export const T_WORDS = ['NOMINAL', 'HOT', 'RECRYSTALLIZATION'] as const
-export const N_WORDS = ['ACTIVE', 'IDLE'] as const
+export const N_WORDS = ['ACTIVE', 'BACKGROUND'] as const

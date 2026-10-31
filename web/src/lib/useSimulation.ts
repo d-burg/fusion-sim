@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SimHandle, type PresetId, getPreset, getDevice } from './wasm'
-import type { Snapshot, TracePoint, ProfileFrame, ProcessedProfile } from './types'
+import type { DisruptionCause, Snapshot, TracePoint, ProfileFrame, ProcessedProfile } from './types'
 import { processProfileFrames } from './profileUtils'
 import { computeFusion } from './fusionPhysics'
 import { deriveEvents, newLogContext, nextPulseNumber, type LogContext, type LogEvent } from './pulseLog'
@@ -46,6 +46,8 @@ export interface SimState {
   previousPulse: PreviousPulse | null  // last pulse's traces, for the reference overlay
   elmCount: number
   disruptionTime: number | null
+  /** The disruption cause as the log resolved it at the trigger; '' when none or not resolved. */
+  disruptionCause: DisruptionCause
   /** The solenoid's flux swing ran out at some point in this pulse. */
   fluxExhausted: boolean
 }
@@ -125,6 +127,7 @@ export function useSimulation(
     previousPulse: null,
     elmCount: 0,
     disruptionTime: null,
+    disruptionCause: '',
     fluxExhausted: false,
   })
 
@@ -180,6 +183,7 @@ export function useSimulation(
       previousPulse: previousPulseRef.current,
       elmCount: 0,
       disruptionTime: null,
+      disruptionCause: '',
       fluxExhausted: false,
     })
   }, [])
@@ -226,6 +230,7 @@ export function useSimulation(
       previousPulse: previousPulseRef.current,
       elmCount: 0,
       disruptionTime: null,
+      disruptionCause: '',
       fluxExhausted: false,
     })
   }, [])
@@ -309,6 +314,7 @@ export function useSimulation(
         ne_line: s.ne_line,
         impurity_fraction: s.impurity_fraction,
         p_fus: pFusSmoothedRef.current,
+        p_alpha: s.p_alpha,
         elm_suppressed: s.elm_suppressed,
         elm_active: elmActive,
         in_hmode: s.in_hmode,
@@ -431,6 +437,7 @@ export function useSimulation(
           previousPulse: previousPulseRef.current,
           elmCount: logCtxRef.current?.elmCount ?? 0,
           disruptionTime: logCtxRef.current?.disruptionTime ?? null,
+          disruptionCause: logCtxRef.current?.disruptionCause ?? '',
           fluxExhausted: logCtxRef.current?.fluxExhausted ?? false,
         }
       })
@@ -497,6 +504,7 @@ export function useSimulation(
       previousPulse: previousPulseRef.current,
       elmCount: 0,
       disruptionTime: null,
+      disruptionCause: '',
       fluxExhausted: false,
     }))
   }, [])

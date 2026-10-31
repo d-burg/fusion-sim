@@ -11,7 +11,7 @@ import { disruptionFirst } from './reportLabel'
 import DiagLines from './apollo/DiagLines'
 import Phone from './apollo/Phone'
 import { usePhone } from './usePhone'
-import { useDiagnostics } from './useDiagnostics'
+import { betaLimit, fmtHazard, hazardTone, useDiagnostics } from './useDiagnostics'
 import { reconstructionValid } from '../../lib/pulseLog'
 import { formatQ } from '../../lib/fusionPhysics'
 import { q95Disp } from './Fixed'
@@ -121,7 +121,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
       number: '11', title: <>D<sub>α</sub></>, unit: 'AU', xAxis: true,
       series: [
         { key: 'd_alpha', color: WHITE, fmt: f2, unit: '', label: <>D<sub>α</sub></>, floor: 0, spikes: true },
-        { key: 'disruption_risk', color: CYAN, fmt: (v) => (isFinite(v) ? (v * 100).toFixed(2) : '—'), unit: '%/S', label: <>HAZARD</>, floor: 0 },
+        { key: 'disruption_risk', color: CYAN, fmt: (v) => fmtHazard(v), unit: '%/S', label: <>HAZARD</>, floor: 0 },
       ],
     },
   ], [prog])
@@ -132,7 +132,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
   const deviceName = device?.name ?? ctx.activeDevice
   const presetLabel = (ctx.presets.find((p) => p.id === ctx.activePreset)?.label ?? ctx.activePreset)
     
-  const phaseColor = phase === 'DISRUPT' ? '#ff5a4a' : LCD
+  const phaseColor = phase === 'DISRUPTED' ? '#ff5a4a' : LCD
 
   // ── status lamps: real state only; anything a telemetry row already says is left out ──
   const ipOn = !!s && s.ip > 0.05
@@ -140,22 +140,24 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
   const q95 = s?.q95 ?? 99
   const radFrac = s && s.p_input > 0.1 ? s.p_rad / s.p_input : 0
   const fluxFrac = s && s.flux_budget ? (s.flux_consumed ?? 0) / s.flux_budget : 0
-  const riskBeta = s?.risk_beta ?? 0
-  const riskLocked = s?.risk_locked_mode ?? 0
-  const hazard = s?.disruption_risk ?? 0
+  // BETA and LOCKED light from engine state, not from hazard terms: βN at or above the no-wall limit 4·l_i,
+  // and a disruption whose cause the log resolved as a locked mode (the snapshot carries no locked-mode flag)
+  const betaOver = ipOn && !!s && s.beta_n >= betaLimit(s)
+  const lockedOut = !!s?.disrupted && ctx.state.disruptionCause === 'locked_mode'
+  const hazTone = s ? hazardTone(s.disruption_risk) : undefined
   const paused = !running && !finished && time > 0
   const lamps: [string, Lamp][] = [
     ['H-MODE', s?.in_hmode ? 'green' : 'off'],
     ['ELM', s?.elm_active ? 'amber' : s?.elm_suppressed && s?.in_hmode ? 'white' : 'off'],
     ['DIVERTED', ipOn && s && !s.is_limited ? 'green' : 'off'],
-    ['HAZARD', hazard > 0.05 ? 'red' : hazard > 0.01 ? 'amber' : 'off'],
+    ['HAZARD', hazTone === 'bad' ? 'red' : hazTone === 'warn' ? 'amber' : 'off'],
     ['DENSITY', ipOn && fgw >= 1 ? 'red' : ipOn && fgw >= 0.8 ? 'amber' : 'off'],
     ['Q95', ipOn && q95 < 2.5 ? 'red' : ipOn && q95 < 3 ? 'amber' : 'off'],
-    ['BETA', riskBeta > 0.5 ? 'red' : riskBeta > 0.15 ? 'amber' : 'off'],
+    ['BETA', betaOver ? 'red' : 'off'],
     ['RADIATION', ipOn && radFrac > 0.8 ? 'red' : ipOn && radFrac > 0.5 ? 'amber' : 'off'],
     ['OH\nSATURATED', s?.oh_saturated ? 'amber' : 'off'],
     ['FLUX', s?.flux_exhausted ? 'red' : fluxFrac > 0.85 ? 'amber' : 'off'],
-    ['LOCKED', riskLocked > 0.5 ? 'red' : riskLocked > 0.15 ? 'amber' : 'off'],
+    ['LOCKED', lockedOut ? 'red' : 'off'],
     ['DISRUPTED', s?.disrupted ? 'red' : 'off'],
   ]
 
@@ -165,7 +167,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
   const tele = (snap: Snapshot | null): [string, string, string][] => {
     const v = (x: number | undefined, d = 2) => (snap && x !== undefined && isFinite(x) ? x.toFixed(d) : '-.--')
     const pfus = !snap ? '-.--' : diag.pFus > 0.001 ? diag.pFus.toFixed(diag.pFus < 10 ? 3 : 1) : '0.000'
-    const q = !snap ? '-.--' : diag.rate > 0 ? formatQ(diag.qPlasma).toUpperCase() : '0'
+    const q = !snap || diag.qPlasma === null ? '-.--' : diag.rate > 0 ? formatQ(diag.qPlasma).toUpperCase() : '0'
     return [
       ['Bt', v(snap?.bt), 'T'], ['Pin', v(snap?.p_input, 1), 'MW'], ['Vloop', v(snap?.v_loop), 'V'],
       ['Te0', v(snap?.te0), 'KEV'], ['POH', v(snap?.p_ohmic, 1), 'MW'], ['Ψ', v(snap?.flux_consumed, 1), 'VS'],

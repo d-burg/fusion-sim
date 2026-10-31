@@ -11,7 +11,8 @@ import Diagnostics, { type Tone } from './Diagnostics'
 import InfoHint from './InfoHint'
 import type { DisplayClock } from './displayClock'
 import type { Phase, Waveform } from './phase'
-import { f1, f2, G, PRESET_WORD, Readout, ReportPanel, STAB, POWER, configWord, hazardPct } from './shared'
+import { f1, f2, G, PRESET_WORD, Readout, ReportPanel, STAB, POWER, configWord } from './shared'
+import { fmtHazard } from '../useDiagnostics'
 import { FIT, Fx, digits8, q95Disp } from '../Fixed'
 import { CONFIG_WORDS, PHASE_WORDS, STATE_WORDS } from './words'
 
@@ -22,6 +23,8 @@ export interface PhoneView {
   phase: Phase
   pulseNo: string
   stateWord: string
+  /** ELMING beside H-MODE (an ELM in the last 0.3 s). */
+  elming: boolean
   stations: Station[]
   T: number
   program: Record<string, Waveform>
@@ -182,11 +185,12 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
       </header>
 
       <div className="kd-ph-state" data-state={stateWord}>
-        <Fx fit={PHASE_WORDS} align="start" className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</Fx>
+        <Fx fit={PHASE_WORDS} align="start" className="kd-phase" data-tone={phase === 'DISRUPTED' ? 'bad' : undefined}>{phase}</Fx>
         {stateWord !== phase && <><span className="kd-dot">.</span><Fx fit={STATE_WORDS} align="start" className="kd-ph-mode">{stateWord}</Fx></>}
+        {stateWord === 'H-MODE' && <Fx fit="ELMING" align="start" className="kd-ph-mode">{view.elming ? 'ELMING' : ''}</Fx>}
         {s?.oh_saturated && <span className="kd-flag">OH SATURATED</span>}
         {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
-        <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={tones.haz}>{valid ? hazardPct(s?.disruption_risk) : '—'}</Fx>{valid ? <> <G>%/s</G></> : ''}</span>
+        <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={tones.haz}>{valid ? fmtHazard(s?.disruption_risk) : '—'}</Fx>{valid ? <> <G>%/s</G></> : ''}</span>
         {hasReport && (
           <button className="kd-ph-report-open" data-on={view.showReport} onClick={view.onToggleReport}>REPORT</button>
         )}

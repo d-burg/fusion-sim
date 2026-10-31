@@ -31,10 +31,10 @@ export function flatTopWindow(ip: Waveform | undefined): [number, number] | null
   return [start, end]
 }
 
-export type Phase = 'STANDBY' | 'RAMP-UP' | 'FLAT-TOP' | 'RAMP-DOWN' | 'END' | 'DISRUPT'
+export type Phase = 'STANDBY' | 'RAMP-UP' | 'FLAT-TOP' | 'RAMP-DOWN' | 'END' | 'DISRUPTED'
 
 export function pulsePhase(win: [number, number] | null, t: number, running: boolean, finished: boolean, snap: Snapshot | null, scrubbing: boolean): Phase {
-  if (snap?.disrupted && (!scrubbing || snap.disruption_phase)) return 'DISRUPT'
+  if (snap?.disrupted && (!scrubbing || snap.disruption_phase)) return 'DISRUPTED'
   if (!running && !finished && t <= 0) return 'STANDBY'
   if (finished && !scrubbing) return 'END'
   if (!win) return 'RAMP-UP'

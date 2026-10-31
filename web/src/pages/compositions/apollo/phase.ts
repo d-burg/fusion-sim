@@ -47,7 +47,7 @@ export function flatTopWindow(ip: Waveform | undefined): [number, number] | null
   return [start, end]
 }
 
-export type Phase = 'STANDBY' | 'RAMP-UP' | 'FLAT-TOP' | 'RAMP-DOWN' | 'COMPLETE' | 'DISRUPT'
+export type Phase = 'STANDBY' | 'RAMP-UP' | 'FLAT-TOP' | 'RAMP-DOWN' | 'END' | 'DISRUPTED'
 
 export function pulsePhase(
   programJson: string,
@@ -57,10 +57,10 @@ export function pulsePhase(
   snap: Snapshot | null,
   scrubbing: boolean,
 ): Phase {
-  if (snap?.disrupted && (!scrubbing || snap.disruption_phase)) return 'DISRUPT'
+  if (snap?.disrupted && (!scrubbing || snap.disruption_phase)) return 'DISRUPTED'
   if (!running && !finished && t <= 0) return 'STANDBY'
   const win = flatTopWindow(parseProgram(programJson).ip)
-  if (finished && !scrubbing) return 'COMPLETE'
+  if (finished && !scrubbing) return 'END'
   if (!win) return 'RAMP-UP'
   if (t < win[0]) return 'RAMP-UP'
   if (t <= win[1]) return 'FLAT-TOP'
