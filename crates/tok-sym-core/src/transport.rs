@@ -499,13 +499,13 @@ impl TransportModel {
         }
 
         // DT isotope confinement enhancement beyond IPB98 M^0.19 scaling.
-        // IPB98 already includes M^0.19 which gives ~1.19× for DT (M=2.5)
-        // vs DD (M=2.0).  JET DTE2/TFTR showed ~40% total improvement,
-        // but much of this is now captured by the calibrated alpha self-
-        // heating (fix 3).  A modest 1.10× residual accounts for effects
-        // beyond alpha heating (e.g., isotope mass effect on turbulence).
-        // Total DT advantage: 1.19 (M^0.19) × 1.10 = 1.31× on tau_E,
-        // plus strong alpha self-heating feedback on Te and W_th.
+        // IPB98 already includes M^0.19, which gives (2.5/2.0)^0.19 = 1.04×
+        // for DT (M=2.5) vs DD (M=2.0).  JET DTE2/TFTR showed ~40% total
+        // improvement, but much of this is now captured by the calibrated
+        // alpha self-heating (fix 3).  A modest 1.10× residual accounts for
+        // effects beyond alpha heating (e.g., isotope mass effect on
+        // turbulence).  Total DT advantage: 1.04 (M^0.19) × 1.10 = 1.15× on
+        // tau_E, plus strong alpha self-heating feedback on Te and W_th.
         if device.mass_number > 2.0 && self.in_hmode {
             self.tau_e *= 1.10;
         }

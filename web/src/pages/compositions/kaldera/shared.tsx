@@ -8,6 +8,7 @@ import type { Tone } from './Diagnostics'
 import type { Waveform } from './phase'
 import { createDisplayClock, type DisplayClock } from './displayClock'
 import { Fx } from '../Fixed'
+import { reportLabel } from '../reportLabel'
 
 export const f2 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(2) : '—')
 export const f1 = (v: number | undefined) => (v !== undefined && isFinite(v) ? v.toFixed(1) : '—')
@@ -53,7 +54,7 @@ export function Readout({ value, fit, unit, caption, hint, tone, link, hot, onHo
       onMouseEnter={link && onHot ? () => onHot(link) : undefined}
       onMouseLeave={link && onHot ? () => onHot(null) : undefined}
     >
-      <div className="kd-ro-v" data-tone={tone}>{fit ? <Fx fit={fit} align="start">{value}</Fx> : value}{unit && value !== '—' ? <span className="kd-ro-u"> {unit}</span> : null}</div>
+      <div className="kd-ro-v" data-tone={tone}>{fit ? <Fx fit={fit} align="start">{value}</Fx> : value}{unit && value !== '—' ? <span className="kd-ro-u kd-g"> {unit}</span> : null}</div>
       <div className="kd-ro-c">{hint ? <InfoHint title={hint.title} content={hint.content}>{caption}</InfoHint> : caption}</div>
     </div>
   )
@@ -132,13 +133,13 @@ export function hazardPct(p: number | undefined): string {
   return v.toFixed(Math.min(5, Math.max(0, 1 - Math.floor(Math.log10(v)))))
 }
 
-/** Report labels with their symbols set as the readouts set them (Greek kept lower-case, subscripts real). */
-export function reportLabel(label: string): ReactNode {
-  const SYM: Record<string, ReactNode> = {
-    'V_loop': <>V<sub>LOOP</sub></>, 'W_th': <>W<sub>TH</sub></>, 'βN': <><G>β</G><sub>N</sub></>,
-    'fGW': <>F<sub>GW</sub></>, 'q95': <>Q<sub>95</sub></>, 'P_fus': <>P<sub>FUS</sub></>, 'Ip': <>I<sub>P</sub></>,
-  }
-  return label.split(' ').map((w, i) => <span key={i}>{i > 0 ? ' ' : ''}{SYM[w] ?? w}</span>)
+/** Units and Greek inside a report value keep their case; the words around them take the caps. */
+const KEEP = /^(s|V|V·s|MA|MJ|MW|kW|Hz)$|[α-ω]/
+function keepUnits(text: string): ReactNode {
+  return text.split(/(\s+)/).map((tok, i) => {
+    const [, pre, core, post] = /^([(<]*)(.*?)([),]*)$/.exec(tok) ?? ['', '', tok, '']
+    return KEEP.test(core) ? <span key={i}>{pre}<G>{core}</G>{post}</span> : tok
+  })
 }
 
 /** End-of-pulse report: achieved against programmed, one hairline-framed panel over the strips. */
@@ -152,9 +153,9 @@ export function ReportPanel({ rows, pulseNo, onClose }: { rows: ReportRow[]; pul
       <div className="kd-report-cols" aria-hidden="true"><span /><span>PROGRAMMED</span><span>ACHIEVED</span></div>
       {rows.map((r, i) => (
         <div key={i} className="kd-report-row">
-          <span className="kd-report-l">{reportLabel(r.label)}</span>
-          <span className="kd-report-p">{r.programmed ?? '—'}</span>
-          <span className="kd-report-a" data-tone={r.status === 'major' ? 'bad' : r.status === 'minor' ? 'warn' : undefined}>{r.achieved}</span>
+          <span className="kd-report-l">{reportLabel(r.label, G)}</span>
+          <span className="kd-report-p">{r.programmed ? keepUnits(r.programmed) : '—'}</span>
+          <span className="kd-report-a" data-tone={r.status === 'major' ? 'bad' : r.status === 'minor' ? 'warn' : undefined}>{keepUnits(r.achieved)}</span>
         </div>
       ))}
     </div>

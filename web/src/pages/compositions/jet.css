@@ -184,6 +184,7 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
 [data-layout="jet"] .jet-ev.sev-invalid .jet-ev-tag, [data-layout="jet"] .jet-ev.sev-invalid .jet-ev-text { color: #800080; }
 [data-layout="jet"] .jet-rep { display: flex; gap: 6px; padding: 0 4px; white-space: nowrap; }
 [data-layout="jet"] .jet-rep-l { width: 104px; flex: none; overflow: hidden; text-overflow: ellipsis; }
+[data-layout="jet"] .jet-rep-l sub { line-height: 0; }
 [data-layout="jet"] .jet-rep-p { width: 84px; flex: none; text-align: right; color: #0000c0; }
 [data-layout="jet"] .jet-rep-a { flex: 1; text-align: right; font-weight: 700; }
 [data-layout="jet"] .jet-rep.sev-minor .jet-rep-a { color: #a06000; }

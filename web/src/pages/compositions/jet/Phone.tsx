@@ -9,6 +9,7 @@ import { PhoneInterlockTable } from './InterlockTable'
 import { flatTopWindow, parseProgram, pulsePhase } from '../kaldera/phase'
 import { PHASE_WORDS } from '../kaldera/words'
 import { Fx, digits8 } from '../Fixed'
+import { reportLabel } from '../reportLabel'
 import { useSettings } from '../../../lib/settingsContext'
 
 /* ─── JET / CODAS on a phone ──────────────────────────────────────
@@ -206,7 +207,7 @@ export default function Phone({ ctx, words, configCode }: { ctx: ControlRoomCont
           <div className="jet-log">
             {ctx.report.map((r) => (
               <div key={r.label} className={`jet-rep sev-${r.status ?? 'info'}`}>
-                <span className="jet-rep-l">{r.label}</span>
+                <span className="jet-rep-l">{reportLabel(r.label)}</span>
                 <span className="jet-rep-p">{r.programmed ?? ''}</span>
                 <span className="jet-rep-a">{r.achieved}</span>
               </div>

@@ -70,7 +70,7 @@ const STEPS: TutorialStep[] = [
         <p>
           This is a <b>poloidal cross-section</b> of the tokamak: imagine
           slicing the donut vertically. You're looking at a 2D slice of the
-          3D torus, drawn to scale in R and Z (metres on the axes).
+          3D torus, drawn to scale in R and Z (meters on the axes).
         </p>
 
         <H>Flux surfaces</H>
@@ -90,15 +90,16 @@ const STEPS: TutorialStep[] = [
           poloidal magnetic field is zero. Field lines outside the
           separatrix are "open" and guide escaping particles and heat
           downward to the <b>divertor</b> target plates. The caption gives the
-          configuration (LSN, USN, DN or LIMITED) and the toroidal field B<sub>T</sub>.
+          configuration (LSN, USN, DN or LIMITED) and the toroidal field B<sub>t</sub>.
         </p>
 
         <H>Plasma shape</H>
         <p>
           The shape of the plasma cross-section is characterized by its
           <b> elongation (κ)</b>, how tall it is versus wide, and its
-          <b> triangularity (δ)</b>, how D-shaped it is. Elongated,
-          D-shaped plasmas are more stable and confine energy better.
+          <b> triangularity (δ)</b>, how D-shaped it is. Elongation and
+          positive δ raise the β limit and confinement at fixed q<sub>95</sub>;
+          elongated plasmas are vertically unstable and held by feedback.
           The shape is controlled by currents in external shaping coils.
         </p>
 
@@ -123,9 +124,9 @@ const STEPS: TutorialStep[] = [
         <p>
           These strips show the <b>time evolution</b> of the pulse, like a
           strip-chart recorder in a real control room: the plasma
-          current <b>I<sub>P</sub></b>, the line-averaged density <b>N̄<sub>E</sub></b> with
-          the Greenwald fraction <b>F<sub>GW</sub></b>, the stored energy <b>W<sub>TH</sub></b>,
-          the input power <b>P<sub>IN</sub></b> with the radiated power <b>P<sub>RAD</sub></b>,
+          current <b>I<sub>p</sub></b>, the line-averaged density <b>n̄<sub>e</sub></b> with
+          the Greenwald fraction <b>f<sub>GW</sub></b>, the stored energy <b>W<sub>th</sub></b>,
+          the input power <b>P<sub>in</sub></b> with the radiated power <b>P<sub>rad</sub></b>,
           and the <b>D<sub>α</sub></b> emission whose spikes are ELMs.
         </p>
 
@@ -172,21 +173,22 @@ const STEPS: TutorialStep[] = [
 
         <H>Core parameters</H>
         <p>
-          The plasma current <b>I<sub>P</sub></b> (MA), line-averaged
-          density <b>N̄<sub>E</sub></b>, stored thermal energy <b>W<sub>TH</sub></b> (MJ),
-          central electron temperature <b>T<sub>E0</sub></b> (keV), confinement
+          The plasma current <b>I<sub>p</sub></b> (MA), line-averaged
+          density <b>n̄<sub>e</sub></b>, stored thermal energy <b>W<sub>th</sub></b> (MJ),
+          central electron temperature <b>T<sub>e0</sub></b> (keV), confinement
           time <b>τ<sub>E</sub></b> (s), confinement quality <b>H<sub>98</sub></b> and
-          loop voltage <b>V<sub>LOOP</sub></b>. Together these define the
+          loop voltage <b>V<sub>loop</sub></b>. Together these define the
           thermodynamic state of the plasma. You want high temperature and
           density for fusion, but the plasma has limits on how far you can push.
-          The toroidal field B<sub>T</sub> is in the equilibrium caption.
+          The toroidal field B<sub>t</sub> is in the equilibrium caption.
         </p>
 
         <H>Power balance</H>
         <p>
           Power goes <i>in</i> through ohmic heating (resistive), neutral beam injection
-          (NBI), and electron cyclotron heating (ECH), summed as <b>P<sub>IN</sub></b>. Part of it
-          comes <i>out</i> as radiation, <b>P<sub>RAD</sub></b>; the rest is conducted to the edge.
+          (NBI), electron cyclotron heating (ECH), ion cyclotron heating (ICH) and, in D-T,
+          alpha heating, summed as <b>P<sub>in</sub></b>. Part of it
+          comes <i>out</i> as radiation, <b>P<sub>rad</sub></b>; the rest is conducted to the edge.
           The balance between input and output determines whether the plasma is heating
           up, cooling down, or in steady state. The P IN strip below draws both.
         </p>
@@ -232,9 +234,10 @@ const STEPS: TutorialStep[] = [
           All the power that crosses the separatrix flows along field lines
           in a thin <b>scrape-off layer</b> (SOL), typically only a few
           millimeters wide, and slams into the divertor target plates.
-          This concentrates megawatts of power onto a tiny area, creating
-          heat fluxes comparable to a rocket nozzle or the surface of the
-          Sun (~10 MW/m²).
+          This concentrates megawatts of power onto a tiny area. Unmitigated,
+          the target heat flux reaches 10 MW/m² and more; actively cooled
+          tungsten tolerates about 10 MW/m² in steady state, and designs
+          target 5–10 MW/m².
         </p>
 
         <H>Reading the bar</H>
@@ -285,14 +288,16 @@ const STEPS: TutorialStep[] = [
 
         <H>What you're seeing</H>
         <p>
-          The glowing column in the center is the <b>plasma</b>. The color
-          and intensity reflect the plasma state: it glows brighter with
-          higher temperature and density.
+          The bright limb is the <b>plasma edge</b>. Visible light comes from
+          the cool boundary and divertor (recycling and impurity line
+          emission); the hot core is dark in the visible. The edge brightens
+          with density and radiated power.
         </p>
         <p>
-          The structures at the bottom are the <b>divertor plates</b>. They
-          change color based on the heat flux — from cool blue through cyan
-          and yellow to dangerous red/white at high heat loads. This is the
+          The structures at the bottom are the <b>divertor plates</b>. The
+          strike bands glow in the recycling-light color and brighten with
+          heat flux; detachment dims and broadens them. Above about 550 °C the
+          tiles also incandesce, red toward white as they heat. This is the
           same heat flux the Q⊥ DIVERTOR bar reports, visualized spatially.
         </p>
 

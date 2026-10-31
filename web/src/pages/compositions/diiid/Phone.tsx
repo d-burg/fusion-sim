@@ -12,6 +12,7 @@ import { flatTopWindow, parseProgram, pulsePhase } from '../kaldera/phase'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
 import { Fx, q95Disp } from '../Fixed'
+import { reportLabel } from '../reportLabel'
 import { useSettings } from '../../../lib/settingsContext'
 
 const SEV: Record<string, string> = { info: '#bbbbbb', ok: GREEN, minor: YELLOW, major: RED, invalid: MAGENTA }
@@ -189,9 +190,9 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
       <div className="dcp-ticker">
         <span className="dc-ticker-k">{ctx.pulseNumber !== null ? `#${ctx.pulseNumber}` : '--'}</span>
         {ctx.finished && ctx.report
-          ? ctx.report.slice(0, 6).map((r, i) => (
+          ? ctx.report.map((r, i) => (
             <span key={i} className="dc-ev" style={{ color: r.status === 'major' ? RED : r.status === 'minor' ? YELLOW : '#bbbbbb' }}>
-              {r.label} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
+              {reportLabel(r.label)} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
             </span>
           ))
           : lastEvents.map((e) => (

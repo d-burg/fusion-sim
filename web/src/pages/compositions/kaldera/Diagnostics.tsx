@@ -5,6 +5,7 @@ import { divertorInfo, neutronDiagnosticInfo } from '../../../components/infoCon
 import { fmtPfus, sci, useDiagnostics, type DiagTone } from '../useDiagnostics'
 import InfoHint from './InfoHint'
 import { FIT, Fx, N_WORDS, REGIME_WORDS, T_WORDS } from '../Fixed'
+import { G } from './shared'
 
 export type Tone = DiagTone
 
@@ -37,15 +38,15 @@ export default function Diagnostics({ snapshot, valid, compact }: { snapshot: Sn
   const lqV = <Fx fit={FIT.lambdaQ}>{valid ? d.lambdaQ.toFixed(1) : '—'}</Fx>
   const fdV = <Fx fit={FIT.fDet}>{valid ? d.fDet.toFixed(2) : '—'}</Fx>
   const regimeW = <Fx fit={REGIME_WORDS} data-tone={d.regimeTone}>{d.regime}</Fx>
-  const divDetail = <>{qV} MW/M² . <span className="kd-g">λ</span><sub>Q</sub> {lqV} MM . F<sub>DET</sub> {fdV}</>
+  const divDetail = <>{qV} <G>MW/m²</G> . <G>λ</G><sub>q</sub> {lqV} <G>mm</G> . <G>f</G><sub>det</sub> {fdV}</>
   const divRight = <>{divDetail} . {regimeW}</>
   const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
   const tWordW = <Fx fit={T_WORDS} data-tone={d.tTone}>{tWord}</Fx>
   const tV = <Fx fit={FIT.tSurf} align={lead}>{d.tSurf.toFixed(0)}</Fx>
   const tRight = <>{tV} °C . W . {tWordW}</>
-  const pFusStr = d.pFus > 0.001 ? fmtPfus(d.pFus).toUpperCase() : '— MW'
+  const pFusStr = d.pFus > 0.001 ? fmtPfus(d.pFus) : '— MW'
   const nWordW = <Fx fit={N_WORDS} data-tone={d.active ? 'ok' : undefined}>{d.active ? 'ACTIVE' : 'IDLE'}</Fx>
-  const neuDetail = <><Fx fit={FIT.sci} align={lead}>{sci(d.rate)}</Fx> N/S . Q <Fx fit={FIT.Q} data-tone={d.qPlasma >= 1 ? 'ok' : undefined}>{d.rate > 0 ? formatQ(d.qPlasma).toUpperCase() : '—'}</Fx> . P<sub>FUS</sub> <Fx fit={['888.8 MW', '888 KW']} align="start">{pFusStr}</Fx></>
+  const neuDetail = <><Fx fit={FIT.sci} align={lead}>{sci(d.rate)}</Fx> <G>n/s</G> . Q <Fx fit={FIT.Q} data-tone={d.qPlasma >= 1 ? 'ok' : undefined}>{d.rate > 0 ? formatQ(d.qPlasma).toUpperCase() : '—'}</Fx> . P<sub>fus</sub> <Fx fit={['888.8 MW', '888 kW']} align="start" className="kd-g">{pFusStr}</Fx></>
   const neuRight = <>{neuDetail} . {nWordW}</>
 
   // Phone: the state word sits at the right of the label, the figures on their own line under the bar.
@@ -53,7 +54,7 @@ export default function Diagnostics({ snapshot, valid, compact }: { snapshot: Sn
     return (
       <div className="kd-bars" data-compact="true">
         <Bar
-          label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>Q⊥ DIVERTOR</InfoHint>}
+          label={<InfoHint title="Divertor thermal loading" content={divertorInfo}><G>q</G>⊥ DIVERTOR</InfoHint>}
           fill={d.qFill}
           tone={d.qTone}
           right={regimeW}
@@ -82,7 +83,7 @@ export default function Diagnostics({ snapshot, valid, compact }: { snapshot: Sn
   return (
     <div className="kd-bars">
       <Bar
-        label={<InfoHint title="Divertor thermal loading" content={divertorInfo}>Q⊥ DIVERTOR</InfoHint>}
+        label={<InfoHint title="Divertor thermal loading" content={divertorInfo}><G>q</G>⊥ DIVERTOR</InfoHint>}
         fill={d.qFill}
         tone={d.qTone}
         right={divRight}

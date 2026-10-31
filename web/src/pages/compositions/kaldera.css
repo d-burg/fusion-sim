@@ -52,7 +52,7 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 [data-layout="kaldera"] * { box-sizing: border-box; }
 [data-layout="kaldera"] .kd-g, .kd-pop[data-layout="kaldera"] .kd-g { text-transform: none; }
 [data-layout="kaldera"] button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-[data-layout="kaldera"] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
+[data-layout="kaldera"] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; text-transform: none; }
 
 
 /* ── nav row ──────────────────────────────────────────────────────── */

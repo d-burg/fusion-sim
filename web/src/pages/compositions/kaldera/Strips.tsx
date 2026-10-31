@@ -248,7 +248,7 @@ export default function Strips({ strips, stations, duration, clock, scrubTime, o
       const x = X(Math.min(s.t, T))
       const last = i === stations.length - 1
       g.textAlign = i === 0 ? 'left' : last ? 'right' : 'center'
-      g.fillText(`${s.t.toFixed(2)}${last ? ' S' : ''}`, i === 0 ? 0 : last ? W : x, ay + 5)
+      g.fillText(`${s.t.toFixed(2)}${last ? ' s' : ''}`, i === 0 ? 0 : last ? W : x, ay + 5)
     })
 
   }, [strips, stations, duration, scrubTime, hot, fontPx])

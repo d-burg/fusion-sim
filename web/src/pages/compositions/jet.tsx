@@ -8,6 +8,7 @@ import InterlockTable from './jet/InterlockTable'
 import Phone from './jet/Phone'
 import { usePhone } from './usePhone'
 import { Fx, digits8 } from './Fixed'
+import { reportLabel } from './reportLabel'
 import './jet.css'
 
 /* ─── JET / CODAS wall, light direction ──────────────────────────
@@ -245,7 +246,7 @@ function EventList({ ctx }: { ctx: ControlRoomContext }) {
           <div className="jet-report-h">REPORT  prog | achieved</div>
           {ctx.report.map((r) => (
             <div key={r.label} className={`jet-rep sev-${r.status ?? 'info'}`}>
-              <span className="jet-rep-l">{r.label}</span>
+              <span className="jet-rep-l">{reportLabel(r.label)}</span>
               <span className="jet-rep-p">{r.programmed ?? ''}</span>
               <span className="jet-rep-a">{r.achieved}</span>
             </div>

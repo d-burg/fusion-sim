@@ -119,7 +119,7 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
     <>
       <b>Normalized beta (&beta;<sub>N</sub>)</b> &mdash; the ratio of
       plasma kinetic pressure to magnetic pressure, normalized to remove
-      trivial dependences: &beta;<sub>N</sub> = &beta;<sub>t</sub>&thinsp;aB<sub>t</sub>/I<sub>p</sub>.
+      trivial dependences: &beta;<sub>N</sub> = &beta;<sub>t</sub>[%]&thinsp;a[m]&thinsp;B<sub>t</sub>[T]/I<sub>p</sub>[MA].
       The Troyon stability limit is &beta;<sub>N</sub> &asymp; 2.8; exceeding
       it risks pressure-driven disruptions.{' '}
       <Cite doi="10.1088/0741-3335/26/1A/209">Troyon et al., PPCF 26, 209 (1984)</Cite>.
@@ -128,10 +128,10 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
   li: (
     <>
       <b>Internal inductance (l<sub>i</sub>)</b> &mdash; a dimensionless
-      measure of current-profile peakedness. l<sub>i</sub> &asymp; 1 indicates
-      a broad, stable profile. Very peaked profiles (high l<sub>i</sub>)
-      can trigger sawtooth crashes; very broad profiles may approach the
-      kink stability boundary.
+      measure of current-profile peakedness; l<sub>i</sub> &asymp; 0.7&ndash;1
+      is typical. Low l<sub>i</sub> (broad profile) lowers the no-wall
+      &beta; and kink limits; high l<sub>i</sub> (peaked profile) favors
+      sawteeth and, at fixed elongation, reduces the vertical-stability margin.
     </>
   ),
   d_alpha: (
@@ -167,7 +167,7 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
     <>
       <b>Greenwald fraction (f<sub>GW</sub>)</b> &mdash; the ratio of
       line-averaged density to the empirical density limit
-      n<sub>GW</sub> = I<sub>p</sub>/(&pi;a&sup2;). Operating above
+      n<sub>GW</sub>[10<sup>20</sup>&nbsp;m<sup>&minus;3</sup>] = I<sub>p</sub>[MA]/(&pi;a&sup2;[m&sup2;]). Operating above
       f<sub>GW</sub> &asymp; 0.85&ndash;1.0 risks a radiative collapse
       and density-limit disruption.{' '}
       <Cite doi="10.1088/0741-3335/44/8/201">Greenwald, PPCF 44, R27 (2002)</Cite>.
@@ -230,7 +230,8 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
     <>
       <b>Input power (P<sub>in</sub>)</b> &mdash; total heating power
       delivered to the plasma: P<sub>in</sub> = P<sub>OH</sub> +
-      P<sub>NBI</sub> + P<sub>ECH</sub>. The threshold for L&ndash;H
+      P<sub>NBI</sub> + P<sub>ECH</sub> + P<sub>ICH</sub> + P<sub>&alpha;</sub>
+      (P<sub>&alpha;</sub> in D-T only). The threshold for L&ndash;H
       transition scales with density and magnetic field. In the
       steady state, P<sub>in</sub> &asymp; P<sub>loss</sub> + P<sub>rad</sub>.
     </>
@@ -252,8 +253,9 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
       power from D-T (or D-D) fusion reactions. For D-T:
       P<sub>fus</sub> = 5 &times; P<sub>&alpha;</sub> since the 3.52 MeV alpha
       carries 20% of the 17.59 MeV total reaction energy. The ITER design
-      target is P<sub>fus</sub> &asymp; 500 MW at Q = 10. JET achieved a
-      record 11 MW during DTE2 (2021).
+      target is P<sub>fus</sub> &asymp; 500 MW at Q = 10. JET reached a
+      16 MW peak (DTE1, 1997) and 59 MJ over 5 s (DTE2, 2021), raised to
+      69 MJ in DTE3 (2023).
     </>
   ),
   p_loss: (
@@ -290,12 +292,22 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
       inductive flat-top on a real machine.
     </>
   ),
+  i_ni: (
+    <>
+      <b>Non-inductive current (I<sub>ni</sub>)</b> &mdash; the part of
+      I<sub>p</sub> the solenoid need not drive: bootstrap current
+      (f<sub>bs</sub> = C<sub>bs</sub>(&radic;&epsilon;&thinsp;&beta;<sub>p</sub>)<sup>1.3</sup>,
+      ITER Physics Design Guidelines) plus beam- and EC-driven current,
+      I<sub>cd</sub> &prop; T<sub>e</sub>P<sub>cd</sub>/(n&#x0304;<sub>e</sub>R<sub>0</sub>).
+      ICH heats only. The ohmic circuit drives I<sub>p</sub> &minus; I<sub>ni</sub>.
+    </>
+  ),
   impurity_fraction: (
     <>
       <b>Impurity fraction (f<sub>Imp</sub>)</b> &mdash; the fraction of
       impurity ions (carbon, tungsten, etc.) relative to the main
       fuel species. Impurities dilute the fuel and increase
-      radiative losses. Wall conditioning (boronization, glow pulse
+      radiative losses. Wall conditioning (boronization, glow-discharge
       cleaning) is used to minimize impurity influx.
     </>
   ),
@@ -371,7 +383,7 @@ export const plasmaParamsInfo = (
     <Heading>T<sub>e0</sub> &mdash; Central Temperature</Heading>
     <p>
       The peak electron temperature (keV) at the magnetic axis.
-      Fusion reactivity peaks near 15&ndash;20 keV for D-T fuel.
+      At fixed pressure, D-T fusion power (&prop; ⟨&sigma;v⟩/T&sup2;) peaks near 13&ndash;15 keV.
       Central temperatures of 10+ keV are needed for net energy gain.
     </p>
     <Heading>n&#x0304;<sub>e</sub> &mdash; Average Density</Heading>
@@ -445,10 +457,10 @@ export const stabilityInfo = (
     </p>
     <Heading>l<sub>i</sub> &mdash; Internal Inductance</Heading>
     <p>
-      Indicates current profile shape. Very low l<sub>i</sub>
-      (broad current) can approach the vertical stability boundary;
-      very high l<sub>i</sub> (peaked current) increases sawtooth
-      activity and may destabilize tearing modes.
+      Indicates current profile shape. Low l<sub>i</sub> (broad current)
+      lowers the no-wall &beta; and kink limits; high l<sub>i</sub> (peaked
+      current) increases sawtooth activity, may destabilize tearing modes
+      and, at fixed elongation, reduces the vertical-stability margin.
     </p>
     <Heading>V<sub>loop</sub> &mdash; Loop Voltage</Heading>
     <p>
@@ -492,9 +504,10 @@ export const divertorInfo = (
       &lambda;<sub>q</sub> is set by cross-field transport and follows the{' '}
       <Cite doi="10.1088/0029-5515/53/9/093031">Eich scaling</Cite>:
       &lambda;<sub>q</sub> &prop; B<sub>pol</sub><sup>&minus;0.9</sup>,
-      giving widths of only 1&ndash;5 mm on large tokamaks. The resulting
-      heat flux can reach 10&ndash;20 MW/m&sup2; &mdash; comparable to the
-      surface of the Sun.
+      giving widths of only 1&ndash;5 mm on large tokamaks. Unmitigated,
+      the target heat flux can reach 10&ndash;20 MW/m&sup2;; actively cooled
+      tungsten tolerates about 10 MW/m&sup2; in steady state, and designs
+      target 5&ndash;10 MW/m&sup2;.
     </p>
 
     <Heading>Detachment</Heading>
@@ -527,10 +540,12 @@ export const divertorInfo = (
     <Heading>Surface Temperature</Heading>
     <p>
       The divertor tile surface temperature is determined by the heat flux,
-      the tile armor thickness, thermal conductivity, and the coolant
-      temperature. For tungsten monoblock designs (ITER, JET-ILW), the
-      coolant is pressurized water at ~150&deg;C. For carbon-wall machines
-      (DIII-D), water cooling at near-ambient temperature is used.
+      the tile armor thickness, thermal conductivity, and the cooling.
+      ITER&rsquo;s tungsten monoblocks are actively cooled by pressurized
+      water (~100&deg;C inlet) and settle at a steady temperature. The
+      JET-ILW divertor (bulk-W lamellae and W-coated CFC) and DIII-D&rsquo;s
+      graphite tiles are inertially cooled: the surface heats through the
+      pulse and the heat is removed between pulses.
     </p>
 
     <Heading>Tungsten Recrystallization</Heading>
@@ -668,9 +683,10 @@ export const powerBalanceInfo = (
       Self-heating from 3.52 MeV alpha particles produced by D-T fusion
       reactions. The alphas are confined by the magnetic field and
       thermalize in the plasma, transferring their energy to the bulk
-      ions and electrons. This is the key term that enables Q &gt; 1:
-      when P<sub>&alpha;</sub> exceeds the external heating, the plasma
-      approaches ignition. Shown only for D-T fuel.
+      ions and electrons. P<sub>&alpha;</sub> = P<sub>ext</sub> at Q = 5,
+      the burning-plasma threshold; ignition is P<sub>&alpha;</sub> alone
+      balancing the losses (P<sub>ext</sub> = 0, Q &rarr; &infin;). Shown
+      only for D-T fuel.
     </p>
     <Heading>P<sub>rad</sub> &mdash; Radiated Power</Heading>
     <p>
@@ -755,7 +771,7 @@ export const eventLogInfo = (
       length, I<sub>p</sub> flat-top, peak W<sub>th</sub> and β<sub>N</sub>,
       max f<sub>GW</sub>, min q<sub>95</sub>, H<sub>98</sub>, time in H-mode,
       ELM count, peak fusion power and Q, and whether it disrupted. The
-      previous pulse's traces stay on the trace panel as a grey reference.
+      previous pulse's traces stay on the trace panel as a gray reference.
     </p>
   </>
 )

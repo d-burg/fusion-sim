@@ -14,6 +14,7 @@ import { usePhone } from './usePhone'
 import { reconstructionValid } from '../../lib/pulseLog'
 import { formatQ } from '../../lib/fusionPhysics'
 import { q95Disp } from './Fixed'
+import { reportLabel, disruptionFirst } from './reportLabel'
 import './diiid.css'
 
 const SEV: Record<string, string> = { info: '#bbbbbb', ok: GREEN, minor: YELLOW, major: RED, invalid: MAGENTA }
@@ -42,6 +43,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
   const pulse = ctx.pulseNumber === null ? '      ' : String(ctx.pulseNumber).padStart(6, ' ')
   const remaining = ctx.duration - ctx.time
   const lastEvents = ctx.events.slice(-4).reverse()
+  const report = ctx.finished && !!ctx.report
   // The green monospace scalar block under the status table, as on the wall's big screen.
   const f = (v: number | undefined, d = 2) => (v === undefined || !isFinite(v) ? '--' : v.toFixed(d))
   // Readouts that the wall already plots (NEBAR, WTH, TE0, LI) are left to the strip charts; the divertor and neutron
@@ -120,12 +122,13 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
         </div>
       </div>
 
-      <div className="dc-ticker">
+      {/* the report is longer than the line: it scrolls sideways in place (wheel or swipe) */}
+      <div key={report ? 'report' : 'events'} className="dc-ticker" data-report={report || undefined} onWheel={report ? (e) => { e.currentTarget.scrollLeft += e.deltaY } : undefined}>
         <span className="dc-ticker-k">{ctx.pulseNumber !== null ? `#${ctx.pulseNumber}` : '--'}</span>
         {ctx.finished && ctx.report
-          ? ctx.report.slice(0, 8).map((r, i) => (
+          ? disruptionFirst(ctx.report).map((r, i) => (
             <span key={i} className="dc-ev" style={{ color: r.status === 'major' ? RED : r.status === 'minor' ? YELLOW : '#bbbbbb' }}>
-              {r.label} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
+              {reportLabel(r.label)} {r.achieved}{r.programmed ? ` / ${r.programmed}` : ''}
             </span>
           ))
           : lastEvents.map((e) => (

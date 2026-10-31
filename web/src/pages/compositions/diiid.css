@@ -131,6 +131,9 @@ html[data-theme="diiid"] body { background: #000; }
 [data-layout="diiid"] .dc-ticker-k { color: #00ffff; font-weight: 700; margin-right: 14px; }
 [data-layout="diiid"] .dc-ev { margin-right: 22px; }
 [data-layout="diiid"] .dc-ev::before { content: '▌'; color: #444; margin-right: 6px; }
+[data-layout="diiid"] .dc-ticker[data-report] { overflow-x: auto; scrollbar-width: none; }
+[data-layout="diiid"] .dc-ticker[data-report]::-webkit-scrollbar { display: none; }
+[data-layout="diiid"] .dc-ev sub { line-height: 0; }
 
 /* ── console key row ──────────────────────────────── */
 [data-layout="diiid"] .dc-console {

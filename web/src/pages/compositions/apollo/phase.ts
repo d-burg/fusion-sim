@@ -76,3 +76,9 @@ export function clock(seconds: number): string {
   const ms = Math.floor((rem - whole) * 1000)
   return `${String(m).padStart(2, '0')}:${String(whole).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
 }
+
+// The CRT has no subscripts: report symbols take the telemetry column's names, the words are in caps.
+const CRT_SYM: Record<string, string> = { 'V_loop': 'Vloop', 'W_th': 'Wth', 'P_fus': 'Pfus', 'βN': 'βN', 'fGW': 'fGW', 'q95': 'q95', 'Ip': 'Ip' }
+
+/** A report label as the CRT prints it, e.g. "Peak W_th" → "PEAK Wth". */
+export const crtLabel = (label: string) => label.split(' ').map((w) => CRT_SYM[w] ?? w.toUpperCase()).join(' ')

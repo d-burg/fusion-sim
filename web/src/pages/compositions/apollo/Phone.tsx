@@ -7,7 +7,7 @@ import SevenSeg from '../diiid/SevenSeg'
 import BoardPlot, { type Series } from './BoardPlot'
 import LampKey, { type Lamp } from './LampKey'
 import { PhoneDiagLines } from './DiagLines'
-import { clock, flatTopWindow, interpWaveform, parseProgram, pulsePhase, type Waveform } from './phase'
+import { clock, crtLabel, flatTopWindow, interpWaveform, parseProgram, pulsePhase, type Waveform } from './phase'
 import { useDiagnostics } from '../useDiagnostics'
 import { reconstructionValid } from '../../../lib/pulseLog'
 import { formatQ } from '../../../lib/fusionPhysics'
@@ -297,7 +297,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
           {showReport && ctx.report ? (
             ctx.report.map((r, i) => (
               <div key={i} className="ap-log-line" style={{ color: r.status === 'major' ? SEV.major : r.status === 'minor' ? SEV.minor : undefined }}>
-                <span className="app-log-k">{r.label}</span><span className="ap-v">{r.programmed ?? ''}</span><span className="ap-v">{r.achieved}</span>
+                <span className="app-log-k">{crtLabel(r.label)}</span><span className="ap-v">{r.programmed ?? ''}</span><span className="ap-v">{r.achieved}</span>
               </div>
             ))
           ) : logLines.length === 0 ? (

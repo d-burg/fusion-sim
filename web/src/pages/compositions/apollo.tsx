@@ -6,7 +6,8 @@ import PortView from '../../components/portview'
 import SevenSeg from './diiid/SevenSeg'
 import BoardPlot, { type Series } from './apollo/BoardPlot'
 import LampKey, { type Lamp } from './apollo/LampKey'
-import { clock, interpWaveform, parseProgram, pulsePhase, type Waveform } from './apollo/phase'
+import { clock, crtLabel, interpWaveform, parseProgram, pulsePhase, type Waveform } from './apollo/phase'
+import { disruptionFirst } from './reportLabel'
 import DiagLines from './apollo/DiagLines'
 import Phone from './apollo/Phone'
 import { usePhone } from './usePhone'
@@ -298,11 +299,12 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
           <div className="ap-tile ap-log">
             <div className="ap-plot-title">{showReport && ctx.report ? 'REPORT' : 'LOG'}</div>
             <div className="ap-plot-num">13</div>
-            <div className="ap-log-lines">
+            {/* the report is taller than the screen: it scrolls in place */}
+            <div key={showReport && ctx.report ? 'report' : 'log'} className="ap-log-lines" data-report={(showReport && !!ctx.report) || undefined}>
               {showReport && ctx.report ? (
-                ctx.report.slice(0, 5).map((r, i) => (
+                disruptionFirst(ctx.report).map((r, i) => (
                   <div key={i} className="ap-log-line" style={{ color: r.status === 'major' ? sevColor.major : r.status === 'minor' ? sevColor.minor : undefined }}>
-                    <span className="ap-log-t">{r.label}</span><span className="ap-v">{r.programmed ?? ''}</span><span className="ap-v">{r.achieved}</span>
+                    <span className="ap-log-k">{crtLabel(r.label)}</span><span className="ap-v">{r.programmed ?? ''}</span><span className="ap-v">{r.achieved}</span>
                   </div>
                 ))
               ) : logLines.length === 0 ? (
