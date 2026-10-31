@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { StandardNav } from './DeviceSelect'
+import './standard.css'
 
 /* ─────────────────────────────────────────────
  * Bibliography & Physics Reference
@@ -189,30 +191,47 @@ function RefTag({ id }: { id: string }) {
   return (
     <a
       href={`#ref-${id}`}
-      className="text-cyan-400 hover:text-cyan-300 text-xs align-super ml-0.5 no-underline"
+      className="sp-ref"
     >
       [{REFERENCES.findIndex((r) => r.id === id) + 1}]
     </a>
   )
 }
 
+const SECTION_TITLES: string[] = [
+  "MHD Equilibrium: Grad-Shafranov Equation",
+  "Energy Confinement: IPB98(y,2) Scaling",
+  "L-H Transition Power Threshold",
+  "Safety Factor q₉₅",
+  "Greenwald Density Limit",
+  "Troyon Beta Limit",
+  "Spitzer Resistivity and Ohmic Heating",
+  "Radiation Losses",
+  "0D Power Balance Transport Model",
+  "Fusion Reactivity (Bosch-Hale)",
+  "Fusion Power and Q",
+  "Scrape-Off Layer and Divertor Heat Flux",
+  "Divertor Detachment Model",
+  "Divertor Surface Temperature (0D Lumped Thermal Model)",
+  "Radial Profiles: H-Mode Pedestal (OMFIT/Tanh)",
+  "Radial Profiles: L-Mode (Parabolic)",
+  "Internal Inductance",
+  "Density Evolution",
+  "Edge-Localized Modes (ELMs)",
+  "Disruption Risk Model",
+  "Disruption Sequence (4-Phase)",
+  "Synthetic Diagnostic Signals",
+  "Device Geometry",
+]
+
 /* ── Section wrapper ── */
-function Section({
-  number,
-  title,
-  children,
-}: {
-  number: number
-  title: string
-  children: React.ReactNode
-}) {
+function Section({ number, children }: { number: number; children: React.ReactNode }) {
   return (
-    <section className="mb-10">
-      <h2 className="text-lg font-bold text-white mb-3 flex items-baseline gap-2">
-        <span className="text-cyan-500 font-mono text-sm">{number}.</span>
-        {title}
+    <section className="sp-bib-sec" id={`sec-${number}`}>
+      <h2 className="sp-head sp-bib-h2">
+        <span className="sp-num">{String(number).padStart(2, '0')}</span> . {SECTION_TITLES[number - 1]}
       </h2>
-      <div className="text-gray-300 text-sm leading-relaxed space-y-3 pl-1">{children}</div>
+      <div className="sp-bib-body">{children}</div>
     </section>
   )
 }
@@ -220,7 +239,7 @@ function Section({
 /* ── Equation block ── */
 function Eq({ children }: { children: React.ReactNode }) {
   return (
-    <div className="my-3 px-4 py-2.5 bg-gray-900/80 border border-gray-700/50 rounded font-mono text-sm text-cyan-200 overflow-x-auto">
+    <div className="sp-eq font-mono">
       {children}
     </div>
   )
@@ -228,31 +247,37 @@ function Eq({ children }: { children: React.ReactNode }) {
 
 export default function Bibliography() {
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-200">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-gray-900 border-b border-gray-800 px-6 sm:px-10 py-3 flex items-center justify-between">
-        <Link
-          to="/"
-          className="text-sm text-gray-500 hover:text-cyan-400 transition-colors"
-        >
-          ← Back to simulator
-        </Link>
-        <span className="font-mono text-xs tracking-[0.16em] text-gray-300">
-          fusionsimulator<span className="text-gray-600">.io</span>
-        </span>
-      </header>
+    <div data-page="bibliography" className="page-enter">
+      <StandardNav active="bibliography" />
 
-      <main className="max-w-3xl mx-auto px-6 sm:px-10 py-12">
+      <main className="sp-bib-main">
+        {/* Contents: the section numbers and titles, as a tracked-caps list */}
+        <nav className="sp-toc" aria-label="Contents">
+          <div className="sp-head sp-toc-head">CONTENTS</div>
+          <ol className="sp-toc-list">
+            {SECTION_TITLES.map((t, i) => (
+              <li key={t}>
+                <a href={`#sec-${i + 1}`} className="sp-toc-link">
+                  <span className="sp-num">{String(i + 1).padStart(2, '0')}</span> . {t}
+                </a>
+              </li>
+            ))}
+            <li><a href="#references" className="sp-toc-link"><span className="sp-num">24</span> . References</a></li>
+          </ol>
+        </nav>
+
+        <article className="sp-bib-col">
         {/* Page header */}
-        <div className="mb-10">
-          <h1 className="text-3xl font-bold text-white mb-3">Physics bibliography</h1>
-          <p className="text-gray-400 text-sm leading-relaxed">
+        <div className="sp-bib-intro">
+          <h1 className="sp-bib-h1">Physics bibliography</h1>
+          <div className="sp-bib-rule" aria-hidden="true" />
+          <p className="sp-bib-lede">
             Complete reference of every equation, scaling law, approximation, and formalism
             implemented in the simulator. This page is intended as a companion for students
             and researchers who want to understand the physics behind each panel.
           </p>
-          <div className="mt-5 border-l border-gray-800 pl-4 py-1 text-gray-500 text-xs leading-relaxed max-w-2xl">
-            <span className="font-medium text-gray-300">Note:</span>
+          <div className="sp-note">
+            <span className="sp-note-cap">Note</span>
             {' '}This simulator uses a zero-dimensional (0D) global power-balance transport
             model with analytic equilibrium solutions. Results are approximate and intended for
             qualitative educational use. They should not be used for engineering design or
@@ -261,7 +286,7 @@ export default function Bibliography() {
         </div>
 
         {/* ─── 1. MHD Equilibrium ─── */}
-        <Section number={1} title="MHD Equilibrium: Grad-Shafranov Equation">
+        <Section number={1}>
           <p>
             The magnetic equilibrium is computed using the analytic Cerfon-Freidberg solution to the
             Grad-Shafranov (GS) equation under the Solov'ev ansatz (constant p' and FF').<RefTag id="cerfon2010" />
@@ -299,7 +324,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 2. Energy Confinement ─── */}
-        <Section number={2} title="Energy Confinement: IPB98(y,2) Scaling">
+        <Section number={2}>
           <p>
             The energy confinement time in H-mode is computed from the ITER Physics Basis
             IPB98(y,2) ELMy H-mode scaling law:<RefTag id="iter1999" />
@@ -347,7 +372,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 3. L-H Transition ─── */}
-        <Section number={3} title="L-H Transition Power Threshold">
+        <Section number={3}>
           <p>
             The minimum power required to access H-mode is estimated from the Martin 2008 scaling:<RefTag id="martin2008" /><RefTag id="wagner1982" />
           </p>
@@ -362,7 +387,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 4. Safety Factor ─── */}
-        <Section number={4} title="Safety Factor q₉₅">
+        <Section number={4}>
           <p>
             The edge safety factor at the 95% flux surface is estimated from the cylindrical
             approximation with a shape correction:<RefTag id="wesson2011" />
@@ -379,7 +404,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 5. Greenwald Density Limit ─── */}
-        <Section number={5} title="Greenwald Density Limit">
+        <Section number={5}>
           <p>
             The empirical density limit is given by the Greenwald formula:<RefTag id="greenwald2002" />
           </p>
@@ -394,7 +419,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 6. Troyon Beta Limit ─── */}
-        <Section number={6} title="Troyon Beta Limit">
+        <Section number={6}>
           <p>
             The normalized beta and the MHD stability boundary are given by the Troyon
             parameterization:<RefTag id="troyon1984" />
@@ -415,7 +440,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 7. Spitzer Resistivity ─── */}
-        <Section number={7} title="Spitzer Resistivity and Ohmic Heating">
+        <Section number={7}>
           <p>
             Plasma resistivity is computed from the classical Spitzer formula:<RefTag id="spitzer1953" /><RefTag id="wesson2011" />
           </p>
@@ -432,7 +457,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 8. Radiation ─── */}
-        <Section number={8} title="Radiation Losses">
+        <Section number={8}>
           <p>
             Four radiation channels are modeled:<RefTag id="wesson2011" />
           </p>
@@ -464,7 +489,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 9. Power Balance ─── */}
-        <Section number={9} title="0D Power Balance Transport Model">
+        <Section number={9}>
           <p>
             The core of the simulator is a global (0D) power balance equation for the
             stored thermal energy:
@@ -489,7 +514,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 10. Fusion Reactivity ─── */}
-        <Section number={10} title="Fusion Reactivity (Bosch-Hale)">
+        <Section number={10}>
           <p>
             Thermonuclear fusion reactivities for D-T and D-D reactions use the Bosch-Hale
             parameterization:<RefTag id="bosch1992" />
@@ -507,7 +532,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 11. Fusion Power ─── */}
-        <Section number={11} title="Fusion Power and Q">
+        <Section number={11}>
           <p>Fusion power is computed by volume integration over the 51-point radial profiles:</p>
           <Eq>
             {'P_fus = ∫ (n_D · n_T) · ⟨σv⟩(T_e(ρ)) · E_fus · dV'}
@@ -533,7 +558,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 12. SOL & Divertor ─── */}
-        <Section number={12} title="Scrape-Off Layer and Divertor Heat Flux">
+        <Section number={12}>
           <p>
             The SOL power decay width uses the Eich scaling:<RefTag id="eich2013" />
           </p>
@@ -556,7 +581,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 13. Detachment ─── */}
-        <Section number={13} title="Divertor Detachment Model">
+        <Section number={13}>
           <p>
             Detachment is a regime where the divertor plasma cools and recombines before reaching
             the target plates, dramatically reducing the heat flux. It needs the divertor to radiate
@@ -602,7 +627,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 14. Divertor Surface Temperature ─── */}
-        <Section number={14} title="Divertor Surface Temperature (0D Lumped Thermal Model)">
+        <Section number={14}>
           <p>
             The divertor surface temperature is computed using a 0D lumped thermal capacitance model
             that evolves in time:<RefTag id="hirai2018" /><RefTag id="matthews2013" />
@@ -630,8 +655,8 @@ export default function Bibliography() {
             ELM heat flux transients are added as impulses using the Loarte energy scaling
             (Section 19) deposited over a characteristic ELM crash time of ~0.5-1.0 ms.<RefTag id="loarte2003" />
           </p>
-          <div className="mt-3 px-3 py-2 bg-amber-900/20 border border-amber-700/30 rounded text-amber-200/80 text-xs leading-relaxed">
-            <strong className="text-amber-300">Known limitation — single-layer approximation:</strong>{' '}
+          <div className="sp-note">
+            <span className="sp-note-cap">Known limitation . single-layer approximation</span>{' '}
             The model treats the divertor armor as a single thermal lump with uniform temperature.
             In reality, ELM energy deposits in a very thin surface skin (~0.1 mm thermal diffusion
             depth at τ_ELM ~ 1 ms). This means ELM temperature spikes are underestimated (the real
@@ -644,7 +669,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 15. Profiles: H-mode ─── */}
-        <Section number={15} title="Radial Profiles: H-Mode Pedestal (OMFIT/Tanh)">
+        <Section number={15}>
           <p>
             Temperature and density profiles in H-mode use the standard modified hyperbolic
             tangent (mtanh) pedestal parameterization:
@@ -670,7 +695,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 16. Profiles: L-mode ─── */}
-        <Section number={16} title="Radial Profiles: L-Mode (Parabolic)">
+        <Section number={16}>
           <p>In L-mode, simpler parabolic profiles are used:</p>
           <Eq>
             {'T_e(ρ) = T_edge + (T_core − T_edge) · (1 − ρ²)^α_T'}<br />
@@ -683,7 +708,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 17. Internal Inductance ─── */}
-        <Section number={17} title="Internal Inductance">
+        <Section number={17}>
           <p>
             The internal inductance l<sub>i</sub> is computed from the current density profile,
             assuming Spitzer conductivity (j ∝ T<sub>e</sub><sup>3/2</sup>):
@@ -700,7 +725,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 18. Density Evolution ─── */}
-        <Section number={18} title="Density Evolution">
+        <Section number={18}>
           <p>
             The line-averaged density relaxes toward a target with a particle confinement time:
           </p>
@@ -715,7 +740,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 19. ELMs ─── */}
-        <Section number={19} title="Edge-Localized Modes (ELMs)">
+        <Section number={19}>
           <p>
             Three ELM regimes are modeled depending on edge collisionality, shaping, and
             proximity to operational limits:
@@ -733,7 +758,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 20. Disruption Model ─── */}
-        <Section number={20} title="Disruption Risk Model">
+        <Section number={20}>
           <p>
             Disruption risk is computed from multiple operational limit proximities using
             sigmoid activation functions:
@@ -756,7 +781,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 21. Disruption Sequence ─── */}
-        <Section number={21} title="Disruption Sequence (4-Phase)">
+        <Section number={21}>
           <p>When a disruption is triggered, it proceeds through four phases:</p>
           <ol className="list-decimal pl-5 space-y-1">
             <li><strong>Precursor</strong> (50-100 ms): Growing locked mode oscillation with exponential growth rate ~20 s⁻¹</li>
@@ -767,7 +792,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 22. Synthetic Diagnostics ─── */}
-        <Section number={22} title="Synthetic Diagnostic Signals">
+        <Section number={22}>
           <p>Simulated diagnostic signals include noise based on realistic measurement uncertainties:</p>
           <ul className="list-disc pl-5 space-y-0.5">
             <li><strong>Soft X-ray:</strong> SXR ∝ n<sub>e</sub>² T<sub>e</sub><sup>0.5</sup></li>
@@ -781,7 +806,7 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── 23. Geometry ─── */}
-        <Section number={23} title="Device Geometry">
+        <Section number={23}>
           <p>
             Plasma geometry is characterized by the following standard tokamak parameters:
           </p>
@@ -798,18 +823,14 @@ export default function Bibliography() {
         </Section>
 
         {/* ─── References ─── */}
-        <section className="mt-16 pt-8 border-t border-gray-800">
-          <h2 className="text-xl font-bold text-white mb-6">References</h2>
-          <ol className="space-y-3">
+        <section className="sp-bib-sec sp-refs-sec" id="references">
+          <h2 className="sp-head sp-bib-h2"><span className="sp-num">24</span> . References</h2>
+          <ol className="sp-refs">
             {REFERENCES.map((ref, i) => (
-              <li
-                key={ref.id}
-                id={`ref-${ref.id}`}
-                className="text-sm text-gray-400 leading-relaxed flex gap-3"
-              >
-                <span className="text-cyan-500 font-mono text-xs mt-0.5 shrink-0">[{i + 1}]</span>
-                <div>
-                  <span className="text-gray-300">{ref.authors}</span>,{' '}
+              <li key={ref.id} id={`ref-${ref.id}`} className="sp-ref-row">
+                <span className="sp-ref-n">{String(i + 1).padStart(2, '0')}</span>
+                <div className="sp-ref-text">
+                  <span className="sp-ref-authors">{ref.authors}</span>,{' '}
                   <em>{ref.title}</em>,{' '}
                   {ref.journal} ({ref.year}).
                   {ref.doi && (
@@ -819,7 +840,7 @@ export default function Bibliography() {
                         href={`https://doi.org/${ref.doi}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-cyan-500 hover:text-cyan-400 transition-colors"
+                        className="sp-bib-link"
                       >
                         doi:{ref.doi}
                       </a>
@@ -832,14 +853,11 @@ export default function Bibliography() {
         </section>
 
         {/* ─── Page footer ─── */}
-        <footer className="mt-16 pt-6 border-t border-gray-800 text-center text-gray-600 text-xs space-y-1 pb-12">
-          <p>&copy; 2026 Daniel Burgess and the Columbia Fusion Research Center</p>
-          <p>
-            <Link to="/" className="text-gray-500 hover:text-gray-300 transition-colors">
-              fusionsimulator.io
-            </Link>
-          </p>
+        <footer className="sp-bib-foot sp-caps">
+          <span>&copy; 2026 Daniel Burgess . Columbia Fusion Research Center</span>
+          <Link to="/" className="sp-link">FUSIONSIMULATOR.IO</Link>
         </footer>
+        </article>
       </main>
     </div>
   )

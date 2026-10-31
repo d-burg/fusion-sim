@@ -1,0 +1,193 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSettings, LOOKS, type Look, type Sound } from '../lib/settingsContext'
+import { markFirstRunDone } from '../lib/firstRun'
+
+interface Props {
+  /** The card has been dismissed (BEGIN, Escape, or the tour). */
+  onClose: () => void
+  /** Dismiss and start the tutorial overlay. */
+  onStartTour: () => void
+  /** Transient preview while a look name is hovered; null clears it. Never persisted. */
+  onPreview: (l: Look | null) => void
+  /** A ?layout= link fixes the rendered layout, so hover preview has nothing to show. */
+  fixedByLink?: boolean
+}
+
+/**
+ * The one card a first visit sees, over whichever room is rendering: sound,
+ * look and tour, then BEGIN. In the Modern grammar: a hairline-bordered
+ * card on a flat mask, tracked caps, the active choice as a white square.
+ * Hovering a look previews it behind the card (render-only, nothing stored);
+ * clicking commits it through setLook. On touch there is no hover: a tap
+ * commits, and the chosen look shows behind the card before BEGIN. On phones
+ * the card is a full-width bottom sheet with 44 px targets.
+ */
+export default function FirstRunCard({ onClose, onStartTour, onPreview, fixedByLink = false }: Props) {
+  const { sound, setSound, look, setLook } = useSettings()
+  const [hovered, setHovered] = useState<Look | null>(null)
+  const beginRef = useRef<HTMLButtonElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  const preview = useCallback((l: Look | null) => {
+    if (fixedByLink) return
+    setHovered(l); onPreview(l)
+  }, [onPreview, fixedByLink])
+
+  const close = useCallback(() => {
+    onPreview(null)
+    markFirstRunDone()
+    onClose()
+  }, [onClose, onPreview])
+
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(); return }
+      // Tab stays inside the card (it is aria-modal): wrap at either end.
+      const card = cardRef.current
+      if (e.key !== 'Tab' || !card) return
+      const items = Array.from(card.querySelectorAll<HTMLElement>('button:not([disabled])'))
+      if (!items.length) return
+      const first = items[0], last = items[items.length - 1]
+      const at = document.activeElement
+      if (!card.contains(at)) { e.preventDefault(); (e.shiftKey ? last : first).focus() }
+      else if (e.shiftKey && (at === first || at === card)) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
+  }, [close])
+
+  // Focus the card itself (not a control, so no ring shows on open): Tab then walks the choices.
+  useEffect(() => { cardRef.current?.focus({ preventScroll: true }) }, [])
+
+  const pickSound = (s: Sound) => setSound(s)
+  const commitLook = (id: Look) => { setLook(id); preview(null) }
+
+  return (
+    <div className="fr-root" role="dialog" aria-modal="true" aria-labelledby="fr-title">
+      <style>{FR_CSS}</style>
+      <div className="fr-mask" />
+      <div ref={cardRef} className="fr-card" tabIndex={-1}>
+        <div className="fr-head">
+          <span className="fr-title" id="fr-title">CONTROL ROOM . FIRST RUN</span>
+        </div>
+
+        <div className="fr-row">
+          <div className="fr-cap"><span className="fr-num">01</span> . SOUND</div>
+          <div className="fr-choices">
+            {(['on', 'off'] as const).map((s) => (
+              <button key={s} type="button" className="fr-choice" data-on={sound === s} onClick={() => pickSound(s)}>
+                {s.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="fr-row">
+          <div className="fr-cap">
+            <span className="fr-num">02</span> . LOOK
+            {fixedByLink && <span className="fr-fixed">FIXED BY LINK</span>}
+          </div>
+          <div className="fr-looks" onPointerLeave={(e) => { if (e.pointerType === 'mouse') preview(null) }}>
+            {LOOKS.map((l) => (
+              <div key={l.id} className="fr-look">
+                <button
+                  type="button"
+                  className="fr-choice"
+                  data-on={look === l.id}
+                  data-preview={hovered === l.id && look !== l.id}
+                  onPointerEnter={(e) => { if (e.pointerType === 'mouse') preview(l.id) }}
+                  onPointerLeave={(e) => { if (e.pointerType === 'mouse') preview(null) }}
+                  onFocus={() => preview(l.id)}
+                  onBlur={() => preview(null)}
+                  onClick={() => commitLook(l.id)}
+                >
+                  {l.label.toUpperCase()}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="fr-row">
+          <div className="fr-cap"><span className="fr-num">03</span> . TOUR</div>
+          <div className="fr-choices">
+            <button type="button" className="fr-choice" onClick={() => { close(); onStartTour() }}>BEGIN TOUR</button>
+            <button type="button" className="fr-choice" data-on="true" onClick={() => beginRef.current?.focus()}>SKIP</button>
+          </div>
+        </div>
+
+        <div className="fr-foot">
+          <button ref={beginRef} type="button" className="fr-begin" onClick={close}>BEGIN</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* Scoped styles: the card sits outside the composition, so the Modern tokens
+   (--kd-*) are not inherited and the type is named outright. */
+const FR_CSS = `
+.fr-root { position: fixed; inset: 0; z-index: 260; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.fr-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.55); }
+.fr-card {
+  position: relative; box-sizing: border-box; width: 600px; max-width: 100%; max-height: calc(100vh - 32px); overflow-y: auto;
+  background: #0c1018; border: 1px solid rgba(255,255,255,0.22); color: rgba(255,255,255,0.82);
+  border-radius: 0; box-shadow: none;
+  font-family: 'Mona Sans', system-ui, sans-serif; font-stretch: 100%; font-weight: 400;
+  font-size: 13.5px; line-height: 1.55; letter-spacing: 0; text-transform: none;
+}
+.fr-head, .fr-cap, .fr-choice, .fr-foot, .fr-begin {
+  font-family: 'Mona Sans', sans-serif; font-weight: 400; font-stretch: 125%;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.fr-head { padding: 14px 20px 9px; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 9px; }
+.fr-title { color: #fff; }
+.fr-row { display: grid; grid-template-columns: 96px 1fr; column-gap: 16px; align-items: baseline; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08); }
+.fr-head + .fr-row { border-top: 0; }
+.fr-cap { font-size: 9px; color: rgba(255,255,255,0.7); white-space: nowrap; }
+.fr-num { color: rgba(255,255,255,0.5); }
+.fr-fixed { display: block; margin-top: 4px; font-size: 8px; color: rgba(255,255,255,0.5); }
+.fr-choices { display: flex; flex-wrap: wrap; gap: 18px; }
+.fr-choice {
+  background: none; border: 0; border-radius: 0; margin: 0; padding: 3px 4px; line-height: 1;
+  font-size: 10px; color: rgba(255,255,255,0.78); cursor: pointer; white-space: nowrap;
+}
+.fr-card:focus { outline: none; }
+.fr-choice:hover { color: var(--kd-warm, #f0a98a); }
+.fr-choice:focus-visible, .fr-begin:focus-visible { outline: 1px solid var(--kd-warm, #f0a98a); outline-offset: 2px; }
+.fr-choice[data-on="true"] { background: #fff; color: #0a0d14; }
+.fr-choice[data-preview="true"] { color: var(--kd-warm, #f0a98a); }
+.fr-looks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.fr-look { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.fr-foot {
+  display: flex; align-items: baseline; justify-content: flex-end;
+  padding: 10px 20px 14px; border-top: 1px solid rgba(255,255,255,0.12); font-size: 9px;
+}
+.fr-begin {
+  background: none; border: 0; border-bottom: 1px dotted rgba(255,255,255,0.45); border-radius: 0;
+  padding: 2px 0; margin: 0; font-size: 10px; color: rgba(255,255,255,0.9); cursor: pointer;
+}
+.fr-begin:hover { color: #fff; border-bottom-color: #fff; }
+@media (max-width: 767px), (max-height: 500px) and (max-width: 1023px) {
+  .fr-root { align-items: flex-end; padding: 0; }
+  .fr-mask { background: rgba(0,0,0,0.4); }
+  .fr-card {
+    width: 100%; max-height: 82vh; border-left: 0; border-right: 0; border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .fr-head { padding: 14px 16px 10px; font-size: 11px; }
+  .fr-row { grid-template-columns: 1fr; row-gap: 2px; padding: 8px 16px 6px; }
+  .fr-cap { font-size: 10px; }
+  .fr-choices { gap: 4px 10px; }
+  .fr-looks { grid-template-columns: repeat(2, 1fr); gap: 0 10px; }
+  .fr-choice, .fr-begin { min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px; margin-left: -8px; font-size: 11px; }
+  .fr-choice[data-on="true"] { background: linear-gradient(#fff, #fff) center / 100% 20px no-repeat; }
+  .fr-foot { padding: 4px 16px 10px; }
+  .fr-begin { border-bottom: 0; margin: 0 -8px 0 0; text-decoration: underline dotted rgba(255,255,255,0.45); text-underline-offset: 4px; }
+}
+@media (max-height: 500px) and (max-width: 1023px) {
+  .fr-row { grid-template-columns: 96px 1fr; align-items: center; padding: 2px 16px; }
+  .fr-looks { grid-template-columns: repeat(4, auto); justify-content: start; }
+}
+`

@@ -1,0 +1,345 @@
+@import url('https://fonts.googleapis.com/css2?family=Cousine:wght@400;700&display=swap');
+
+/* ═══ JET / CODAS wall — light direction ═══════════════════════════
+   White plot fields, one-pixel black frames, Arial-class labels, a
+   Courier-metric mono (Cousine) for the tables and the log, plain bold
+   Arial digits for the pulse number and clock. Blue and green on white;
+   red only for alarms. No radius, no shadow, no gradient. */
+
+/* Shared canvas tokens: the equilibrium canvas paints with these. */
+html[data-theme="jet"] {
+  --c-base: #ffffff; --c-surface: #ffffff; --c-raised: #f0f0f0;
+  --c-line: #000000; --c-line-strong: #000000;
+  --c-ink: #000000; --c-ink-dim: #000080; --c-ink-faint: #303030;
+  --c-accent: #0000c0; --c-accent-hi: #0000ff;
+  --c-ok: #008000; --c-warn: #c07000; --c-bad: #d00000; --c-bad-ink: #c00000;
+  --c-invalid: #800080;
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: 'Cousine', 'Courier New', monospace;
+}
+html[data-theme="jet"] body { background: #ffffff; color: #000000; }
+
+[data-layout="jet"] {
+  --jet-mono: 'Cousine', 'Courier New', monospace;
+  --jet-sans: Arial, Helvetica, sans-serif;
+  --jet-blue: #0000c0;
+  --jet-green: #00b000;
+  --jet-amber: #ffc000;
+  --jet-red: #e00000;
+  --jet-gray: #d4d0c8;
+  font-family: var(--jet-sans);
+  font-size: 11px;
+  line-height: 1.2;
+  color: #000;
+  background: #fff;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: default;
+}
+[data-layout="jet"] * { box-sizing: border-box; border-radius: 0 !important; box-shadow: none !important; }
+
+/* ── toolbar: flat Windows-era buttons and combo boxes ── */
+[data-layout="jet"] .jet-toolbar {
+  height: 26px; flex: none;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 6px;
+  background: var(--jet-gray);
+  border-bottom: 1px solid #808080;
+}
+[data-layout="jet"] .jet-toolbar label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+[data-layout="jet"] .jet-btn {
+  font: 11px var(--jet-sans); color: #000;
+  background: var(--jet-gray);
+  border: 1px solid; border-color: #fff #404040 #404040 #fff;
+  padding: 1px 12px; height: 20px; min-width: 54px; cursor: default;
+}
+[data-layout="jet"] .jet-btn:active, [data-layout="jet"] .jet-btn.down { border-color: #404040 #fff #fff #404040; background: #c8c4bc; }
+[data-layout="jet"] .jet-toolbar select {
+  font: 11px var(--jet-sans); color: #000; background: #fff;
+  border: 1px solid; border-color: #404040 #fff #fff #404040;
+  height: 20px; padding: 0 2px; cursor: default;
+  -webkit-appearance: menulist; appearance: menulist;
+}
+[data-layout="jet"] .jet-sep { width: 1px; height: 18px; background: #808080; border-right: 1px solid #fff; margin: 0 2px; }
+[data-layout="jet"] .jet-grow { flex: 1; }
+[data-layout="jet"] .jet-flag { font: bold 10px var(--jet-sans); color: var(--jet-blue); padding: 0 4px; }
+[data-layout="jet"] .jet-settings button { color: #000 !important; background: var(--jet-gray) !important; border: 1px solid; border-color: #fff #404040 #404040 #fff; height: 20px; padding: 0 6px !important; }
+[data-layout="jet"] .jet-settings button:hover { background: #c8c4bc !important; }
+
+/* ── header strip: pulse number, clock, status words ── */
+[data-layout="jet"] .jet-head {
+  height: 44px; flex: none;
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 8px;
+  border-bottom: 1px solid #000;
+  background: #fff;
+}
+[data-layout="jet"] .jet-pulse, [data-layout="jet"] .jet-time { display: inline-flex; align-items: baseline; gap: 8px; }
+[data-layout="jet"] .jet-pulse-lbl { font: bold 12px var(--jet-sans); color: #000; }
+[data-layout="jet"] .jet-digits { font: bold 30px/1 var(--jet-sans); color: var(--jet-blue); letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+[data-layout="jet"] .jet-time-of { font: 12px var(--jet-sans); color: #000; }
+[data-layout="jet"] .jet-mode { font: bold 12px var(--jet-sans); color: #000; }
+[data-layout="jet"] .jet-words { display: inline-flex; gap: 4px; }
+[data-layout="jet"] .jet-word {
+  display: inline-block; min-width: 76px; text-align: center;
+  font: bold 11px/18px var(--jet-sans); letter-spacing: 0.02em;
+  border: 1px solid #808080; color: #808080; background: #fff; padding: 0 6px;
+}
+[data-layout="jet"] .jet-word.on { color: #000; border-color: #000; }
+[data-layout="jet"] .jet-word.on.ok { background: var(--jet-green); }
+[data-layout="jet"] .jet-word.on.blue { background: #a0c8ff; }
+[data-layout="jet"] .jet-word.on.warn { background: var(--jet-amber); }
+[data-layout="jet"] .jet-word.on.alarm { background: var(--jet-red); color: #fff; }
+
+/* ── the wall ── */
+[data-layout="jet"] .jet-wall {
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: 320px 1fr 412px;
+  background: #fff;
+}
+[data-layout="jet"] .jet-col-left, [data-layout="jet"] .jet-col-mid, [data-layout="jet"] .jet-col-right {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+}
+[data-layout="jet"] .jet-col-mid { flex-direction: row; }
+
+[data-layout="jet"] .jet-panel {
+  position: relative; min-height: 0; min-width: 0;
+  display: flex; flex-direction: column;
+  border: 1px solid #000; margin: -1px 0 0 -1px;
+  background: #fff;
+}
+[data-layout="jet"] .jet-title {
+  flex: none; height: 15px; line-height: 14px;
+  padding: 0 4px;
+  font: bold 10px/14px var(--jet-sans); color: #000;
+  background: #e4e4e4; border-bottom: 1px solid #000;
+  white-space: pre; overflow: hidden;
+}
+
+[data-layout="jet"] .jet-panel-table { flex: none; }
+[data-layout="jet"] .jet-panel-eq { flex: 1; }
+[data-layout="jet"] .jet-eq { flex: 1; min-height: 0; position: relative; }
+/* the shared canvas carries its own title and info button; the frame has the title */
+[data-layout="jet"] .jet-eq .panel-title { display: none; }
+
+[data-layout="jet"] .jet-panel-scope { flex: 1; }
+[data-layout="jet"] .jet-jscope { flex: 1; min-height: 0; position: relative; }
+[data-layout="jet"] .jet-jscope canvas { position: absolute; inset: 0; display: block; }
+
+[data-layout="jet"] .jet-panel-cam { flex: none; height: 409px; } /* 411 x 393 tile: the port view keeps its ~1.05:1 shape */
+[data-layout="jet"] .jet-cam { flex: 1; min-height: 0; position: relative; background: #000; }
+[data-layout="jet"] .jet-cam > * { width: 100%; height: 100%; }
+[data-layout="jet"] .jet-panel-log { flex: 1; }
+
+/* ── spreadsheet ── */
+[data-layout="jet"] .jet-table {
+  width: 100%; border-collapse: collapse; table-layout: fixed;
+  font: 11px/16px var(--jet-mono);
+}
+[data-layout="jet"] .jet-table th {
+  font: bold 10px/15px var(--jet-sans); text-align: left; padding: 0 4px;
+  background: #c8d8f0; border: 1px solid #808080; color: #000;
+}
+[data-layout="jet"] .jet-table td { padding: 0 4px; border: 1px solid #a0a0a0; white-space: nowrap; overflow: hidden; }
+[data-layout="jet"] .jet-table .num { text-align: right; font-weight: 700; }
+[data-layout="jet"] .jet-table .unit { color: #404040; font-family: var(--jet-sans); font-size: 10px; }
+[data-layout="jet"] .jet-table col { width: 25%; }
+[data-layout="jet"] .jet-table th:nth-child(1), [data-layout="jet"] .jet-table td:nth-child(1) { width: 110px; }
+[data-layout="jet"] .jet-table th:nth-child(2), [data-layout="jet"] .jet-table td:nth-child(2) { width: 62px; }
+[data-layout="jet"] .jet-table th:nth-child(3), [data-layout="jet"] .jet-table td:nth-child(3) { width: 50px; }
+/* signal names: symbols with subscripts and the written-out diagnostics, in the sans */
+[data-layout="jet"] .jet-table .sig { font-family: var(--jet-sans); }
+[data-layout="jet"] .jet-table .sig sub { font-size: 8px; line-height: 0; }
+[data-layout="jet"] .jet-table .state { text-align: center; font: bold 10px/16px var(--jet-sans); background: #e0e0e0; }
+[data-layout="jet"] .jet-table .state-ok { background: var(--jet-green); color: #000; }
+[data-layout="jet"] .jet-table .state-hi, [data-layout="jet"] .jet-table .state-lo { background: var(--jet-amber); color: #000; }
+[data-layout="jet"] .jet-table .state-alarm { background: var(--jet-red); color: #fff; }
+[data-layout="jet"] .jet-table .state-off { background: #fff; color: #808080; }
+[data-layout="jet"] .jet-table .state-na { background: #e8e8e8; }
+/* a long state word (RECRYSTALLIZATION) sets smaller so the cell never clips it */
+[data-layout="jet"] .jet-table .state.state-long { font-size: 8px; letter-spacing: -0.01em; }
+
+/* Excel-style data bar inside the Value cell: a 1 px framed track behind the number, filled in the row's state colour */
+[data-layout="jet"] .jet-table .databar { position: relative; display: block; height: 12px; margin: 1px 0; border: 1px solid #808080; background: #fff; }
+[data-layout="jet"] .jet-table .databar-fill { position: absolute; left: 0; top: 0; bottom: 0; opacity: 0.75; }
+[data-layout="jet"] .jet-table .databar-v { position: relative; display: block; padding-right: 2px; line-height: 12px; }
+
+/* ── event log: plain text list ── */
+[data-layout="jet"] .jet-log {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  font: 11px/15px var(--jet-mono); padding: 2px 0;
+  background: #fff;
+}
+[data-layout="jet"] .jet-ev { display: flex; gap: 6px; padding: 0 4px; align-items: baseline; }
+[data-layout="jet"] .jet-ev-t { width: 48px; flex: none; text-align: right; color: #000; }
+[data-layout="jet"] .jet-ev-tag { width: 50px; flex: none; font-weight: 700; font-size: 10px; }
+[data-layout="jet"] .jet-ev-text { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+[data-layout="jet"] .jet-ev.sev-ok .jet-ev-tag, [data-layout="jet"] .jet-ev.sev-ok .jet-ev-text { color: #008000; }
+[data-layout="jet"] .jet-ev.sev-minor .jet-ev-tag, [data-layout="jet"] .jet-ev.sev-minor .jet-ev-text { color: #a06000; }
+[data-layout="jet"] .jet-ev.sev-major .jet-ev-tag, [data-layout="jet"] .jet-ev.sev-major .jet-ev-text { color: #d00000; }
+[data-layout="jet"] .jet-ev.sev-invalid .jet-ev-tag, [data-layout="jet"] .jet-ev.sev-invalid .jet-ev-text { color: #800080; }
+[data-layout="jet"] .jet-rep { display: flex; gap: 6px; padding: 0 4px; white-space: nowrap; }
+[data-layout="jet"] .jet-rep-l { width: 104px; flex: none; overflow: hidden; text-overflow: ellipsis; }
+[data-layout="jet"] .jet-rep-p { width: 84px; flex: none; text-align: right; color: #0000c0; }
+[data-layout="jet"] .jet-rep-a { flex: 1; text-align: right; font-weight: 700; }
+[data-layout="jet"] .jet-rep.sev-minor .jet-rep-a { color: #a06000; }
+[data-layout="jet"] .jet-rep.sev-major .jet-rep-a { color: #d00000; }
+[data-layout="jet"] .jet-report-h { margin-top: 4px; padding: 0 4px; font: bold 10px/15px var(--jet-sans); background: #e4e4e4; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+
+/* ═══ Phone: the same white spreadsheet, stacked ═══════════════════
+   Gray toolbar header, status words, equilibrium beside the camera,
+   the compact table, one jScope panel, the log, the toolbar pinned at
+   the bottom. Text floor 11 px; every control 44 px tall. */
+[data-layout="jet"][data-phone] {
+  --jp-dock: 62px;
+  height: auto; width: auto; min-height: 100vh; overflow: visible;
+  display: block;
+  padding-bottom: calc(var(--jp-dock) + env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+[data-layout="jet"][data-phone] .jet-btn { font-size: 13px; }
+
+/* the flat Win95 combo: white sunken field, raised arrow button; the native select takes the tap at 16 px (no iOS zoom) */
+[data-layout="jet"][data-phone] .jp-combo { position: relative; display: flex; align-items: center; height: 44px; min-width: 0; cursor: default; }
+[data-layout="jet"][data-phone] .jp-combo-box {
+  display: flex; align-items: stretch; width: 100%; height: 26px; min-width: 0;
+  background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; outline: 1px solid #404040; outline-offset: -2px;
+}
+[data-layout="jet"][data-phone] .jp-combo-v {
+  flex: 1; min-width: 0; padding: 0 4px; font: 12px/24px var(--jet-sans); color: #000;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+[data-layout="jet"][data-phone] .jp-combo-arrow {
+  flex: none; width: 16px; margin: 1px; display: flex; align-items: center; justify-content: center;
+  font-size: 7px; color: #000; background: var(--jet-gray); border: 1px solid; border-color: #fff #404040 #404040 #fff;
+}
+[data-layout="jet"][data-phone] .jp-combo select {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; border: 0;
+  appearance: none; -webkit-appearance: none;
+}
+
+/* header: Device, Scenario, PULSE, t, settings */
+[data-layout="jet"][data-phone] .jp-head {
+  height: 44px; display: flex; align-items: center; gap: 4px; padding-left: 4px;
+  background: var(--jet-gray); border-bottom: 1px solid #808080;
+}
+[data-layout="jet"][data-phone] .jp-dev { flex: 0 1 auto; max-width: 96px; }
+[data-layout="jet"][data-phone] .jp-scn { flex: 1 1 0; }
+[data-layout="jet"][data-phone] .jp-read {
+  flex: none; display: flex; flex-direction: column; justify-content: center; height: 36px; padding: 0 4px;
+  background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080;
+}
+[data-layout="jet"][data-phone] .jp-read-k { font: bold 10px/11px var(--jet-sans); color: #000; letter-spacing: 0.02em; }
+[data-layout="jet"][data-phone] .jp-read-v { font: bold 19px/21px var(--jet-sans); color: var(--jet-blue); font-variant-numeric: tabular-nums; }
+[data-layout="jet"][data-phone] .jp-read-t { min-width: 50px; text-align: right; }
+[data-layout="jet"][data-phone] .jp-settings { flex: none; display: flex; align-items: center; }
+[data-layout="jet"][data-phone] .jp-settings .settings-btn {
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0 !important;
+  color: #000 !important; background: transparent !important;
+}
+[data-layout="jet"][data-phone] .jp-settings .settings-btn svg { width: 20px; height: 20px; }
+
+/* status words: their coloured boxes, wrapping to two rows */
+[data-layout="jet"][data-phone] .jp-words {
+  display: flex; flex-wrap: wrap; gap: 3px; padding: 4px; background: #fff; border-bottom: 1px solid #000;
+}
+[data-layout="jet"][data-phone] .jp-words .jet-word { flex: 1 1 auto; min-width: 0; padding: 0 5px; font: bold 11px/20px var(--jet-sans); white-space: nowrap; }
+
+/* the pair: equilibrium beside the camera tile (1.05 : 1), each with its 15 px frame title */
+[data-layout="jet"][data-phone] .jp-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+[data-layout="jet"][data-phone] .jp-pair .jet-panel { margin: 0 0 0 -1px; border-top: 0; }
+[data-layout="jet"][data-phone] .jp-pair .jet-panel-cam { height: auto; margin-right: -1px; }
+[data-layout="jet"][data-phone] .jp-pair .jet-cam { flex: none; aspect-ratio: 1.05; }
+[data-layout="jet"][data-phone] .jp-pair .jet-cam > * { min-height: 0; }
+[data-layout="jet"][data-phone] .jp-pair .jet-cam .panel-title { display: none; }
+[data-layout="jet"][data-phone] .jp-pair .jet-eq { overflow: hidden; }
+/* the shared canvas writes its legend bottom left, over the plasma on a half-width tile; widen the canvas past
+   both edges so the plot stays centered and the legend and tick labels fall outside the clip (the table carries them) */
+[data-layout="jet"][data-phone] .jp-pair .jet-eq > div:first-child {
+  position: absolute; top: 0; bottom: -24px; left: -96px; right: -96px; width: auto; height: auto;
+}
+[data-layout="jet"][data-phone] .jet-title { font-size: 10px; text-transform: none; }
+
+/* the compact table */
+[data-layout="jet"][data-phone] .jp-table, [data-layout="jet"][data-phone] .jp-scope,
+[data-layout="jet"][data-phone] .jp-log, [data-layout="jet"][data-phone] .jp-report { margin: 0 -1px; border-top: 0; }
+[data-layout="jet"][data-phone] .jet-table-phone { font: 11px/20px var(--jet-mono); }
+[data-layout="jet"][data-phone] .jet-table-phone th { font: bold 11px/18px var(--jet-sans); }
+[data-layout="jet"][data-phone] .jet-table-phone th:nth-child(n), [data-layout="jet"][data-phone] .jet-table-phone td:nth-child(n) { width: auto; }
+[data-layout="jet"][data-phone] .jet-table-phone .c-sig { width: 118px; }
+[data-layout="jet"][data-phone] .jet-table-phone .c-val { width: 92px; }
+[data-layout="jet"][data-phone] .jet-table-phone .c-unit { width: 50px; }
+[data-layout="jet"][data-phone] .jet-table-phone .sig sub { font-size: 9px; }
+[data-layout="jet"][data-phone] .jet-table-phone .unit { font-size: 11px; }
+[data-layout="jet"][data-phone] .jet-table-phone .state,
+[data-layout="jet"][data-phone] .jet-table-phone .state.state-long { font: bold 11px/20px var(--jet-sans); letter-spacing: -0.01em; }
+/* the diagnostics rows read first and largest */
+[data-layout="jet"][data-phone] .jet-table-phone tr.diag td { line-height: 26px; font-size: 12px; }
+[data-layout="jet"][data-phone] .jet-table-phone tr.diag .sig { font-weight: 700; font-size: 11px; }
+[data-layout="jet"][data-phone] .jet-table-phone tr.diag .state { line-height: 26px; }
+[data-layout="jet"][data-phone] .jet-table-phone .databar { height: 18px; }
+[data-layout="jet"][data-phone] .jet-table-phone .databar-v { line-height: 18px; }
+[data-layout="jet"][data-phone] .jet-table-phone tr.jet-more-row td { padding: 0; border-left: 0; border-right: 0; background: var(--jet-gray); }
+[data-layout="jet"][data-phone] .jet-more-in { display: flex; align-items: center; gap: 4px; padding: 0 0 0 4px; }
+
+/* small Win95 buttons inside the page: 44 px tall */
+[data-layout="jet"][data-phone] .jet-pbtn { height: 44px; min-width: 88px; padding: 0 12px; font: 13px var(--jet-sans); }
+[data-layout="jet"][data-phone] .jp-fuel { width: 110px; }
+
+/* jScope: a gray toolbar with + Traces, the channel list, one stacked panel */
+[data-layout="jet"][data-phone] .jp-bar { display: flex; align-items: center; height: 44px; padding-left: 4px; background: var(--jet-gray); border-bottom: 1px solid #000; }
+[data-layout="jet"][data-phone] .jp-bar-t { font: bold 11px var(--jet-sans); white-space: pre; }
+[data-layout="jet"][data-phone] .jp-chan {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 2px;
+  background: var(--jet-gray); border-bottom: 1px solid #000;
+}
+[data-layout="jet"][data-phone] .jp-chan .jet-pbtn.down { background: #fff; font-weight: 700; }
+[data-layout="jet"][data-phone] .jp-chan .jet-pbtn { min-width: 0; padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-layout="jet"][data-phone] .jp-scope-plot { display: flex; flex-direction: column; }
+[data-layout="jet"][data-phone] .jp-scope-plot canvas { touch-action: pan-y; }
+
+/* event log: three lines; the report under it after the pulse */
+[data-layout="jet"][data-phone] .jp-log .jet-log { min-height: 49px; }
+[data-layout="jet"][data-phone] .jp-report .jet-log { flex: none; }
+[data-layout="jet"][data-phone] .jp-report .jet-rep-l { width: auto; flex: 1 1 auto; }
+
+/* the toolbar, pinned: a thin progress rule with its playhead, then the buttons */
+[data-layout="jet"][data-phone] .jp-dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  height: calc(var(--jp-dock) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #fff; border-top: 1px solid #000;
+}
+[data-layout="jet"][data-phone] .jp-line { position: relative; height: 12px; margin: 0 22px; }
+[data-layout="jet"][data-phone] .jp-line::before { content: ''; position: absolute; left: 0; right: 0; top: 6px; height: 1px; background: #808080; }
+[data-layout="jet"][data-phone] .jp-line-fill { position: absolute; left: 0; top: 5px; height: 3px; background: var(--jet-blue); }
+[data-layout="jet"][data-phone] .jp-line-tick { position: absolute; top: 2px; width: 1px; height: 9px; background: #000; }
+[data-layout="jet"][data-phone] .jp-handle {
+  position: absolute; top: -32px; width: 44px; height: 44px; transform: translateX(-50%);
+  pointer-events: none; touch-action: none;
+}
+[data-layout="jet"][data-phone] .jp-handle::after {
+  content: ''; position: absolute; left: 50%; top: 33px; width: 2px; height: 10px; transform: translateX(-50%); background: var(--jet-blue);
+}
+[data-layout="jet"][data-phone] .jp-handle[data-scrub="true"] { pointer-events: auto; }
+[data-layout="jet"][data-phone] .jp-handle[data-scrub="true"]::after {
+  top: 31px; width: 10px; height: 13px; background: var(--jet-gray); border: 1px solid; border-color: #fff #404040 #404040 #fff; outline: 1px solid #000;
+}
+[data-layout="jet"][data-phone] .jp-dock-row { display: flex; gap: 4px; padding: 0 4px; height: 48px; align-items: center; }
+[data-layout="jet"][data-phone] .jp-key { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 4px; font: 13px var(--jet-sans); }
+[data-layout="jet"][data-phone] .jp-run { flex-grow: 1.1; font-weight: 700; }
+[data-layout="jet"][data-phone] .jp-speed { flex-grow: 1.25; }
+[data-layout="jet"][data-phone] .jp-speed .jp-combo-box { height: 44px; }
+[data-layout="jet"][data-phone] .jp-speed .jp-combo-v { font: 13px/42px var(--jet-sans); text-align: center; padding: 0 2px; text-overflow: clip; }
+[data-layout="jet"][data-phone] .jp-speed .jp-combo-arrow { width: 14px; }
+
+/* a phone on its side: the same stack, wider; the words in one row, the camera capped */
+@media (orientation: landscape) {
+  [data-layout="jet"][data-phone] .jp-words { flex-wrap: nowrap; }
+  [data-layout="jet"][data-phone] .jp-dev { max-width: 160px; }
+  [data-layout="jet"][data-phone] .jp-pair { grid-template-columns: minmax(0, 1fr) 220px; }
+  [data-layout="jet"][data-phone] .jp-chan { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useSimulation } from '../lib/useSimulation'
 import { getDevices, type PresetId } from '../lib/wasm'
 import type { MagneticConfig, OverrideValue, ProgramHandoff } from '../lib/program'
+import { useSettings, type Look } from '../lib/settingsContext'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
 import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
@@ -10,12 +11,26 @@ import PulsePlanner from '../components/PulsePlanner'
 import PortView from '../components/portview'
 import SettingsDropdown from '../components/SettingsDropdown'
 import TutorialOverlay from '../components/TutorialOverlay'
+import FirstRunCard from '../components/FirstRunCard'
+import { FIRSTRUN_EVENT, firstRunPending } from '../lib/firstRun'
 import EventLog from '../components/EventLog'
 import { buildReport } from '../lib/pulseLog'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
 import { CENTAUR_LIMITER } from '../lib/centaur-geometry'
+import type { ControlRoomContext } from './compositions/types'
+import CompositionDiiid from './compositions/diiid'
+import CompositionApollo from './compositions/apollo'
+import CompositionJet from './compositions/jet'
+import CompositionKaldera from './compositions/kaldera'
+
+const COMPOSITIONS: Record<string, ComponentType<{ ctx: ControlRoomContext }>> = {
+  diiid: CompositionDiiid,
+  apollo: CompositionApollo,
+  jet: CompositionJet,
+  kaldera: CompositionKaldera,
+}
 
 const DEVICE_LIMITERS: Record<string, [number, number][]> = {
   diiid: DIIID_LIMITER,
@@ -41,17 +56,52 @@ function getPresets(deviceId: string): { id: PresetId; label: string }[] {
 
 export default function ControlRoom() {
   const { deviceId: routeDeviceId } = useParams<{ deviceId: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const routePreset = (searchParams.get('preset') || 'hmode') as PresetId
   const showTutorial = searchParams.get('tutorial') === 'true'
+  // The control room renders one of the compositions. The look chosen in
+  // settings (program page or the settings menu) is the default; ?layout=
+  // overrides it, and ?layout=classic shows the pre-composition page.
+  const { look } = useSettings()
+  const layoutParam = searchParams.get('layout')
+  // The first-run card's hover preview overrides the look for rendering only; nothing is stored.
+  const [previewLook, setPreviewLook] = useState<Look | null>(null)
+  const resolvedLayout = layoutParam ?? previewLook ?? look
+  const LayoutComponent = resolvedLayout === 'classic' ? undefined : (COMPOSITIONS[resolvedLayout] ?? COMPOSITIONS.kaldera)
 
   // A programme edited on the pulse page arrives as router state.
   const location = useLocation()
   const rawHandoff = (location.state ?? null) as ProgramHandoff | null
   const handoff = typeof rawHandoff?.programJson === 'string' ? rawHandoff : null
+  // A ?layout= link that differs from the stored look pins the view; the settings
+  // menu says so and offers to drop the parameter (other parameters are kept).
+  const layoutFixed = layoutParam !== null && layoutParam !== look
+  const releaseLayout = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('layout')
+    setSearchParams(next, { replace: true, state: location.state })
+  }
+  const layoutLock = layoutFixed ? { slug: layoutParam, onRelease: releaseLayout } : undefined
 
   // Local state so user can switch without navigating
   const [tutorialActive, setTutorialActive] = useState(showTutorial)
+  // The first-run card (sound, look, tour) shows until it has been dismissed once;
+  // the settings menu's "First-run setup" clears the key and fires FIRSTRUN_EVENT.
+  const [firstRunOpen, setFirstRunOpen] = useState(() => !showTutorial && firstRunPending())
+  useEffect(() => {
+    const reopen = () => { setTutorialActive(false); setFirstRunOpen(true) }
+    window.addEventListener(FIRSTRUN_EVENT, reopen)
+    return () => window.removeEventListener(FIRSTRUN_EVENT, reopen)
+  }, [])
+  // Warm the other looks' faces so the first hover preview on the card does not
+  // flash fallback type. The @font-face rules come from the compositions' CSS
+  // (diiid.css: Courier Prime, apollo.css: VT323, jet.css: Cousine); loading
+  // them here only fetches the files.
+  useEffect(() => {
+    if (!document.fonts?.load) return
+    const faces = ['400 13px "Courier Prime"', '700 13px "Courier Prime"', '17px "VT323"', '400 11px "Cousine"', '700 11px "Cousine"', '400 13px "Mona Sans"']
+    Promise.all(faces.map((f) => document.fonts.load(f))).catch(() => {})
+  }, [])
   const [activeDevice, setActiveDevice] = useState(routeDeviceId ?? 'diiid')
   const [activePreset, setActivePreset] = useState<PresetId>(routePreset)
   const [showPlanner, setShowPlanner] = useState(false)
@@ -191,6 +241,45 @@ export default function ControlRoom() {
     setPlannerOverrides({})
     setPlannerDuration(null)
     setConfigOverride(null)
+  }
+
+  const plannerNode = showPlanner ? (
+    <PulsePlanner
+      deviceId={activeDevice}
+      onRun={handleRunProgram}
+      onClose={() => setShowPlanner(false)}
+      overrides={plannerOverrides}
+      onOverridesChange={setPlannerOverrides}
+      durationOverride={plannerDuration}
+      onDurationChange={setPlannerDuration}
+      basePreset={plannerPreset}
+      onPresetChange={handlePlannerPresetChange}
+      configOverride={configOverride}
+      onConfigChange={setConfigOverride}
+    />
+  ) : null
+
+  if (LayoutComponent) {
+    const ctx: ControlRoomContext = {
+      state, controls, displaySnapshot, history, running, finished, scrubTime, wallJson, programJson,
+      events, pulseNumber, previousPulse, report, plasmaSnapshot, limiterPoints, usesIch,
+      time, duration, progress,
+      activeDevice, devices, onDeviceChange: handleDeviceChange,
+      activePreset, presets: getPresets(activeDevice), onPresetChange: handlePresetChange,
+      fuelType, showsFuelToggle: activeDevice === 'jet' || activeDevice === 'iter', onFuelChange: handleFuelChange,
+      activeSpeed, onSpeedChange: handleSpeedChange, hasCustomProgram,
+      showPlanner, togglePlanner: () => setShowPlanner((v) => !v), plannerNode,
+      settingsNode: <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} layoutLock={layoutLock} />,
+      tutorialNode: tutorialActive ? <TutorialOverlay onComplete={() => setTutorialActive(false)} /> : null,
+    }
+    return (
+      <>
+        <LayoutComponent ctx={ctx} />
+        {firstRunOpen && (
+          <FirstRunCard onClose={() => setFirstRunOpen(false)} onStartTour={() => setTutorialActive(true)} onPreview={setPreviewLook} fixedByLink={layoutParam !== null} />
+        )}
+      </>
+    )
   }
 
   return (
@@ -339,7 +428,7 @@ export default function ControlRoom() {
               </span>
             )}
           </div>
-          <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} />
+          <SettingsDropdown onRestartTutorial={() => setTutorialActive(true)} layoutLock={layoutLock} />
         </div>
       </div>
 

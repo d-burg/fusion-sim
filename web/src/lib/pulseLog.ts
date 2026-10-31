@@ -6,6 +6,7 @@
  */
 import type { DisruptionCause, Snapshot, TracePoint } from './types'
 import type { PulseProgram, WaveformPoint } from './wasm'
+import { safeGet, safeSet } from './safeStorage'
 
 /* ─── Events ─────────────────────────────────────────────── */
 
@@ -482,22 +483,14 @@ const PULSE_KEY = 'tok-sym-pulse-number'
 
 /** The last pulse number issued on this browser, or 0. */
 export function lastPulseNumber(): number {
-  try {
-    const n = parseInt(localStorage.getItem(PULSE_KEY) ?? '0', 10)
-    return Number.isFinite(n) && n > 0 ? n : 0
-  } catch {
-    return 0
-  }
+  const n = parseInt(safeGet(PULSE_KEY) ?? '0', 10)
+  return Number.isFinite(n) && n > 0 ? n : 0
 }
 
 /** Issue the next pulse number and persist it. */
 export function nextPulseNumber(): number {
   const n = lastPulseNumber() + 1
-  try {
-    localStorage.setItem(PULSE_KEY, String(n))
-  } catch {
-    /* private mode: the number still counts within this session */
-  }
+  safeSet(PULSE_KEY, String(n)) // private mode: the number still counts within this session
   return n
 }
 

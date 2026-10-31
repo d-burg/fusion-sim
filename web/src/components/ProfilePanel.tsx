@@ -1,3 +1,4 @@
+import { themeColors } from '../lib/themeColors'
 import { useEffect, useRef } from 'react'
 import type { ProcessedProfile } from '../lib/types'
 
@@ -163,8 +164,9 @@ function drawProfileCanvas(canvas: HTMLCanvasElement, opts: DrawOpts) {
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
+  const tc = themeColors()
   // Clear
-  ctx.fillStyle = '#111827'
+  ctx.fillStyle = tc.base
   ctx.fillRect(0, 0, W, H)
 
   const plotW = W - MARGIN.left - MARGIN.right
@@ -176,7 +178,7 @@ function drawProfileCanvas(canvas: HTMLCanvasElement, opts: DrawOpts) {
   const yOf = (v: number) => MARGIN.top + plotH - (v / yMax) * plotH
 
   // Grid
-  ctx.strokeStyle = '#1f2937'
+  ctx.strokeStyle = tc.line
   ctx.lineWidth = 0.5
   for (let i = 0; i <= 4; i++) {
     const y = MARGIN.top + (plotH * i) / 4
@@ -214,7 +216,7 @@ function drawProfileCanvas(canvas: HTMLCanvasElement, opts: DrawOpts) {
 
   // X-axis labels (every tile gets its own)
   ctx.textAlign = 'center'
-  ctx.fillStyle = '#6b7280'
+  ctx.fillStyle = tc.inkFaint
   ctx.font = '8px monospace'
   ctx.fillText('ρ', MARGIN.left + plotW / 2, H - 1)
   for (let i = 0; i <= 5; i++) {
@@ -267,7 +269,7 @@ function drawProfileCanvas(canvas: HTMLCanvasElement, opts: DrawOpts) {
     const badgeY = MARGIN.top + 10
     ctx.font = 'bold 8px monospace'
     ctx.textAlign = 'center'
-    ctx.fillStyle = hmodeLabel === 'H' ? '#06b6d4' : '#9ca3af'
+    ctx.fillStyle = hmodeLabel === 'H' ? tc.accent : tc.inkDim
     ctx.fillText(`${hmodeLabel}-mode`, badgeX, badgeY)
   }
 }
