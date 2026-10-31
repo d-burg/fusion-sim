@@ -260,7 +260,7 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
   --kd-pw: 180px;
   --kd-eqh: 190px;
   position: relative; inset: auto; display: block; overflow: visible;
-  min-height: 100vh; padding: 0 var(--kd-x) calc(var(--kd-ctl-h) + env(safe-area-inset-bottom));
+  min-height: 100vh; min-height: 100dvh; padding: 0 var(--kd-x) calc(var(--kd-ctl-h) + env(safe-area-inset-bottom));
   font-size: 11px; -webkit-tap-highlight-color: transparent;
 }
 [data-layout="kaldera"][data-phone] .kd-ph-cap { font-size: 10px; color: rgba(255,255,255,0.6); }
@@ -341,7 +341,7 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 /* the report: a bottom sheet over the page, above the control strip */
 [data-layout="kaldera"][data-phone] .kd-ph-sheet {
   position: fixed; left: 0; right: 0; bottom: calc(var(--kd-ctl-h) + env(safe-area-inset-bottom)); z-index: 40;
-  max-height: calc(100vh - var(--kd-ctl-h) - 80px); overflow-y: auto; overscroll-behavior: contain;
+  max-height: calc(100vh - var(--kd-ctl-h) - 80px); max-height: calc(100dvh - var(--kd-ctl-h) - 80px); overflow-y: auto; overscroll-behavior: contain;
 }
 [data-layout="kaldera"][data-phone] .kd-ph-sheet .kd-report {
   position: static; width: auto; border-left: 0; border-right: 0; border-bottom: 0;

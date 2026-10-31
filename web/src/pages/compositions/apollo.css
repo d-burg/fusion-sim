@@ -34,6 +34,7 @@ html[data-theme="apollo"] {
 
 [data-layout="apollo"].ap-root {
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   display: grid;

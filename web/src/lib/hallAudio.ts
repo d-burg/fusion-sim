@@ -20,6 +20,7 @@
 import type { Device } from './wasm'
 import type { Snapshot } from './types'
 import { PulseVoice, pulseLevels, PULSE_SILENT as PULSE_SILENT_LEVELS } from './pulseAudio'
+import { claimMediaChannel, releaseMediaChannel } from './iosAudio'
 
 /** What the pulsed-power plant of a device sounds like. */
 export interface Plant {
@@ -230,15 +231,34 @@ export class HallAudio {
     if (g) g.master.gain.setTargetAtTime(this.volume, g.ctx.currentTime, LEVEL_TAU)
   }
 
-  /** Call from the Start click: browsers only let a context run after a gesture. */
+  /**
+   * Browsers only let a context run after a gesture, and iOS stops it again
+   * (`interrupted`) on a call or a locked screen, so this also runs on every
+   * touch and on return to the page.
+   */
   resume(): void {
     const ctx = this.graph?.ctx
-    if (ctx instanceof AudioContext && (this.hallOn || this.dAlphaOn || this.pulseOn)) void ctx.resume()
+    if (!(ctx instanceof AudioContext) || !(this.hallOn || this.dAlphaOn || this.pulseOn)) return
+    claimMediaChannel(ctx.sampleRate)
+    if (ctx.state !== 'running') ctx.resume().catch(() => {})
+  }
+
+  private readonly onGesture = () => this.resume()
+  private readonly onVisibility = () => { if (!document.hidden) this.resume() }
+
+  private listen(on: boolean): void {
+    const add = on ? window.addEventListener.bind(window) : window.removeEventListener.bind(window)
+    for (const type of ['touchend', 'pointerup', 'click', 'keydown']) add(type, this.onGesture, { capture: true })
+    if (on) document.addEventListener('visibilitychange', this.onVisibility)
+    else document.removeEventListener('visibilitychange', this.onVisibility)
   }
 
   private suspend(): void {
     const ctx = this.graph?.ctx
-    if (ctx instanceof AudioContext) void ctx.suspend()
+    if (ctx instanceof AudioContext) {
+      void ctx.suspend()
+      releaseMediaChannel()
+    }
   }
 
   /**
@@ -317,6 +337,10 @@ export class HallAudio {
     const g = this.graph
     this.graph = null
     if (!g) return
+    if (g.ctx instanceof AudioContext) {
+      this.listen(false)
+      releaseMediaChannel()
+    }
     for (const src of g.sources) {
       try { src.stop() } catch { /* already stopped */ }
     }
@@ -327,6 +351,7 @@ export class HallAudio {
     if (this.graph) return this.graph
     if (!this.offline && !HallAudio.supported()) return null
     const ctx = this.offline ?? new AudioContext()
+    if (!this.offline) this.listen(true)
     const master = ctx.createGain()
     master.gain.value = this.volume
     master.connect(ctx.destination)

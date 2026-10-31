@@ -369,7 +369,7 @@ function ProgramPage({ deviceId }: { deviceId: string | undefined }) {
 
   if (!device) {
     return (
-      <div data-page="program" className="page-enter min-h-screen flex flex-col">
+      <div data-page="program" className="page-enter min-h-dvh flex flex-col">
         <StandardNav left={deviceLinks} />
         <div className="sp-head" style={{ padding: '40px 64px' }}>UNKNOWN DEVICE . {deviceId}</div>
       </div>
@@ -382,7 +382,7 @@ function ProgramPage({ deviceId }: { deviceId: string | undefined }) {
   const scenario = getPresets(deviceId ?? '').find((p) => p.id === selected)
 
   return (
-    <div data-page="program" className="page-enter min-h-screen md:tall:h-screen flex flex-col md:tall:overflow-hidden pb-20 md:tall:pb-0">
+    <div data-page="program" className="page-enter min-h-dvh md:tall:h-dvh flex flex-col md:tall:overflow-hidden pb-20 md:tall:pb-0">
       <StandardNav left={deviceLinks} />
 
       {/* Two columns from md up. The no-scroll, fills-the-viewport version needs
