@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSettings, LOOKS, type Sound, type Units } from '../lib/settingsContext'
 import { reopenFirstRun } from '../lib/firstRun'
@@ -10,7 +10,10 @@ interface Props {
 }
 
 export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Props = {}) {
-  const { units, look, sound, setUnits, setLook, setSound } = useSettings()
+  const {
+    units, look, sound, hallAudio, dAlphaAudio, pulseAudio, audioVolume,
+    setUnits, setLook, setSound, setHallAudio, setDAlphaAudio, setPulseAudio, setAudioVolume,
+  } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   // Opens upward when the button sits in the lower half of the viewport (a key row along the bottom).
@@ -154,6 +157,26 @@ export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Prop
                 </button>
               ))}
             </div>
+            {sound === 'on' && (
+              <div className="mt-2 space-y-1.5">
+                <OnOff label="Hall audio" value={hallAudio} onChange={setHallAudio} />
+                <OnOff label={<>Sonified D<sub>α</sub></>} value={dAlphaAudio} onChange={setDAlphaAudio} />
+                <OnOff label="Pulse sonification" value={pulseAudio} onChange={setPulseAudio} />
+                <label className="flex items-center gap-2 text-xs text-gray-500 pt-0.5">
+                  <span className="w-14 shrink-0">Volume</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(audioVolume * 100)}
+                    onChange={(e) => setAudioVolume(Number(e.target.value) / 100)}
+                    className="flex-1 cursor-pointer"
+                    aria-label="Audio volume"
+                  />
+                  <span className="font-mono tabular-nums w-8 text-right">{Math.round(audioVolume * 100)}</span>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Divider */}
@@ -212,6 +235,32 @@ export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Prop
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** A labeled Off/On segmented toggle, styled like the units toggle, for one audio channel. */
+function OnOff({ label, value, onChange }: { label: ReactNode; value: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex-1 text-sm text-gray-300">{label}</span>
+      <div className="flex rounded overflow-hidden border border-gray-700 w-24">
+        {([true, false] as const).map((on) => (
+          <button
+            key={String(on)}
+            onClick={() => onChange(on)}
+            aria-pressed={value === on}
+            className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer
+              ${
+                value === on
+                  ? 'theme-toggle-active'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+              }`}
+          >
+            {on ? 'On' : 'Off'}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
