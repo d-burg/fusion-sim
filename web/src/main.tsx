@@ -11,6 +11,9 @@ import './index.css'
 import App from './App.tsx'
 import { initWasm } from './lib/wasm'
 import { SettingsProvider } from './lib/settingsContext'
+import { installDiag } from './lib/diag'
+
+installDiag()
 
 // Initialize WASM before mounting React
 initWasm().then(() => {
