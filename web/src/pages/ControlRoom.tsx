@@ -296,7 +296,7 @@ export default function ControlRoom() {
   }
 
   return (
-    <div className="page-enter h-screen flex flex-col bg-[#0a0e17] overflow-hidden">
+    <div className="page-enter h-dvh flex flex-col bg-[#0a0e17] overflow-hidden">
       {/* ─── Top bar ─── */}
       {/* Three-column grid rather than justify-between: the side columns take
           an equal share of the free space, so the playback controls stay

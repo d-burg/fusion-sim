@@ -33,6 +33,7 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
   color: #000;
   background: #fff;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   display: flex;
@@ -197,7 +198,7 @@ html[data-theme="jet"] body { background: #ffffff; color: #000000; }
    the bottom. Text floor 11 px; every control 44 px tall. */
 [data-layout="jet"][data-phone] {
   --jp-dock: 62px;
-  height: auto; width: auto; min-height: 100vh; overflow: visible;
+  height: auto; width: auto; min-height: 100vh; min-height: 100dvh; overflow: visible;
   display: block;
   padding-bottom: calc(var(--jp-dock) + env(safe-area-inset-bottom, 0px));
   -webkit-tap-highlight-color: transparent;

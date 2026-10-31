@@ -131,7 +131,7 @@ const FR_CSS = `
 .fr-root { position: fixed; inset: 0; z-index: 260; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .fr-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.55); }
 .fr-card {
-  position: relative; box-sizing: border-box; width: 600px; max-width: 100%; max-height: calc(100vh - 32px); overflow-y: auto;
+  position: relative; box-sizing: border-box; width: 600px; max-width: 100%; max-height: calc(100dvh - 32px); overflow-y: auto;
   background: #0c1018; border: 1px solid rgba(255,255,255,0.22); color: rgba(255,255,255,0.82);
   border-radius: 0; box-shadow: none;
   font-family: 'Mona Sans', system-ui, sans-serif; font-stretch: 100%; font-weight: 400;
