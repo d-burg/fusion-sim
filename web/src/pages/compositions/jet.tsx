@@ -8,6 +8,8 @@ import InterlockTable from './jet/InterlockTable'
 import Phone from './jet/Phone'
 import { usePhone } from './usePhone'
 import { Fx, digits8 } from './Fixed'
+import { elmRecent } from './useDiagnostics'
+import { reportLabel } from './reportLabel'
 import './jet.css'
 
 /* ─── JET / CODAS wall, light direction ──────────────────────────
@@ -52,7 +54,7 @@ const ROWS_B: RowDef[] = [
   { label: 'q_{95}', unit: '', series: [{ key: 'q95' }, { key: 'li', name: 'l_{i}' }], yMin: 0, yMax: 10 },
   { label: 'H_{98}', unit: '', series: [{ key: 'h_factor' }, { key: 'f_greenwald', name: 'f_{GW}' }], yMin: 0 },
   { label: 'Ψ_{OH}', unit: 'V·s', series: [{ key: 'psi_oh' }, { key: 'i_ni', name: 'I_{NI}' }], yMin: 0, digits: 1 },
-  { label: 'hazard', unit: '1/s', series: [{ key: 'disruption_risk' }], yMin: 0, digits: 3 },
+  { label: 'hazard', unit: '%/s', series: [{ key: 'disruption_risk', value: (p) => p.disruption_risk * 100 }], yMin: 0, digits: 2 },
 ]
 
 const SPEEDS = [2, 1, 0.75, 0.5]
@@ -73,16 +75,18 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
   const dev = ctx.devices.find((d) => d.id === ctx.activeDevice)
   const plasma = !!s && s.ip > 0.05 && !s.disrupted
   const simStatus = s?.status ?? 'Ready'
+  // the ELM flag lasts a few ms: the chip holds for 0.3 s after the last ELM so it does not flicker
+  const elming = plasma && elmRecent(ctx.history, ctx.time)
 
   const words = useMemo(() => [
     { text: 'PLASMA', on: plasma, cls: 'ok' },
     { text: s?.in_hmode ? 'H-MODE' : 'L-MODE', on: plasma, cls: s?.in_hmode ? 'ok' : 'blue', fit: ['H-MODE', 'L-MODE'] },
-    { text: 'ELMING', on: plasma && !!s?.elm_active, cls: 'warn' },
+    { text: 'ELMING', on: elming, cls: 'warn' },
     { text: s?.is_limited ? 'LIMITED' : configCode(s?.magnetic_config), on: plasma, cls: 'blue', fit: ['LIMITED', 'DIVERTED', 'LSN', 'USN', 'DN'] },
     { text: 'OH SATURATED', on: !!s?.oh_saturated, cls: 'warn' },
     { text: 'FLUX', on: !!s?.flux_exhausted, cls: 'alarm' },
     { text: 'DISRUPTED', on: !!s?.disrupted, cls: 'alarm' },
-  ], [s, plasma])
+  ], [s, plasma, elming])
 
   const phone = usePhone()
   if (phone) return <Phone ctx={ctx} words={words} configCode={configCode} />
@@ -245,7 +249,7 @@ function EventList({ ctx }: { ctx: ControlRoomContext }) {
           <div className="jet-report-h">REPORT  prog | achieved</div>
           {ctx.report.map((r) => (
             <div key={r.label} className={`jet-rep sev-${r.status ?? 'info'}`}>
-              <span className="jet-rep-l">{r.label}</span>
+              <span className="jet-rep-l">{reportLabel(r.label)}</span>
               <span className="jet-rep-p">{r.programmed ?? ''}</span>
               <span className="jet-rep-a">{r.achieved}</span>
             </div>

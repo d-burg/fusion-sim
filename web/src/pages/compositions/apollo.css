@@ -132,10 +132,12 @@ html[data-theme="apollo"] {
 [data-layout="apollo"] .ap-log-lines {
   position: absolute; left: 8px; right: 8px; top: 17px; bottom: 4px;
   font-family: 'VT323', 'Courier New', monospace; font-size: 16px; line-height: 17px;
-  text-transform: uppercase; color: #f2f2ee; overflow: hidden;
+  color: #f2f2ee; overflow: hidden;
 }
+[data-layout="apollo"] .ap-log-lines[data-report] { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #4a4a46 transparent; }
 [data-layout="apollo"] .ap-log-line { display: flex; gap: 10px; white-space: nowrap; overflow: hidden; }
 [data-layout="apollo"] .ap-log-line .ap-log-t { flex: none; width: 10ch; }
+[data-layout="apollo"] .ap-log-line .ap-log-k { flex: none; width: 14ch; }
 [data-layout="apollo"] .ap-log-line .ap-v { flex: none; width: 9ch; text-align: right; }
 
 /* ── 14–16 console ────────────────────────────────────────────── */

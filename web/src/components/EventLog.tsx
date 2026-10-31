@@ -185,11 +185,9 @@ function EventLine({ ev, compact = false }: { ev: LogEvent; compact?: boolean })
           <span className="inline-block w-1.5 h-1.5 rounded-full align-middle" style={{ backgroundColor: color }} />
         )}
       </span>
-      <span className={`min-w-0 ${compact ? 'truncate' : ''}`} style={{ color: textColor }}>
+      {/* the condition behind a line (ev.detail) is on hover only, never a second line */}
+      <span className={`min-w-0 ${compact ? 'truncate' : ''}`} style={{ color: textColor }} title={ev.detail}>
         {ev.text}
-        {!compact && ev.detail && (
-          <span className="block text-[var(--c-ink-faint)]">{ev.detail}</span>
-        )}
       </span>
     </>
   )

@@ -171,6 +171,8 @@ export interface TracePoint {
   ne_line: number
   impurity_fraction: number
   p_fus: number
+  /** Alpha heating (MW), so the report's Q uses the same P_ext as the readouts. */
+  p_alpha?: number
   elm_suppressed: boolean
   elm_active?: boolean
   in_hmode: boolean

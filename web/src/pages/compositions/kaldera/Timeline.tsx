@@ -19,7 +19,7 @@ interface Props {
   headOnly?: boolean
 }
 
-const fmtT = (t: number) => `${Math.max(0, t).toFixed(3)} S`
+const fmtT = (t: number) => `${Math.max(0, t).toFixed(3)} s`
 
 /**
  * The timeline along the bottom: one 1 px line, labelled stations, and a
@@ -128,7 +128,7 @@ export default function Timeline({ stations, duration, clock, scrubTime, running
           subscription above rewrites textContent, and with two children React
           later tried to remove a ' . SCRUB' node that was gone (crash on Reset
           after a scrub). */}
-      <div ref={timeRef} className="kd-playhead-time" style={{ left: `${pct}%` }}>{`${fmtT(cur)}${scrubTime !== null ? ' . SCRUB' : ''}`}</div>
+      <div ref={timeRef} className="kd-playhead-time kd-g" style={{ left: `${pct}%` }}>{`${fmtT(cur)}${scrubTime !== null ? ' . SCRUB' : ''}`}</div>
     </div>
   )
 }

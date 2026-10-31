@@ -6,7 +6,7 @@ import { reopenFirstRun } from '../lib/firstRun'
 interface Props {
   onRestartTutorial?: () => void
   /** Set when a ?layout= link overrides the stored look: names the layout and drops the parameter. */
-  layoutLock?: { slug: string; onRelease: () => void }
+  layoutLock?: { label: string; onRelease: () => void }
 }
 
 export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Props = {}) {
@@ -102,7 +102,7 @@ export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Prop
             </div>
             {layoutLock && (
               <div className="settings-lock mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[9px] uppercase tracking-[0.12em] text-gray-400">
-                <span>LAYOUT FIXED BY LINK . {layoutLock.slug}</span>
+                <span>LAYOUT FIXED BY LINK . {layoutLock.label}</span>
                 <button
                   type="button"
                   onClick={() => { layoutLock.onRelease(); setOpen(false) }}
@@ -122,19 +122,19 @@ export default function SettingsDropdown({ onRestartTutorial, layoutLock }: Prop
                 <button
                   key={u}
                   onClick={() => setUnits(u)}
-                  className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer capitalize
+                  className={`flex-1 px-2 py-1 text-sm font-medium transition-colors cursor-pointer
                     ${
                       units === u
                         ? 'theme-toggle-active'
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
                     }`}
                 >
-                  {u}
+                  {u === 'metric' ? 'SI' : 'CGS'}
                 </button>
               ))}
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              {units === 'metric' ? 'SI: m, T, keV, MA' : 'CGS: cm, kG, keV, kA'}
+              {units === 'metric' ? 'm, T, keV, MA' : 'cm, kG, keV, kA (practical CGS)'}
             </div>
           </div>
 

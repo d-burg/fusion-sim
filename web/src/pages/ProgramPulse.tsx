@@ -147,7 +147,7 @@ function Strip({
       <div className="sp-strip-label" title={ch.unit ? `${ch.title} (${ch.unit})` : ch.title}>{ch.label}</div>
       <div className="sp-strip-right">
         <span className="sp-strip-v">
-          {programmed ? <>{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}{ch.unit ? ` ${ch.unit}` : ''}</> : '—'}
+          {programmed ? <>{extremum.toFixed(Math.abs(extremum) >= 10 ? 1 : 2)}{ch.unit ? <> <G>{ch.unit}</G></> : ''}</> : '—'}
         </span>
         {onEdit && !edited && (
           <button type="button" className="sp-edit" onClick={onEdit} aria-label={`Edit ${ch.title}`}>EDIT</button>
@@ -196,16 +196,16 @@ function ProgramChart({
   const param = (key: string) => SCALAR_PARAMS.find((p) => p.key === key)
 
   const allChannels: Channel[] = [
-    { key: 'ip', label: <>I<sub>P</sub></>, unit: 'MA', title: 'Plasma current', points: program.ip, param: param('ip') },
+    { key: 'ip', label: <>I<sub>p</sub></>, unit: 'MA', title: 'Plasma current', points: program.ip, param: param('ip') },
     { key: 'bt', label: <>B<sub>T</sub></>, unit: 'T', title: 'Toroidal magnetic field', points: program.bt },
-    { key: 'ne', label: <>N̄<sub>E</sub></>, unit: '10²⁰ m⁻³', title: 'Line-averaged electron density', points: program.ne_target, param: param('ne') },
+    { key: 'ne', label: <><G>n̄</G><sub>e</sub></>, unit: '10²⁰ m⁻³', title: 'Line-averaged electron density', points: program.ne_target, param: param('ne') },
     { key: 'nbi', label: <>P<sub>NBI</sub></>, unit: 'MW', title: 'Neutral beam injection power', points: program.p_nbi, param: param('p_nbi') },
     { key: 'ech', label: <>P<sub>ECH</sub></>, unit: 'MW', title: 'Electron cyclotron heating power', points: program.p_ech, param: param('p_ech') },
     { key: 'ich', label: <>P<sub>ICH</sub></>, unit: 'MW', title: 'Ion cyclotron heating power', points: program.p_ich },
     { key: 'd2_puff', label: <><G>Γ</G> D<sub>2</sub></>, unit: '10²⁰/s', title: 'Deuterium gas puff rate', points: program.d2_puff ?? [], param: param('d2_puff') },
     { key: 'n2_puff', label: <><G>Γ</G> N</>, unit: '10²⁰ atoms/s', title: 'Nitrogen seeding rate', points: program.n2_puff ?? [], param: param('n2_puff') },
-    { key: 'neon_puff', label: <><G>Γ</G> NE</>, unit: '10²⁰ atoms/s', title: 'Neon seeding rate', points: program.neon_puff ?? [], param: param('neon_puff') },
-    { key: 'argon_puff', label: <><G>Γ</G> AR</>, unit: '10²⁰ atoms/s', title: 'Argon seeding rate', points: program.argon_puff ?? [], param: param('argon_puff') },
+    { key: 'neon_puff', label: <G>Γ Ne</G>, unit: '10²⁰ atoms/s', title: 'Neon seeding rate', points: program.neon_puff ?? [], param: param('neon_puff') },
+    { key: 'argon_puff', label: <G>Γ Ar</G>, unit: '10²⁰ atoms/s', title: 'Argon seeding rate', points: program.argon_puff ?? [], param: param('argon_puff') },
     { key: 'kappa', label: <G>κ</G>, unit: '', title: 'Elongation', points: program.kappa, param: param('kappa') },
     { key: 'delta', label: <G>δ</G>, unit: '', title: 'Triangularity', points: program.delta, param: param('delta') },
   ]
@@ -239,7 +239,7 @@ function ProgramChart({
       <div className="sp-axis">
         {stations.map((s, i) => (
           <span key={s.label} className="sp-axis-t" data-anchor={anchor(i)} style={{ left: pct(s.t) }}>
-            {s.t.toFixed(2)}{i === stations.length - 1 ? ' S' : ''}
+            {s.t.toFixed(2)}{i === stations.length - 1 ? <G> s</G> : ''}
           </span>
         ))}
       </div>
@@ -444,9 +444,9 @@ function ProgramPage({ deviceId }: { deviceId: string | undefined }) {
                       className="sp-dur-in"
                       aria-label="Pulse duration in seconds"
                     />
-                    <span className="sp-ro-u">S</span>
+                    <span className="sp-ro-u sp-g">s</span>
                   </span>
-                  <span className="sp-ro-c">T<sub>END</sub> . MAX {durationMax} S</span>
+                  <span className="sp-ro-c"><G>t</G><sub>end</sub> . MAX {durationMax} <G>s</G></span>
                 </label>
                 {/* Kept in the layout while hidden so nothing shifts. */}
                 <button
@@ -478,7 +478,7 @@ function ProgramPage({ deviceId }: { deviceId: string | undefined }) {
             <>
               <div className="sp-chart-head">
                 <div className="sp-head"><span className="sp-num">{N.chart}</span> . PROGRAMMED WAVEFORMS</div>
-                <div className="sp-head-r">{device.name} . {scenario?.name} . {program.duration.toFixed(1)} S</div>
+                <div className="sp-head-r">{device.name} . {scenario?.name} . {program.duration.toFixed(1)} <G>s</G></div>
               </div>
               <div className="h-[30rem] md:tall:h-auto md:tall:flex-1 min-h-0">
                 <ProgramChart deviceId={deviceId}

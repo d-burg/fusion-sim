@@ -213,7 +213,7 @@ const SECTION_TITLES: string[] = [
   "Scrape-Off Layer and Divertor Heat Flux",
   "Divertor Detachment Model",
   "Divertor Surface Temperature (0D Lumped Thermal Model)",
-  "Radial Profiles: H-Mode Pedestal (OMFIT/Tanh)",
+  "Radial Profiles: H-Mode Pedestal (mtanh)",
   "Radial Profiles: L-Mode (Parabolic)",
   "Internal Inductance",
   "Density Evolution",
@@ -351,10 +351,10 @@ export default function Bibliography() {
             H-mode. At ITER's δ = 0.55, this gives ~3% improvement.
           </p>
           <p>
-            <strong>D-T isotope enhancement:</strong> D-T plasmas receive a 1.10× confinement
+            <strong>D-T isotope enhancement:</strong> D-T plasmas in H-mode receive a 1.10× confinement
             enhancement beyond the IPB98 M<sup>0.19</sup> scaling, representing residual isotope
-            effects on turbulent transport. Combined with the M<sup>0.19</sup> factor (1.19× for
-            DT vs DD), the total confinement advantage is ~1.31×. The dominant DT performance
+            effects on turbulent transport. Combined with the M<sup>0.19</sup> factor
+            ((2.5/2)<sup>0.19</sup> = 1.04× for DT, M = 2.5, vs DD), the total confinement advantage is ~1.15×. The dominant DT performance
             gain comes from alpha self-heating in the power balance.<RefTag id="cordey1999" />
           </p>
           <p>
@@ -461,9 +461,9 @@ export default function Bibliography() {
           <p>
             Four radiation channels are modeled:<RefTag id="wesson2011" />
           </p>
-          <p><strong>Bremsstrahlung</strong> (electron-ion free-free radiation):</p>
+          <p><strong>Bremsstrahlung</strong> (electron-ion free-free radiation; volume-averaged n<sub>e</sub> = 0.85 n̄<sub>e</sub>, intrinsic Z<sub>eff</sub>):</p>
           <Eq>
-            {'P_brem = 5.35 × 10⁻³⁷ · n_e² · Z_eff · T_e^(1/2) · V  [MW]'}
+            {'P_brem = 5.35 × 10⁻³⁷ · n_e² · Z_eff,int · T_e^(1/2) · V  [MW]'}
           </Eq>
           <p><strong>Intrinsic impurity radiation</strong> (wall material — carbon, tungsten, beryllium):</p>
           <Eq>
@@ -475,15 +475,26 @@ export default function Bibliography() {
           </p>
           <p><strong>Line radiation</strong> (residual, on top of intrinsic):</p>
           <Eq>
-            {'P_line = P_brem × 0.15 × max(Z_eff − 1, 0)'}
+            {'P_line = P_brem × 0.15 × max(Z_eff,int − 1, 0)'}
           </Eq>
-          <p><strong>Neon seeding radiation</strong> (intentional impurity injection):</p>
+          <p><strong>Seeded impurity radiation</strong> (nitrogen, neon, argon; coronal OpenADAS cooling rates):<RefTag id="openadas" /></p>
           <Eq>
-            {'P_neon = f_imp · n_e² · L_z,eff · V  [MW]'}
+            {'P_seed = C · Σ_z f_z · n_e² · ⟨L_z⟩ · V  [MW]'}
           </Eq>
           <p>
+            f<sub>z</sub> is each species&rsquo; core fraction n<sub>z</sub>/n<sub>e</sub> and
+            ⟨L<sub>z</sub>⟩ its cooling rate (line, recombination and its own bremsstrahlung),
+            averaged with n<sub>e</sub>² weighting over an assumed peaked T<sub>e</sub> profile on a
+            pedestal. The same average gives the charge states, so seeding raises
+            Z<sub>eff</sub> by Σ f<sub>z</sub>(⟨Z²⟩ − ⟨Z⟩) and dilutes the fuel by Σ f<sub>z</sub>⟨Z⟩.
+            Above the device&rsquo;s collapse threshold f<sub>c</sub> in total seeded fraction,
+            C = 1 + 5 (f − f<sub>c</sub>)/f<sub>c</sub>; below it C = 1. Radiation from the seeded
+            species in the divertor and scrape-off layer is outside the core balance and enters
+            through the detachment model (§13).
+          </p>
+          <p>
             Total radiated power: P<sub>rad</sub> = P<sub>brem</sub> + P<sub>intrinsic</sub> +
-            P<sub>line</sub> + P<sub>neon</sub>.
+            P<sub>line</sub> + P<sub>seed</sub>.
             Radiation fractions above ~80% of total input power pose a risk of radiative collapse and disruption.
           </p>
         </Section>
@@ -611,14 +622,14 @@ export default function Bibliography() {
             {'D = (c_int + c_z) / c_z,det,   f_detach = min(1 − 1/(1 + D³), 0.97)'}
           </Eq>
           <p>
-            At fixed power the density dependence keeps the (f<sub>GW</sub>/f₀)⁶ shape of the earlier
-            model; detachment now also gets harder with separatrix power and easier with plasma current
-            and shaping, and seeding can bring it on at any density. c<sub>z</sub> accumulates from the
+            At fixed power and seeding, D³ ∝ f<sub>GW</sub>⁶, so detachment comes on steeply with
+            density; it gets harder with separatrix power and easier with plasma current and shaping,
+            and seeding can bring it on at any density. c<sub>z</sub> accumulates from the
             seeding gas lines in the transport model with a 0.5 s confinement time. Three species are
             modeled, nitrogen, neon and argon, each counted in nitrogen-equivalent units with the weights
             1, 3.5 and 6 from their fig. 1d. Their core radiation, Z<sub>eff</sub> and fuel dilution come
-            from coronal OpenADAS cooling curves and charge states<RefTag id="openadas" /> at the core
-            temperature; what they radiate in the divertor is the dissipation this model represents. Each
+            from coronal OpenADAS cooling curves and charge states<RefTag id="openadas" /> averaged over
+            the temperature profile (§8); what they radiate in the divertor is the dissipation this model represents. Each
             machine exposes the gas lines it has: nitrogen is avoided on tritium machines (ITER), and
             CENTAUR follows the species SPARC&rsquo;s divertor paper scales<RefTag id="kuang2020" />, nitrogen
             and neon. Above the device&rsquo;s impurity collapse threshold the core radiation fraction climbs
@@ -680,7 +691,7 @@ export default function Bibliography() {
           <p>
             where <em>h_ped</em> is the pedestal height, <em>ρ_ped</em> is the pedestal location,
             <em> w</em> is the pedestal width, and the second term represents core peaking.
-            This is the same form used in the OMFIT and EFIT profile fitting frameworks.
+            The same form is fitted to Thomson-scattering and charge-exchange pedestal profiles (e.g. in OMFIT).
           </p>
           <p>
             The pedestal height scales with triangularity: T<sub>e,ped</sub> = (0.30 + 0.20·δ) · T<sub>e0</sub>
@@ -746,7 +757,7 @@ export default function Bibliography() {
             proximity to operational limits:
           </p>
           <ul className="list-disc pl-5 space-y-1">
-            <li><strong>Type I ELMs:</strong> Large periodic crashes at 5-25 Hz, each ejecting 5-13% of stored energy</li>
+            <li><strong>Type I ELMs:</strong> Large periodic crashes at 5-25 Hz, each removing 5–13% of W<sub>th</sub> in the model (measured Type I losses are typically a few % of W<sub>th</sub>, 5–15% of the pedestal energy)</li>
             <li><strong>Type II (grassy) ELMs:</strong> Small frequent crashes at 80-200 Hz, each ejecting 0.5-1.5% of W<sub>th</sub></li>
             <li><strong>QCE (Quasi-Continuous Exhaust):</strong> Continuous enhanced transport, no discrete crashes</li>
           </ul>
@@ -784,9 +795,9 @@ export default function Bibliography() {
         <Section number={21}>
           <p>When a disruption is triggered, it proceeds through four phases:</p>
           <ol className="list-decimal pl-5 space-y-1">
-            <li><strong>Precursor</strong> (50-100 ms): Growing locked mode oscillation with exponential growth rate ~20 s⁻¹</li>
-            <li><strong>Thermal Quench</strong> (1-2 ms): Exponential T<sub>e</sub> collapse to ~1% of pre-disruption value</li>
-            <li><strong>Current Quench</strong> (5-50 ms): L/R decay with transient I<sub>p</sub> overshoot spike</li>
+            <li><strong>Precursor</strong> (50-100 ms): Locked-mode amplitude grows exponentially at ~20 s⁻¹</li>
+            <li><strong>Thermal Quench</strong> (1–3 ms): Exponential T<sub>e</sub> collapse to ~1% of pre-disruption value; the I<sub>p</sub> spike is sized here from the drop in l<sub>i</sub></li>
+            <li><strong>Current Quench</strong> (5–50 ms): L/R decay from the top of the spike</li>
             <li><strong>Termination</strong>: Plasma current reaches zero, pulse ended</li>
           </ol>
         </Section>

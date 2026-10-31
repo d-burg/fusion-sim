@@ -4,7 +4,7 @@ import { useSimulation } from '../lib/useSimulation'
 import { useHallAudio } from '../lib/useHallAudio'
 import { getDevices, type PresetId } from '../lib/wasm'
 import type { MagneticConfig, OverrideValue, ProgramHandoff } from '../lib/program'
-import { useSettings, type Look } from '../lib/settingsContext'
+import { useSettings, LOOKS, type Look } from '../lib/settingsContext'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
 import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
@@ -70,7 +70,7 @@ export default function ControlRoom() {
   const resolvedLayout = layoutParam ?? previewLook ?? look
   const LayoutComponent = resolvedLayout === 'classic' ? undefined : (COMPOSITIONS[resolvedLayout] ?? COMPOSITIONS.kaldera)
 
-  // A programme edited on the pulse page arrives as router state.
+  // A program edited on the pulse page arrives as router state.
   const location = useLocation()
   const rawHandoff = (location.state ?? null) as ProgramHandoff | null
   const handoff = typeof rawHandoff?.programJson === 'string' ? rawHandoff : null
@@ -82,7 +82,9 @@ export default function ControlRoom() {
     next.delete('layout')
     setSearchParams(next, { replace: true, state: location.state })
   }
-  const layoutLock = layoutFixed ? { slug: layoutParam, onRelease: releaseLayout } : undefined
+  // Name the pinned layout as the settings menu does; an unknown slug renders the Modern look.
+  const layoutLabel = layoutParam === 'classic' ? 'Classic' : (LOOKS.find((l) => l.id === layoutParam)?.label ?? 'Modern')
+  const layoutLock = layoutFixed ? { label: layoutLabel, onRelease: releaseLayout } : undefined
 
   // Local state so user can switch without navigating
   const [tutorialActive, setTutorialActive] = useState(showTutorial)
@@ -109,7 +111,7 @@ export default function ControlRoom() {
   const [activeSpeed, setActiveSpeed] = useState(1.0)
 
   // Persistent Pulse Planner state — survives open/close of the drawer, and
-  // is seeded from the hand-off so the planner opens on the edited programme.
+  // is seeded from the hand-off so the planner opens on the edited program.
   const [plannerOverrides, setPlannerOverrides] = useState<Record<string, OverrideValue>>(handoff?.overrides ?? {})
   const [plannerDuration, setPlannerDuration] = useState<number | null>(handoff?.durationOverride ?? null)
   const [plannerPreset, setPlannerPreset] = useState<PresetId>(handoff?.presetId ?? routePreset)
@@ -150,15 +152,16 @@ export default function ControlRoom() {
       history,
       programJson,
       disrupted: !!state.snapshot?.disrupted,
-      cause: state.snapshot?.disruption_cause,
+      // the cause as the log resolved it at the trigger ('' → "not resolved")
+      cause: state.disruptionCause,
       disruptionTime: state.disruptionTime,
       elmCount: state.elmCount,
       fluxBudget: state.snapshot?.flux_budget,
       fluxExhausted: state.fluxExhausted,
     })
-  }, [finished, history, programJson, state.snapshot, state.disruptionTime, state.elmCount, state.fluxExhausted])
+  }, [finished, history, programJson, state.snapshot, state.disruptionTime, state.disruptionCause, state.elmCount, state.fluxExhausted])
 
-  // Load a programme edited on the pulse page. runProgram builds the sim but
+  // Load a program edited on the pulse page. runProgram builds the sim but
   // leaves it stopped, so the control room waits on Start as it always does.
   // Deliberately NOT guarded with a ref: under StrictMode's mount/unmount/
   // remount, useSimulation recreates the preset sim on the remount, so a
@@ -297,10 +300,10 @@ export default function ControlRoom() {
       {/* ─── Top bar ─── */}
       {/* Three-column grid rather than justify-between: the side columns take
           an equal share of the free space, so the playback controls stay
-          centred on the page even as the side content changes width (DD/DT
+          centered on the page even as the side content changes width (DD/DT
           toggle appearing per device, "(done)" suffix at end of pulse). */}
       {/* Below md the bar is two rows: selectors and time/settings on the first,
-          playback centred on its own full-width second row. A single row is
+          playback centered on its own full-width second row. A single row is
           wider than a phone and the root clips overflow, so the right-hand
           controls were cut off and could not be scrolled to. */}
       <div className="relative z-50 grid grid-cols-[1fr_auto] md:grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-x-1 sm:gap-x-2 gap-y-1">
@@ -460,7 +463,7 @@ export default function ControlRoom() {
       {/* Balanced 2x3: equilibrium top-left, traces across the top right,
           status spanning the bottom under the equilibrium, port view bottom
           right. Cells carry no card chrome; the 1px grid gap over the base
-          colour does all the separating. */}
+          color does all the separating. */}
       <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)] gap-px min-h-0 bg-[var(--c-line)]">
         {/* Top-left: Equilibrium cross-section (single cell) */}
         <div data-tutorial="equilibrium" className="stagger-1 panel-cell">

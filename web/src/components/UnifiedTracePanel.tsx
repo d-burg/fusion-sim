@@ -98,7 +98,7 @@ interface Props {
   scrubTime: number | null
   onScrub: (time: number | null) => void
   elmActive: boolean
-  /** The previous pulse, drawn in grey behind the live traces as a reference. */
+  /** The previous pulse, drawn in gray behind the live traces as a reference. */
   reference?: PreviousPulse | null
 }
 
@@ -409,7 +409,7 @@ export default function UnifiedTracePanel({
       ctx.rect(MARGIN_LEFT, row * ROW_H, plotW, ROW_H)
       ctx.clip()
 
-      // ── Reference pulse (grey, behind everything) ──
+      // ── Reference pulse (gray, behind everything) ──
       if (refVals && ref) {
         ctx.strokeStyle = isRetro ? '#2a9d2a' : tc.inkFaint
         ctx.lineWidth = 1.5

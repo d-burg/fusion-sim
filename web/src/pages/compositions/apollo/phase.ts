@@ -47,7 +47,7 @@ export function flatTopWindow(ip: Waveform | undefined): [number, number] | null
   return [start, end]
 }
 
-export type Phase = 'STANDBY' | 'RAMP-UP' | 'FLAT-TOP' | 'RAMP-DOWN' | 'COMPLETE' | 'DISRUPT'
+export type Phase = 'STANDBY' | 'RAMP-UP' | 'FLAT-TOP' | 'RAMP-DOWN' | 'END' | 'DISRUPTED'
 
 export function pulsePhase(
   programJson: string,
@@ -57,10 +57,10 @@ export function pulsePhase(
   snap: Snapshot | null,
   scrubbing: boolean,
 ): Phase {
-  if (snap?.disrupted && (!scrubbing || snap.disruption_phase)) return 'DISRUPT'
+  if (snap?.disrupted && (!scrubbing || snap.disruption_phase)) return 'DISRUPTED'
   if (!running && !finished && t <= 0) return 'STANDBY'
   const win = flatTopWindow(parseProgram(programJson).ip)
-  if (finished && !scrubbing) return 'COMPLETE'
+  if (finished && !scrubbing) return 'END'
   if (!win) return 'RAMP-UP'
   if (t < win[0]) return 'RAMP-UP'
   if (t <= win[1]) return 'FLAT-TOP'
@@ -76,3 +76,9 @@ export function clock(seconds: number): string {
   const ms = Math.floor((rem - whole) * 1000)
   return `${String(m).padStart(2, '0')}:${String(whole).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
 }
+
+// The CRT has no subscripts: report symbols take the telemetry column's names, the words are in caps.
+const CRT_SYM: Record<string, string> = { 'V_loop': 'Vloop', 'W_th': 'Wth', 'P_fus': 'Pfus', 'βN': 'βN', 'fGW': 'fGW', 'q95': 'q95', 'Ip': 'Ip' }
+
+/** A report label as the CRT prints it, e.g. "Peak W_th" → "PEAK Wth". */
+export const crtLabel = (label: string) => label.split(' ').map((w) => CRT_SYM[w] ?? w.toUpperCase()).join(' ')

@@ -82,7 +82,7 @@ export default function Hero({ snapshot, wallJson, limiterPoints, bare }: Props)
       const x = Math.round(X(r)) + 0.5
       g.beginPath(); g.moveTo(x, yb); g.lineTo(x, yb + 2); g.stroke()
       g.textAlign = i === rTicks.length - 1 ? 'left' : 'center'
-      g.fillText(r.toFixed(rStep < 1 ? 1 : 0) + (i === rTicks.length - 1 ? ' M' : ''), i === rTicks.length - 1 ? x - 6 : x, yb + 3)
+      g.fillText(r.toFixed(rStep < 1 ? 1 : 0) + (i === rTicks.length - 1 ? ' m' : ''), i === rTicks.length - 1 ? x - 6 : x, yb + 3)
     })
     g.textAlign = 'right'; g.textBaseline = 'middle'
     for (let z = Math.ceil(zMin / zStep) * zStep; z <= zMax + 1e-9; z += zStep) {

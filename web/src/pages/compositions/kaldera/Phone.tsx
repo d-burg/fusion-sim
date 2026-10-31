@@ -11,7 +11,8 @@ import Diagnostics, { type Tone } from './Diagnostics'
 import InfoHint from './InfoHint'
 import type { DisplayClock } from './displayClock'
 import type { Phase, Waveform } from './phase'
-import { f1, f2, G, PRESET_WORD, Readout, ReportPanel, STAB, POWER, configWord, hazardPct } from './shared'
+import { f1, f2, G, PRESET_WORD, Readout, ReportPanel, STAB, POWER, configWord } from './shared'
+import { fmtHazard } from '../useDiagnostics'
 import { FIT, Fx, digits8, q95Disp } from '../Fixed'
 import { CONFIG_WORDS, PHASE_WORDS, STATE_WORDS } from './words'
 
@@ -22,6 +23,8 @@ export interface PhoneView {
   phase: Phase
   pulseNo: string
   stateWord: string
+  /** ELMING beside H-MODE (an ELM in the last 0.3 s). */
+  elming: boolean
   stations: Station[]
   T: number
   program: Record<string, Waveform>
@@ -33,20 +36,20 @@ export interface PhoneView {
   onToggleReport: () => void
 }
 
-const fmtT = (t: number) => `${Math.max(0, t).toFixed(3)} S`
+const fmtT = (t: number) => `${Math.max(0, t).toFixed(3)} s`
 const speedWord = (sp: number) => (sp === 1 ? '1' : sp === 2 ? '2' : sp.toFixed(2).replace(/0$/, ''))
 
 /** The phone trace channels, keyed as the shared `phoneTraces` setting keys them (TracePoint names). */
 const CHANNELS: { key: string; word: ReactNode }[] = [
-  { key: 'ip', word: <>I<sub>P</sub></> },
-  { key: 'w_th', word: <>W<sub>TH</sub></> },
+  { key: 'ip', word: <>I<sub>p</sub></> },
+  { key: 'w_th', word: <>W<sub>th</sub></> },
   { key: 'd_alpha', word: <>D <G>α</G></> },
-  { key: 'ne_bar', word: <>N̄<sub>E</sub> . F<sub>GW</sub></> },
-  { key: 'p_input', word: <>P<sub>IN</sub> . P<sub>RAD</sub></> },
+  { key: 'ne_bar', word: <><G>n̄</G><sub>e</sub> . <G>f</G><sub>GW</sub></> },
+  { key: 'p_input', word: <>P<sub>in</sub> . P<sub>rad</sub></> },
   { key: 'beta_n', word: <><G>β</G><sub>N</sub></> },
-  { key: 'q95', word: <>Q<sub>95</sub></> },
-  { key: 'v_loop', word: <>V<sub>LOOP</sub></> },
-  { key: 'te0', word: <>T<sub>E0</sub></> },
+  { key: 'q95', word: <><G>q</G><sub>95</sub></> },
+  { key: 'v_loop', word: <>V<sub>loop</sub></> },
+  { key: 'te0', word: <>T<sub>e0</sub></> },
   { key: 'tau_e', word: <><G>τ</G><sub>E</sub></> },
   { key: 'h_factor', word: <>H<sub>98</sub></> },
   { key: 'psi_oh', word: <><G>Ψ</G><sub>OH</sub></> },
@@ -132,19 +135,19 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
   const all: Record<string, Strip> = useMemo(() => {
     const pick = (k: keyof TracePoint): Pts => history.map((p) => [p.t, Number(p[k])] as [number, number])
     return {
-      ip: { id: 'ip', label: 'IP', node: <>I<sub>P</sub></>, hint: traceDescriptions.ip, unit: 'MA', pts: pick('ip'), ref: program.ip },
-      w_th: { id: 'w_th', label: 'W TH', node: <>W<sub>TH</sub></>, hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
+      ip: { id: 'ip', label: 'IP', node: <>I<sub>p</sub></>, hint: traceDescriptions.ip, unit: 'MA', pts: pick('ip'), ref: program.ip },
+      w_th: { id: 'w_th', label: 'W TH', node: <>W<sub>th</sub></>, hint: traceDescriptions.w_th, unit: 'MJ', pts: pick('w_th') },
       d_alpha: { id: 'd_alpha', label: 'D α', node: <>D <G>α</G></>, hint: traceDescriptions.d_alpha, pts: pick('d_alpha'), elm: history.map((p) => !!p.elm_active) },
-      ne_bar: { id: 'ne_bar', label: 'N̄E', node: <>N̄<sub>E</sub></>, hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', node: <>F<sub>GW</sub></>, hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
-      p_input: { id: 'p_input', label: 'P IN', node: <>P<sub>IN</sub></>, hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', node: <>P<sub>RAD</sub></>, hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
+      ne_bar: { id: 'ne_bar', label: 'N̄E', node: <><G>n̄</G><sub>e</sub></>, hint: traceDescriptions.ne_bar, pts: pick('ne_bar'), ref: program.ne_target, second: { label: 'F GW', node: <><G>f</G><sub>GW</sub></>, hint: traceDescriptions.f_greenwald, pts: pick('f_greenwald'), own: true }, blank: !valid },
+      p_input: { id: 'p_input', label: 'P IN', node: <>P<sub>in</sub></>, hint: traceDescriptions.p_input, unit: 'MW', pts: pick('p_input'), ref: pinRef, second: { label: 'P RAD', node: <>P<sub>rad</sub></>, hint: traceDescriptions.p_rad, pts: pick('p_rad') }, digits: 1 },
       beta_n: { id: 'beta_n', label: 'BETA N', node: <><G>β</G><sub>N</sub></>, hint: traceDescriptions.beta_n, pts: pick('beta_n'), blank: !valid },
-      q95: { id: 'q95', label: 'Q95', node: <>Q<sub>95</sub></>, hint: traceDescriptions.q95, pts: pick('q95'), blank: !valid },
-      v_loop: { id: 'v_loop', label: 'V LOOP', node: <>V<sub>LOOP</sub></>, hint: traceDescriptions.v_loop, unit: 'V', pts: pick('v_loop') },
-      te0: { id: 'te0', label: 'TE0', node: <>T<sub>E0</sub></>, hint: traceDescriptions.te0, unit: 'KEV', pts: pick('te0'), blank: !valid },
-      tau_e: { id: 'tau_e', label: 'TAU E', node: <><G>τ</G><sub>E</sub></>, unit: 'S', pts: tauPts, digits: 3, blank: !valid },
+      q95: { id: 'q95', label: 'Q95', node: <><G>q</G><sub>95</sub></>, hint: traceDescriptions.q95, pts: pick('q95'), blank: !valid },
+      v_loop: { id: 'v_loop', label: 'V LOOP', node: <>V<sub>loop</sub></>, hint: traceDescriptions.v_loop, unit: 'V', pts: pick('v_loop') },
+      te0: { id: 'te0', label: 'TE0', node: <>T<sub>e0</sub></>, hint: traceDescriptions.te0, unit: 'keV', pts: pick('te0'), blank: !valid },
+      tau_e: { id: 'tau_e', label: 'TAU E', node: <><G>τ</G><sub>E</sub></>, unit: 's', pts: tauPts, digits: 3, blank: !valid },
       h_factor: { id: 'h_factor', label: 'H98', node: <>H<sub>98</sub></>, hint: traceDescriptions.h_factor, pts: pick('h_factor'), blank: !valid },
-      psi_oh: { id: 'psi_oh', label: 'PSI OH', node: <><G>Ψ</G><sub>OH</sub></>, hint: traceDescriptions.psi_oh, unit: 'V·S', pts: pick('psi_oh') },
-      disruption_risk: { id: 'disruption_risk', label: 'HAZARD', hint: traceDescriptions.disruption_risk, unit: '%/S', pts: history.map((p) => [p.t, p.disruption_risk * 100] as [number, number]), blank: !valid },
+      psi_oh: { id: 'psi_oh', label: 'PSI OH', node: <><G>Ψ</G><sub>OH</sub></>, hint: traceDescriptions.psi_oh, unit: 'V·s', pts: pick('psi_oh') },
+      disruption_risk: { id: 'disruption_risk', label: 'HAZARD', hint: traceDescriptions.disruption_risk, unit: '%/s', pts: history.map((p) => [p.t, p.disruption_risk * 100] as [number, number]), blank: !valid },
     }
   // history is mutated in place by the simulation hook; key on its length and last time
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,18 +178,19 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
         </button>
         <div className="kd-ph-pulse">
           <span className="kd-ph-cap">PULSE {pulseNo}</span>
-          <Fx fit={digits8(fmtT(T))} className="kd-ph-time"><span ref={timeRef}>{fmtT(scrubTime ?? Math.min(clock.get(), T))}</span></Fx>
+          <Fx fit={digits8(fmtT(T))} className="kd-ph-time kd-g"><span ref={timeRef}>{fmtT(scrubTime ?? Math.min(clock.get(), T))}</span></Fx>
         </div>
         <span className="kd-settings kd-ph-settings">{ctx.settingsNode}</span>
         {picking && <Choices ctx={ctx} onClose={() => setPicking(false)} />}
       </header>
 
       <div className="kd-ph-state" data-state={stateWord}>
-        <Fx fit={PHASE_WORDS} align="start" className="kd-phase" data-tone={phase === 'DISRUPT' ? 'bad' : undefined}>{phase}</Fx>
+        <Fx fit={PHASE_WORDS} align="start" className="kd-phase" data-tone={phase === 'DISRUPTED' ? 'bad' : undefined}>{phase}</Fx>
         {stateWord !== phase && <><span className="kd-dot">.</span><Fx fit={STATE_WORDS} align="start" className="kd-ph-mode">{stateWord}</Fx></>}
+        {stateWord === 'H-MODE' && <Fx fit="ELMING" align="start" className="kd-ph-mode">{view.elming ? 'ELMING' : ''}</Fx>}
         {s?.oh_saturated && <span className="kd-flag">OH SATURATED</span>}
         {s?.flux_exhausted && <span className="kd-flag">FLUX</span>}
-        <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={tones.haz}>{valid ? hazardPct(s?.disruption_risk) : '—'}</Fx>{valid ? ' %/S' : ''}</span>
+        <span className="kd-haz">HAZARD <Fx fit={FIT.hazardPct} className="kd-haz-v" data-tone={tones.haz}>{valid ? fmtHazard(s?.disruption_risk) : '—'}</Fx>{valid ? <> <G>%/s</G></> : ''}</span>
         {hasReport && (
           <button className="kd-ph-report-open" data-on={view.showReport} onClick={view.onToggleReport}>REPORT</button>
         )}
@@ -226,20 +230,20 @@ export default function Phone({ ctx, view }: { ctx: ControlRoomContext; view: Ph
           <button className="kd-ph-word kd-ph-more" aria-expanded={more} onClick={() => setMore((v) => !v)}>{more ? 'LESS' : 'MORE'}</button>
         </div>
         <div className="kd-scalars kd-ph-scalars">
-          <Readout value={f2(s?.ip)} fit={big ? "88.88" : "8.88"} unit="MA" caption={<>I<sub>P</sub></>} />
-          <Readout value={f2(s?.ne_bar)} fit="8.88" unit="10²⁰ M⁻³" caption={<>N̄<sub>E</sub></>} />
-          <Readout value={f2(s?.w_th)} fit={big ? "888.88" : "8.88"} unit="MJ" caption={<>W<sub>TH</sub></>} />
+          <Readout value={f2(s?.ip)} fit={big ? "88.88" : "8.88"} unit="MA" caption={<>I<sub>p</sub></>} />
+          <Readout value={f2(s?.ne_bar)} fit="8.88" unit="10²⁰ m⁻³" caption={<><G>n̄</G><sub>e</sub></>} />
+          <Readout value={f2(s?.w_th)} fit={big ? "888.88" : "8.88"} unit="MJ" caption={<>W<sub>th</sub></>} />
           <Readout value={f2(rv(s?.beta_n))} fit="8.88" caption={<><G>β</G><sub>N</sub></>} hint={STAB} tone={tones.beta} />
-          <Readout value={f2(q95Disp(rv(s?.q95)))} fit="88.88" caption={<>Q<sub>95</sub></>} hint={STAB} tone={tones.q95} />
-          <Readout value={f2(rv(s?.f_greenwald))} fit="8.88" caption={<>F<sub>GW</sub></>} hint={STAB} tone={tones.fgw} />
+          <Readout value={f2(q95Disp(rv(s?.q95)))} fit="88.88" caption={<><G>q</G><sub>95</sub></>} hint={STAB} tone={tones.q95} />
+          <Readout value={f2(rv(s?.f_greenwald))} fit="8.88" caption={<><G>f</G><sub>GW</sub></>} hint={STAB} tone={tones.fgw} />
           {more && (
             <>
-              <Readout value={f1(s?.p_input)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>IN</sub></>} hint={POWER} />
-              <Readout value={f1(s?.p_rad)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>RAD</sub></>} hint={POWER} />
-              <Readout value={f2(rv(s?.te0))} fit={big ? "88.88" : "8.88"} unit="KEV" caption={<>T<sub>E0</sub></>} />
-              <Readout value={f2(rv(s?.tau_e))} fit="8.88" unit="S" caption={<><G>τ</G><sub>E</sub></>} />
+              <Readout value={f1(s?.p_input)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>in</sub></>} hint={POWER} />
+              <Readout value={f1(s?.p_rad)} fit={big ? "888.8" : "88.8"} unit="MW" caption={<>P<sub>rad</sub></>} hint={POWER} />
+              <Readout value={f2(rv(s?.te0))} fit={big ? "88.88" : "8.88"} unit="keV" caption={<>T<sub>e0</sub></>} />
+              <Readout value={f2(rv(s?.tau_e))} fit="8.88" unit="s" caption={<><G>τ</G><sub>E</sub></>} />
               <Readout value={f2(rv(s?.h_factor))} fit="8.88" caption={<>H<sub>98</sub></>} />
-              <Readout value={f2(s?.v_loop)} fit="-88.88" unit="V" caption={<>V<sub>LOOP</sub></>} />
+              <Readout value={f2(s?.v_loop)} fit="-88.88" unit="V" caption={<>V<sub>loop</sub></>} />
             </>
           )}
         </div>

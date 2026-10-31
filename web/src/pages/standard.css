@@ -29,7 +29,7 @@
 }
 [data-page="landing"] { min-height: 100vh; display: flex; flex-direction: column; }
 [data-page] .sp-g { text-transform: none; }
-[data-page] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; }
+[data-page] sub { font-size: 0.8em; vertical-align: baseline; position: relative; top: 0.25em; letter-spacing: 0.12em; text-transform: none; }
 [data-page] .sp-num { color: rgba(255,255,255,0.5); }
 [data-page] .sp-head { font-size: 9px; color: rgba(255,255,255,0.7); white-space: nowrap; }
 [data-page] .sp-head-r { font-size: 8px; color: rgba(255,255,255,0.5); white-space: nowrap; font-variant-numeric: tabular-nums; }

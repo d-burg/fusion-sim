@@ -56,7 +56,7 @@ export function StandardNav({ active, left, tour }: { active?: 'devices' | 'bibl
 function Readout({ value, unit, caption }: { value: string; unit?: string; caption: ReactNode }) {
   return (
     <div className="sp-ro">
-      <div className="sp-ro-v">{value}{unit && <span className="sp-ro-u"> {unit}</span>}</div>
+      <div className="sp-ro-v">{value}{unit && <span className="sp-ro-u sp-g"> {unit}</span>}</div>
       <div className="sp-ro-c">{caption}</div>
     </div>
   )
@@ -171,9 +171,9 @@ export default function DeviceSelect() {
                 <h2 className="sp-tile-name">{d.name}</h2>
                 <div className="sp-tile-loc">{meta.location}{meta.status ? ` . ${meta.status}` : ''}</div>
                 <div className="sp-tile-params">
-                  <Readout value={d.r0.toFixed(2)} unit="M" caption={<>R<sub>0</sub></>} />
-                  <Readout value={d.a.toFixed(2)} unit="M" caption={<span className="sp-g">a</span>} />
-                  <Readout value={String(d.ip_max)} unit="MA" caption={<>I<sub>P</sub> MAX</>} />
+                  <Readout value={d.r0.toFixed(2)} unit="m" caption={<>R<sub>0</sub></>} />
+                  <Readout value={d.a.toFixed(2)} unit="m" caption={<span className="sp-g">a</span>} />
+                  <Readout value={String(d.ip_max)} unit="MA" caption={<>I<sub>p</sub> MAX</>} />
                   <Readout value={String(d.bt_max)} unit="T" caption={<>B<sub>T</sub> MAX</>} />
                 </div>
                 <span className="sp-select sp-dotted">SELECT</span>

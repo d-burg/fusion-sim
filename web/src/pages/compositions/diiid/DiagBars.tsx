@@ -22,7 +22,7 @@ function Bar({ k, fill, tone, idle, v, fit, u, word, words, wordTone }: {
       <span className="dc-bar-track">[<span data-lamp={lamp(tone, idle)}>{'#'.repeat(n)}</span>{'.'.repeat(CELLS - n)}]</span>
       <span className="dc-bar-v">
         <Fx fit={fit}>{v}</Fx><span className="dc-bar-u"> {u}</span><span className="dc-bar-dot"> . </span>
-        <Fx fit={words} className="dc-bar-w" data-lamp={lamp(wordTone, word === '--' || word === 'IDLE')}>{word}</Fx>
+        <Fx fit={words} className="dc-bar-w" data-lamp={lamp(wordTone, word === '--' || word === 'BACKGROUND')}>{word}</Fx>
       </span>
     </div>
   )
@@ -31,12 +31,12 @@ function Bar({ k, fill, tone, idle, v, fit, u, word, words, wordTone }: {
 /** The divertor and neutron bars at the foot of the green scalar block; the surface temperature only on tungsten. */
 export default function DiagBars({ d }: { d: Diagnostics }) {
   const regime = d.regime === '—' ? '--' : d.regime
-  const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
+  const tWord = d.tWord
   return (
     <>
       <Bar k="DIVERTOR HEAT FLUX" fill={d.qFill} tone={d.qTone} v={Math.min(d.q, 99.9).toFixed(1)} fit={FIT.q} u="MW/m2" word={regime} words={REGIME} wordTone={d.regimeTone} />
       {d.isW && <Bar k="SURFACE TEMPERATURE" fill={d.tFill} tone={d.tTone} v={d.tSurf.toFixed(0)} fit={FIT.tSurf} u="°C" word={tWord} words={T_WORDS} wordTone={d.tTone} />}
-      <Bar k="NEUTRONS" fill={d.nFill} tone={undefined} idle={!d.active} v={d.rate > 0 ? sci(d.rate).replace('E', 'e') : '--'} fit={NEU} u="n/s" word={d.active ? 'ACTIVE' : 'IDLE'} words={N_WORDS} />
+      <Bar k="NEUTRONS" fill={d.nFill} tone={undefined} idle={!d.active} v={d.rate > 0 ? sci(d.rate).replace('E', 'e') : '--'} fit={NEU} u="n/s" word={d.nWord} words={N_WORDS} />
     </>
   )
 }
@@ -52,7 +52,7 @@ function PhoneBar({ k, fill, tone, idle, v, fit, u, word, words, wordTone, child
     <div className="dcp-bar">
       <div className="dcp-bar-top">
         <span className="dcp-bar-k">{k}</span>
-        <Fx fit={words} className="dcp-bar-w" data-lamp={lamp(wordTone, word === '--' || word === 'IDLE')}>{word}</Fx>
+        <Fx fit={words} className="dcp-bar-w" data-lamp={lamp(wordTone, word === '--' || word === 'BACKGROUND')}>{word}</Fx>
       </div>
       <div className="dcp-bar-bot">
         <span className="dcp-bar-track">[<span data-lamp={lamp(tone, idle)}>{'#'.repeat(n)}</span>{'.'.repeat(PCELLS - n)}]</span>
@@ -66,12 +66,12 @@ function PhoneBar({ k, fill, tone, idle, v, fit, u, word, words, wordTone, child
 /** The three diagnostics bars for the phone, full width; P_fus and Q ride under the neutron bar. */
 export function PhoneBars({ d, pfus, q }: { d: Diagnostics; pfus: string; q: string }) {
   const regime = d.regime === '—' ? '--' : d.regime
-  const tWord = d.tTone === 'bad' ? 'RECRYSTALLIZATION' : d.tTone === 'warn' ? 'HOT' : 'NOMINAL'
+  const tWord = d.tWord
   return (
     <>
       <PhoneBar k="DIVERTOR HEAT FLUX" fill={d.qFill} tone={d.qTone} v={Math.min(d.q, 99.9).toFixed(1)} fit={FIT.q} u="MW/m2" word={regime} words={REGIME} wordTone={d.regimeTone} />
       {d.isW && <PhoneBar k="SURFACE TEMPERATURE" fill={d.tFill} tone={d.tTone} v={d.tSurf.toFixed(0)} fit={FIT.tSurf} u="°C" word={tWord} words={T_WORDS} wordTone={d.tTone} />}
-      <PhoneBar k="NEUTRONS" fill={d.nFill} tone={undefined} idle={!d.active} v={d.rate > 0 ? sci(d.rate).replace('E', 'e') : '--'} fit={NEU} u="n/s" word={d.active ? 'ACTIVE' : 'IDLE'} words={N_WORDS}>
+      <PhoneBar k="NEUTRONS" fill={d.nFill} tone={undefined} idle={!d.active} v={d.rate > 0 ? sci(d.rate).replace('E', 'e') : '--'} fit={NEU} u="n/s" word={d.nWord} words={N_WORDS}>
         <div className="dcp-bar-fus">
           <span>PFUS <b><Fx fit="888.8">{pfus}</Fx></b><span className="dcp-bar-u"> MW</span></span>
           <span>Q <b><Fx fit={FIT.Q}>{q}</Fx></b></span>

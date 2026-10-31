@@ -125,11 +125,32 @@ export interface FusionState {
   p_alpha: number        // Alpha heating power (MW) — DT: P_fus/5; DD: charged products
   neutron_rate: number   // Neutrons per second
   neutron_power: number  // Power carried by neutrons (MW)
-  q_plasma: number       // P_fus / P_input
+  q_plasma: number | null // Q = P_fus / P_ext; null when P_ext < P_EXT_MIN
   fuel_type: 'DD' | 'DT'
 }
 
 // ── Main computation ────────────────────────────────────────────────
+
+/** Below this external heating (MW) Q is not defined and is shown as a dash. */
+export const P_EXT_MIN = 0.5
+
+/**
+ * External heating P_ext (MW): NBI + ECH + ICH + Ohmic. The engine's p_input
+ * includes the alpha self-heating, so it is subtracted here.
+ */
+export function externalHeating(pInput: number, pAlpha: number | undefined): number {
+  return pInput - (pAlpha ?? 0)
+}
+
+/**
+ * Fusion gain Q = P_fus / P_ext, the one definition every readout and the
+ * end-of-pulse report use. No cap and no current fade: null (shown as "—")
+ * when P_ext < 0.5 MW, where the ratio means nothing.
+ */
+export function fusionGain(pFus: number, pInput: number, pAlpha: number | undefined): number | null {
+  const pExt = externalHeating(pInput, pAlpha)
+  return pExt >= P_EXT_MIN ? pFus / pExt : null
+}
 
 /**
  * Compute fusion power, neutron rate, and Q from current plasma state.
@@ -220,42 +241,7 @@ export function computeFusion(snapshot: Snapshot, device: Device): FusionState {
     p_alpha_MW = p_fus_MW - neutron_power_MW  // rest is charged products
   }
 
-  // Q = P_fus / P_external (external heating only, excludes alpha self-heating).
-  // snapshot.p_input now includes p_alpha from the Rust transport model,
-  // so subtract it for the standard physics Q definition.
-  //
-  // During ramp-down, P_external drops faster than the thermal energy decays,
-  // causing a nonphysical spike in Q = P_fus / P_ext.  Suppress this by
-  // requiring P_external to be at least 20% of P_input (i.e. alpha power
-  // isn't dominating the denominator) and smoothly ramping Q to zero when
-  // Ip is below 50% of nominal (plasma is no longer in a meaningful state).
-  // Q = P_fusion / P_external, with protections against rampdown spikes.
-  // During rampdown, external heating drops before fusion power decays
-  // (thermal inertia), causing Q = P_fus/P_ext to spike. Solution:
-  // 1. Floor the denominator at the total external heating (not alpha)
-  // 2. Fade Q smoothly as Ip drops below flat-top
-  // 3. Cap at 15 to prevent display artifacts
-  const p_alpha = snapshot.p_alpha ?? 0
-  const p_external = snapshot.p_input - p_alpha
-  const p_aux = snapshot.p_input - p_alpha - (snapshot.p_ohmic ?? 0)
-  // Fade against THIS pulse's flat-top current, not the machine's maximum
-  // rating: a JET pulse at 3.5 of 4.8 MA is at flat-top, not 73 % of the
-  // way there, and used to have its Q scaled down by ~0.6 for it.
-  const ip_ref = snapshot.prog_ip_peak && snapshot.prog_ip_peak > 0
-    ? snapshot.prog_ip_peak
-    : device.ip_max
-  const ip_frac = ip_ref > 0 ? snapshot.ip / ip_ref : 0
-  const prog_ip_frac = ip_ref > 0 ? (snapshot.prog_ip ?? snapshot.ip) / ip_ref : 0
-  // Fade starts early (98% Ip) and reaches zero at 30%
-  const ip_fade = Math.min(Math.max((prog_ip_frac - 0.30) / 0.68, 0), 1.0)
-    * Math.min(Math.max((ip_frac - 0.20) / 0.60, 0), 1.0)
-  // Denominator: use the larger of actual p_external or the auxiliary
-  // heating power. This prevents the denom from collapsing when heating
-  // is cut before stored energy decays.
-  const denom = Math.max(p_external, p_aux, 1.0)
-  const q_plasma = denom > 1.0
-    ? Math.min(p_fus_MW / denom, 15) * ip_fade
-    : 0
+  const q_plasma = fusionGain(p_fus_MW, snapshot.p_input, snapshot.p_alpha)
 
   return {
     p_fus: p_fus_MW,

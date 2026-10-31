@@ -7,6 +7,7 @@ import { plasmaParamsInfo, stabilityInfo, powerBalanceInfo, divertorInfo, neutro
 import { getDevice } from '../lib/wasm'
 import { computeFusion, computeDivertorHeatFlux, DivertorThermalModel, formatNeutronRate, formatQ, neutronSignalLevel, type FusionState, type DivertorState } from '../lib/fusionPhysics'
 import { FLUX_WARN, reconstructionValid } from '../lib/pulseLog'
+import { betaTone, fmtHazard, hazardPct, hazardTone, regimeTone, T_WARN, W_RECRYST_TEMP, type Regime } from '../lib/limits'
 
 interface Props {
   snapshot: Snapshot | null
@@ -244,7 +245,7 @@ export default function StatusPanel({
           <Param label={<>B<sub>t</sub></>} value={s.bt} unit="T" />
           <Param label={<><span style={{ textDecoration: 'overline' }}>n</span><sub>e</sub></>} value={s.ne_bar} unit="10²⁰" />
           <Param label={<>c<sub>z</sub></>} value={100 * ((s.imp_n ?? 0) + (s.imp_ne ?? 0) + (s.imp_ar ?? 0))} unit="%" invalid={invalid} />
-          <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={s.beta_n > 2.5} danger={s.beta_n > 2.8} invalid={invalid} />
+          <Param label={<>β<sub>N</sub></>} value={s.beta_n} unit="" warn={betaTone(s.beta_n, s) === 'warn'} danger={betaTone(s.beta_n, s) === 'bad'} invalid={invalid} />
 
           <Param label={<>W<sub>th</sub></>} value={s.w_th} unit="MJ" />
           <Param label={<>τ<sub>E</sub></>} value={s.tau_e} unit="s" invalid={invalid} />
@@ -355,6 +356,8 @@ function PowerBalance({ snapshot: s, fusion, usesIch }: { snapshot: Snapshot; fu
 // ── Q_plasma display ─────────────────────────────────────────────────
 
 function QDisplay({ fusion }: { fusion: FusionState | null }) {
+  // null below 0.5 MW of external heating: Q is shown as a dash and the filter holds
+  const qDefined = fusion?.q_plasma != null
   const rawQ = fusion?.q_plasma ?? 0
   const rawPFus = fusion?.p_fus ?? 0
 
@@ -367,11 +370,11 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
     smoothQ.current = 0
     smoothPFus.current = 0
   } else {
-    smoothQ.current += alpha * (rawQ - smoothQ.current)
+    if (qDefined) smoothQ.current += alpha * (rawQ - smoothQ.current)
     smoothPFus.current += alpha * (rawPFus - smoothPFus.current)
   }
 
-  const q = smoothQ.current
+  const q = qDefined ? smoothQ.current : 0
   const pFus = smoothPFus.current
 
   // Color coding for Q
@@ -397,7 +400,7 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
     <div className={`rounded border px-2.5 py-1 flex items-baseline gap-2 shrink-0 self-start whitespace-nowrap ${borderColor}`}>
       <span className="text-xs text-gray-500">Q<sub>plasma</sub></span>
       <span className={`text-lg font-mono font-semibold tabular-nums leading-tight min-w-[3em] text-right ${qColor}`}>
-        {formatQ(q)}
+        {qDefined ? formatQ(q) : '—'}
       </span>
       <span className="text-xs text-gray-500 ml-1">
         P<sub>fus</sub> <span className="font-mono tabular-nums">{pFusStr}</span>
@@ -497,9 +500,6 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
 
 // ── Divertor Thermal Loading ─────────────────────────────────────────
 
-/** Tungsten recrystallization temperature threshold (°C). */
-const W_RECRYST_TEMP = 1300
-
 /** Tungsten recrystallization heat flux threshold (MW/m²) — approximate steady-state limit. */
 const W_RECRYST_QFLUX = 10
 
@@ -524,7 +524,7 @@ function DivertorLoading({ divertor, invalid = false, divertorActive = false }: 
   // Dynamic scale: 2000°C normally, expands if ELMs push higher
   const maxTemp = Math.max(2000, tSurface * 1.2)
   const fracT = Math.min(tSurface / maxTemp, 1)
-  const tempBarColor = tSurface > W_RECRYST_TEMP ? 'var(--c-bad)' : tSurface > 600 ? 'var(--c-warn)' : 'var(--c-ok)'
+  const tempBarColor = tSurface > W_RECRYST_TEMP ? 'var(--c-bad)' : tSurface >= T_WARN ? 'var(--c-warn)' : 'var(--c-ok)'
   const isTempWarning = isW && tSurface > W_RECRYST_TEMP
 
   const isWarning = (isW && q > W_RECRYST_QFLUX) || isTempWarning
@@ -532,7 +532,7 @@ function DivertorLoading({ divertor, invalid = false, divertorActive = false }: 
   // Bars can use the saturated token; the numeric readouts next to them are
   // small text, so they use the AA-safe ink variant of the alarm red.
   const qInkColor = q > W_RECRYST_QFLUX ? 'var(--c-bad-ink)' : q > 5 ? 'var(--c-warn)' : 'var(--c-ok)'
-  const tempInkColor = tSurface > W_RECRYST_TEMP ? 'var(--c-bad-ink)' : tSurface > 600 ? 'var(--c-warn)' : 'var(--c-ok)'
+  const tempInkColor = tSurface > W_RECRYST_TEMP ? 'var(--c-bad-ink)' : tSurface >= T_WARN ? 'var(--c-warn)' : 'var(--c-ok)'
 
   return (
     <div className="border-t border-gray-800 pt-1.5">
@@ -555,7 +555,7 @@ function DivertorLoading({ divertor, invalid = false, divertorActive = false }: 
         <span className="text-xs text-gray-600 ml-auto" style={invalidStyle} title={invalidTitle}>
           f<sub>det</sub>=<span className="font-mono tabular-nums">{invalid ? '—' : fDet.toFixed(2)}</span>
         </span>
-        <DetachmentTag fDet={fDet} active={divertorActive} />
+        <DetachmentTag fDet={fDet} q={q} active={divertorActive} />
       </div>
 
       {/* Heat flux bar */}
@@ -624,7 +624,7 @@ function divertorRegime(fDet: number): DivertorRegime {
  * rather than a blinking element: the control room keeps nothing blinking
  * that is not an unacknowledged alarm.
  */
-function DetachmentTag({ fDet, active }: { fDet: number; active: boolean }) {
+function DetachmentTag({ fDet, q, active }: { fDet: number; q: number; active: boolean }) {
   const regime = active ? divertorRegime(fDet) : null
   // Highlight only an actual change of regime, not the first render: the
   // panel mounts afresh on every pulse start and device switch. The one-shot
@@ -641,8 +641,10 @@ function DetachmentTag({ fDet, active }: { fDet: number; active: boolean }) {
     prevRef.current = regime
   }, [regime])
   const label = regime === 'detached' ? 'Detached' : regime === 'partial' ? 'Partial' : regime === 'attached' ? 'Attached' : '—'
-  const color = regime === 'detached' ? 'var(--c-accent)' : regime === 'partial' ? 'var(--c-ink-dim)' : 'var(--c-ink-faint)'
-  const dot = regime === 'detached' ? 'var(--c-accent)' : regime === 'partial' ? 'var(--c-ink-dim)' : 'var(--c-line-strong)'
+  // the tone every look uses: partial and detached are neutral, attached is amber above 5 MW/m²
+  const tone = regimeTone((regime === null ? '—' : regime.toUpperCase()) as Regime, q)
+  const color = tone === 'warn' ? 'var(--c-warn)' : regime === null ? 'var(--c-ink-faint)' : 'var(--c-ink-dim)'
+  const dot = tone === 'warn' ? 'var(--c-warn)' : regime === null ? 'var(--c-line-strong)' : 'var(--c-ink-dim)'
   return (
     <span
       ref={elRef}
@@ -659,12 +661,14 @@ function DetachmentTag({ fDet, active }: { fDet: number; active: boolean }) {
 
 /** Compact disruption risk indicator. */
 function DisruptionRisk({ risk }: { risk: number }) {
-  const pct = Math.min(risk * 100, 100)
+  const pct = Math.min(hazardPct(risk), 100)
+  // the shared bands: amber from 1 %/s, red from 10 %/s
+  const tone = hazardTone(risk)
   const barColor =
-    pct > 60 ? 'var(--c-bad)' : pct > 30 ? 'var(--c-warn)' : 'var(--c-ok)'
+    tone === 'bad' ? 'var(--c-bad)' : tone === 'warn' ? 'var(--c-warn)' : 'var(--c-ok)'
   // Small text needs the AA-safe ink variant of the alarm red.
   const inkColor =
-    pct > 60 ? 'var(--c-bad-ink)' : pct > 30 ? 'var(--c-warn)' : 'var(--c-ok)'
+    tone === 'bad' ? 'var(--c-bad-ink)' : tone === 'warn' ? 'var(--c-warn)' : 'var(--c-ok)'
 
   return (
     <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -679,7 +683,7 @@ function DisruptionRisk({ risk }: { risk: number }) {
         className="text-xs font-mono font-medium tabular-nums w-14 whitespace-nowrap"
         style={{ color: inkColor }}
       >
-        {pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}<span className="text-gray-500">%/s</span>
+        {fmtHazard(risk)}<span className="text-gray-500">%/s</span>
       </span>
     </div>
   )

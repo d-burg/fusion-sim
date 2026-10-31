@@ -9,6 +9,8 @@ import { PhoneInterlockTable } from './InterlockTable'
 import { flatTopWindow, parseProgram, pulsePhase } from '../kaldera/phase'
 import { PHASE_WORDS } from '../kaldera/words'
 import { Fx, digits8 } from '../Fixed'
+import { fmtHazard, hazardTone } from '../useDiagnostics'
+import { reportLabel } from '../reportLabel'
 import { useSettings } from '../../../lib/settingsContext'
 
 /* ─── JET / CODAS on a phone ──────────────────────────────────────
@@ -33,7 +35,7 @@ const CHANNELS: { key: string; word: string; row: RowDef }[] = [
   { key: 'tau_e', word: 'τE', row: { label: 'τ_{E}', unit: 's', series: [{ key: 'w_th', value: (p: TracePoint) => (p.p_loss > 1e-3 ? p.w_th / p.p_loss : 0) }], yMin: 0, digits: 3 } },
   { key: 'h_factor', word: 'H98', row: { label: 'H_{98}', unit: '', series: [{ key: 'h_factor' }], yMin: 0 } },
   { key: 'psi_oh', word: 'ΨOH', row: { label: 'Ψ_{OH}', unit: 'V·s', series: [{ key: 'psi_oh' }, { key: 'i_ni', name: 'I_{NI}' }], yMin: 0, digits: 1 } },
-  { key: 'disruption_risk', word: 'Hazard', row: { label: 'hazard', unit: '1/s', series: [{ key: 'disruption_risk' }], yMin: 0, digits: 3 } },
+  { key: 'disruption_risk', word: 'Hazard', row: { label: 'hazard', unit: '%/s', series: [{ key: 'disruption_risk', value: (p: TracePoint) => p.disruption_risk * 100 }], yMin: 0, digits: 2 } },
 ]
 const BY_KEY = Object.fromEntries(CHANNELS.map((c) => [c.key, c]))
 
@@ -70,11 +72,12 @@ export default function Phone({ ctx, words, configCode }: { ctx: ControlRoomCont
   // ── status words: the phase word first, then the desktop's seven, then the hazard value ──
   const win = useMemo(() => flatTopWindow(parseProgram(ctx.programJson).ip), [ctx.programJson])
   const phase = pulsePhase(win, ctx.time, ctx.running, ctx.finished, s, ctx.scrubTime !== null)
-  const hz = s?.disruption_risk ?? 0
+  const hz = hazardTone(s?.disruption_risk)
   const state: Word[] = [
-    { text: phase === 'DISRUPT' ? 'DISRUPT' : phase, on: phase !== 'STANDBY', cls: phase === 'DISRUPT' ? 'alarm' : phase === 'FLAT-TOP' ? 'ok' : 'blue', fit: PHASE_WORDS },
-    ...words,
-    { text: `HAZARD ${s ? hz.toFixed(3) : '---'}`, fit: ['HAZARD 8.888'], on: plasma || !!s?.disrupted, cls: s?.disrupted || hz >= 0.2 ? 'alarm' : hz >= 0.05 ? 'warn' : 'ok' },
+    { text: phase, on: phase !== 'STANDBY', cls: phase === 'DISRUPTED' ? 'alarm' : phase === 'FLAT-TOP' ? 'ok' : 'blue', fit: PHASE_WORDS },
+    // the desktop's DISRUPTED chip would repeat the phase word
+    ...words.filter((w) => w.text !== 'DISRUPTED'),
+    { text: `HAZARD ${s ? fmtHazard(s.disruption_risk) : '---'} %/s`, fit: ['HAZARD 88.8 %/s'], on: plasma || !!s?.disrupted, cls: s?.disrupted || hz === 'bad' ? 'alarm' : hz === 'warn' ? 'warn' : 'ok' },
   ]
 
   // ── traces ──
@@ -206,7 +209,7 @@ export default function Phone({ ctx, words, configCode }: { ctx: ControlRoomCont
           <div className="jet-log">
             {ctx.report.map((r) => (
               <div key={r.label} className={`jet-rep sev-${r.status ?? 'info'}`}>
-                <span className="jet-rep-l">{r.label}</span>
+                <span className="jet-rep-l">{reportLabel(r.label)}</span>
                 <span className="jet-rep-p">{r.programmed ?? ''}</span>
                 <span className="jet-rep-a">{r.achieved}</span>
               </div>
