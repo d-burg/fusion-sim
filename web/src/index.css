@@ -47,6 +47,15 @@
      so alarm TEXT uses a lifted variant; fills/borders keep --c-bad.
      #dd7059 = 5.54:1 on --c-surface, 5.03:1 on --c-raised. */
   --c-bad-ink:     #dd7059;
+  /* Equilibrium cross-section (components/EquilibriumCanvas reads these
+     through themeColors). Flux surfaces: the inferno ramp, core first, edge
+     last, interpolated between the stops. The LCFS glows 6 px. Each look
+     redefines the set under its data-theme block to fit its own palette. */
+  --c-eq-flux: #fcffa4, #f7d03c, #fb9a06, #ed6925, #cf4446, #a52c60, #781c6d, #4a0c6b, #1b0c41, #000004;
+  --c-eq-lcfs: #facc15;
+  --c-eq-lcfs-glow: 6;
+  --c-eq-axis: #f97316;
+  --c-eq-xpoint: #ef4444;
   /* INVALID (EPICS/ISA-101 convention): a readout with no physical meaning,
      e.g. a reconstructed quantity with no plasma. Magenta so it is never
      confused with an alarm. #c98bd0 = 6.3:1 on --c-surface. */
@@ -275,6 +284,14 @@ input[type="range"]:hover::-moz-range-thumb,
 input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); }
 
 /* ── Button groups (presets / speed) ──────────────────────────── */
+/* Labels and units typeset by components/SciText: real <sup>/<sub> instead of
+   Unicode superscript glyphs, and a unit keeps its case under an uppercasing
+   look (m, not M) and never breaks across lines. */
+.sci sup, .sci sub { font-size: 0.72em; line-height: 0; text-transform: none; letter-spacing: 0; }
+.sci sup { vertical-align: baseline; position: relative; top: -0.55em; }
+.sci sub { vertical-align: baseline; position: relative; top: 0.3em; }
+.sci-unit { text-transform: none; white-space: nowrap; }
+
 .flex.rounded.overflow-hidden.border.border-gray-700 {
   border: 1px solid var(--c-line);
   border-radius: 0;

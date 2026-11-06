@@ -128,7 +128,7 @@ export const SCALAR_PARAMS: ScalarParam[] = [
   { key: 'ip', label: 'Iₚ flat-top', unit: 'MA', waveformKey: 'ip', min: 0.2, max: 20, step: 0.1, precision: 2, deviceRange: ipRange },
   { key: 'p_nbi', label: 'NBI power', unit: 'MW', waveformKey: 'p_nbi', min: 0, max: 40, step: 0.5, precision: 1 },
   { key: 'p_ech', label: 'ECH power', unit: 'MW', waveformKey: 'p_ech', min: 0, max: 20, step: 0.5, precision: 1 },
-  { key: 'ne', label: 'Density target', unit: '10²⁰m⁻³', waveformKey: 'ne_target', min: 0.1, max: 3.0, step: 0.05, precision: 2 },
+  { key: 'ne', label: 'Density target', unit: '10²⁰ m⁻³', waveformKey: 'ne_target', min: 0.1, max: 3.0, step: 0.05, precision: 2 },
   { key: 'd2_puff', label: 'D₂ gas puff', unit: '10²⁰/s', waveformKey: 'd2_puff', min: 0, max: 10, step: 0.5, precision: 1, scalesWithVolume: true },
   { key: 'n2_puff', label: 'Nitrogen seeding', unit: '10²⁰ atoms/s', waveformKey: 'n2_puff', min: 0, max: 2.0, step: 0.05, precision: 2, scalesWithVolume: true },
   { key: 'neon_puff', label: 'Neon seeding', unit: '10²⁰ atoms/s', waveformKey: 'neon_puff', min: 0, max: 2.0, step: 0.05, precision: 2, scalesWithVolume: true },

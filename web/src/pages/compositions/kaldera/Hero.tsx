@@ -141,7 +141,20 @@ export default function Hero({ snapshot, wallJson, limiterPoints, bare }: Props)
     if (hasPlasma && snapshot) {
       g.save(); wallPath(); g.clip()
       if (snapshot.axis_r > 0) {
-        const x = Math.round(X(snapshot.axis_r)), y = Math.round(Y(snapshot.axis_z))
+        // Mark the center of the innermost drawn surface, not the engine's
+        // axis_r/axis_z: the engine locates its axis by a short fixed-step
+        // gradient climb that stops a centimeter or two short of the ψ
+        // maximum, and that offset reads plainly against the tight inner
+        // ring. The centroid follows the rendered contours through shape
+        // changes; the engine's axis is the fallback while the ring is thin.
+        let ar = snapshot.axis_r, az = snapshot.axis_z
+        const inner = snapshot.flux_surfaces?.[0]
+        if (inner && inner.points.length >= 6) {
+          let sr = 0, sz = 0
+          for (const p of inner.points) { sr += p[0]; sz += p[1] }
+          ar = sr / inner.points.length; az = sz / inner.points.length
+        }
+        const x = Math.round(X(ar)), y = Math.round(Y(az))
         g.fillStyle = 'rgba(255,255,255,0.95)'
         g.fillRect(x - 2, y - 2, 4, 4)
       }
