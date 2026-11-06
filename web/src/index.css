@@ -275,6 +275,14 @@ input[type="range"]:hover::-moz-range-thumb,
 input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); }
 
 /* ── Button groups (presets / speed) ──────────────────────────── */
+/* Labels and units typeset by components/SciText: real <sup>/<sub> instead of
+   Unicode superscript glyphs, and a unit keeps its case under an uppercasing
+   look (m, not M) and never breaks across lines. */
+.sci sup, .sci sub { font-size: 0.72em; line-height: 0; text-transform: none; letter-spacing: 0; }
+.sci sup { vertical-align: baseline; position: relative; top: -0.55em; }
+.sci sub { vertical-align: baseline; position: relative; top: 0.3em; }
+.sci-unit { text-transform: none; white-space: nowrap; }
+
 .flex.rounded.overflow-hidden.border.border-gray-700 {
   border: 1px solid var(--c-line);
   border-radius: 0;
