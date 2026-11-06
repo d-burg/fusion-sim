@@ -6,7 +6,7 @@ import StripChart from './StripChart'
 import SevenSeg from './SevenSeg'
 import { PhoneBars } from './DiagBars'
 import { shotWords, statusCells, type Cell } from './statusCells'
-import { useWallCharts, PHONE_CHANNELS, GREEN, YELLOW, CYAN, RED, MAGENTA } from './charts'
+import { useWallCharts, eqTileTitle, PHONE_CHANNELS, GREEN, YELLOW, CYAN, RED, MAGENTA } from './charts'
 import { elmRecent, useDiagnostics } from '../useDiagnostics'
 import { flatTopWindow, parseProgram, pulsePhase } from '../kaldera/phase'
 import { reconstructionValid } from '../../../lib/pulseLog'
@@ -131,7 +131,7 @@ export default function Phone({ ctx }: { ctx: ControlRoomContext }) {
       <div className="dcp-pair">
         <div className="dc-tile dc-eq" data-tutorial="equilibrium">
           <EquilibriumCanvas snapshot={snap} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
-          <span className="dc-tile-title">EFIT01</span>
+          <span className="dc-tile-title">{eqTileTitle(ctx.activeDevice)}</span>
           {snap && by.CONFIGURATION.v !== '--' && (
             <span className="dcp-eq-cfg">{by.CONFIGURATION.v}<br />{snap.is_limited ? 'LIMITED' : 'DIVERTED'}</span>
           )}

@@ -9,6 +9,10 @@ import type { Series } from './StripChart'
 // The wall's primaries: chosen for separation on black, not for taste.
 export const GREEN = '#00ff00', YELLOW = '#ffff00', CYAN = '#00ffff', MAGENTA = '#ff40ff', RED = '#ff3030', WHITE = '#ffffff'
 
+/** Caption of the equilibrium tile. EFIT01 is DIII-D's between-shot EFIT run and names no
+ *  other machine's reconstruction, so the look says it only when DIII-D is the device. */
+export const eqTileTitle = (deviceId: string) => (deviceId === 'diiid' ? 'EFIT01' : 'EQUILIBRIUM')
+
 export interface WallChart { id: string; title: string; unit?: string; series: Series[]; yMin?: number; yMax?: number }
 
 const pick = (h: TracePoint[], k: keyof TracePoint): [number, number][] =>

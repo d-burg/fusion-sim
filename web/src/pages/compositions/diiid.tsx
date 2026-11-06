@@ -8,7 +8,7 @@ import StatusGrid from './diiid/StatusGrid'
 import Console from './diiid/Console'
 import DiagBars from './diiid/DiagBars'
 import Phone from './diiid/Phone'
-import { useWallCharts, GREEN, YELLOW, CYAN, RED, MAGENTA } from './diiid/charts'
+import { useWallCharts, eqTileTitle, GREEN, YELLOW, CYAN, RED, MAGENTA } from './diiid/charts'
 import { elmRecent, useDiagnostics } from './useDiagnostics'
 import { shotWords } from './diiid/statusCells'
 import { usePhone } from './usePhone'
@@ -66,7 +66,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
       <div className="dc-wall" data-tutorial="traces">
         <div className="dc-tile dc-eq" data-tutorial="equilibrium">
           <EquilibriumCanvas snapshot={snap} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
-          <span className="dc-tile-title">EFIT01</span>
+          <span className="dc-tile-title">{eqTileTitle(ctx.activeDevice)}</span>
         </div>
         {charts.map((c) => (
           <StripChart
