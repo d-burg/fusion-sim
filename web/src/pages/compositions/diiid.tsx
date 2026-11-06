@@ -23,12 +23,23 @@ const SEV: Record<string, string> = { info: '#bbbbbb', ok: GREEN, minor: YELLOW,
 const clock = (t: number) => Math.max(0, t).toFixed(2).padStart(6, ' ')
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
-  // Black field for the shared canvases (equilibrium) while this layout is up.
+  // Black field and the wall's equilibrium palette for the shared canvases
+  // while this layout is up. The settings provider re-asserts its own theme
+  // on mount (its effect runs after this one on a fresh load), so an observer
+  // puts ours back, as the JET and Apollo looks do; the previous value is
+  // restored on unmount.
   useEffect(() => {
     const el = document.documentElement
     const prev = el.getAttribute('data-theme')
     el.setAttribute('data-theme', 'diiid')
-    return () => { if (prev === null) el.removeAttribute('data-theme'); else el.setAttribute('data-theme', prev) }
+    const mo = new MutationObserver(() => {
+      if (el.getAttribute('data-theme') !== 'diiid') el.setAttribute('data-theme', 'diiid')
+    })
+    mo.observe(el, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => {
+      mo.disconnect()
+      if (prev === null) el.removeAttribute('data-theme'); else el.setAttribute('data-theme', prev)
+    }
   }, [])
   const phone = usePhone()
   return phone ? <Phone ctx={ctx} /> : <Desktop ctx={ctx} />
