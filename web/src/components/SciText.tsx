@@ -21,11 +21,13 @@ const SUB: Record<string, string> = {
   'ₚ': 'p', 'ᵣ': 'r', 'ₛ': 's', 'ₜ': 't', 'ᵤ': 'u', 'ᵥ': 'v', 'ₓ': 'x',
 }
 
+type Run = 'plain' | 'sup' | 'sub'
+
 /** The string as React nodes: plain runs, <sup> runs and <sub> runs. */
 export function sci(text: string): ReactNode {
   const out: ReactNode[] = []
   let run = ''
-  let kind: 'plain' | 'sup' | 'sub' = 'plain'
+  let kind: Run = 'plain'
   const flush = () => {
     if (!run) return
     const k = out.length
@@ -33,7 +35,7 @@ export function sci(text: string): ReactNode {
     run = ''
   }
   for (const ch of text) {
-    const next: typeof kind = ch in SUP ? 'sup' : ch in SUB ? 'sub' : 'plain'
+    const next: Run = ch in SUP ? 'sup' : ch in SUB ? 'sub' : 'plain'
     if (next !== kind) { flush(); kind = next }
     run += next === 'sup' ? SUP[ch] : next === 'sub' ? SUB[ch] : ch
   }
