@@ -47,6 +47,15 @@
      so alarm TEXT uses a lifted variant; fills/borders keep --c-bad.
      #dd7059 = 5.54:1 on --c-surface, 5.03:1 on --c-raised. */
   --c-bad-ink:     #dd7059;
+  /* Equilibrium cross-section (components/EquilibriumCanvas reads these
+     through themeColors). Flux surfaces: the inferno ramp, core first, edge
+     last, interpolated between the stops. The LCFS glows 6 px. Each look
+     redefines the set under its data-theme block to fit its own palette. */
+  --c-eq-flux: #fcffa4, #f7d03c, #fb9a06, #ed6925, #cf4446, #a52c60, #781c6d, #4a0c6b, #1b0c41, #000004;
+  --c-eq-lcfs: #facc15;
+  --c-eq-lcfs-glow: 6;
+  --c-eq-axis: #f97316;
+  --c-eq-xpoint: #ef4444;
   /* INVALID (EPICS/ISA-101 convention): a readout with no physical meaning,
      e.g. a reconstructed quantity with no plasma. Magenta so it is never
      confused with an alarm. #c98bd0 = 6.3:1 on --c-surface. */

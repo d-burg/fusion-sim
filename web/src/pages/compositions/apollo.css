@@ -17,6 +17,14 @@ html[data-theme="apollo"] {
   --c-ink: #f2f2ee; --c-ink-dim: #bfe8ff; --c-ink-faint: #8fb8cc;
   --c-accent: #5fd7ff; --c-accent-hi: #9ae8ff;
   --c-ok: #7fcf5f; --c-warn: #f5a623; --c-bad: #ef4b3a; --c-bad-ink: #ff6a5a;
+  /* Equilibrium on the big board: white and cyan lines on black. Flux
+     surfaces in the board's ice blue fading into the grid, the LCFS the one
+     white line, the axis an amber lamp, X-points in the alarm red. Flat. */
+  --c-eq-flux: #bfe8ff, #7cc4e4, #3f87a6, #1f4a5e;
+  --c-eq-lcfs: #efeee6;
+  --c-eq-lcfs-glow: 0;
+  --c-eq-axis: #f5a623;
+  --c-eq-xpoint: #ef4b3a;
 }
 
 [data-layout="apollo"] {
