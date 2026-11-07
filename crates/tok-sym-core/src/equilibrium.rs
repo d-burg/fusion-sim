@@ -95,7 +95,8 @@ pub struct CerfonEquilibrium {
     pub shape: ShapeParams,
     /// Magnetic axis location (x_axis, y_axis) in normalized coords
     pub axis: (f64, f64),
-    /// ψ value at the magnetic axis (maximum of ψ)
+    /// ψ value at the magnetic axis: the extremum of ψ (negative, a minimum,
+    /// in this normalization where the separatrix is ψ = 0)
     pub psi_axis: f64,
     /// ψ value at the separatrix (= 0 by construction)
     pub psi_boundary: f64,
@@ -1003,36 +1004,120 @@ impl CerfonEquilibrium {
         grid
     }
 
-    /// Find the magnetic axis (O-point) by gradient search.
+    /// Find the magnetic axis (O-point): the extremum of ψ inside the plasma
+    /// (a minimum: ψ < 0 inside, 0 on the separatrix), located by a safeguarded
+    /// Newton iteration on ∇ψ = 0.
+    ///
+    /// History: until 2026-11 this was a fixed-step gradient ascent
+    /// (100 steps of 0.001·∇ψ from (1.05, 0)). Because |∇ψ| is of order
+    /// 10⁻² in normalized units the total travel was ~10⁻³ R₀, so the search
+    /// stopped a few millimeters short of the true maximum on every device
+    /// (found by PR #24, where the Modern look's axis marker sat 3–5 px off
+    /// the innermost flux surface's center). psi_axis was therefore slightly
+    /// low and every ψ_N-derived quantity slightly off. The Newton iteration
+    /// below converges to machine precision in a handful of steps; the
+    /// analytic gradient is exact and the Hessian is a central difference of
+    /// it, so the converged point does not depend on the difference step.
     fn find_axis(&mut self) {
-        // Always start from a fixed starting guess near the geometric center.
-        // Using the previous axis as a starting guess can cause convergence issues
-        // when epsilon changes between frames (the axis can drift to a false maximum
-        // outside the plasma, especially during the limited→diverted transition).
-        let (mut x, mut y) = (1.0 + 0.05, 0.0); // slight Shafranov shift outboard
+        // Fixed starting guess near the geometric center, slightly outboard
+        // (Shafranov shift). The previous axis is deliberately NOT reused:
+        // when epsilon changes between frames the search could otherwise
+        // drift to a false maximum outside the plasma, especially through the
+        // limited → diverted transition.
+        let (mut x, mut y) = (1.0 + 0.05, 0.0);
+        let x_lo = 1.0 - self.shape.epsilon * 0.9;
+        let x_hi = 1.0 + self.shape.epsilon * 0.9;
+        let y_lim = self.shape.epsilon * self.shape.kappa * 0.5;
+        let clamp = |x: f64, y: f64| (x.clamp(x_lo, x_hi), y.clamp(-y_lim, y_lim));
 
-        for _ in 0..100 {
-            let gx = self.dpsi_dx(x, y);
-            let gy = self.dpsi_dy(x, y);
-
-            if gx.abs() < 1e-12 && gy.abs() < 1e-12 {
+        // ψ is extremal at the axis: in this normalization (separatrix at
+        // ψ = 0) the interior is negative and the axis is the minimum, so the
+        // search is for the stationary point ∇ψ = 0, with |∇ψ|² as the merit
+        // function; it does not assume a sign.
+        let h = 1e-6; // Hessian difference step (normalized units)
+        let merit = |eq: &Self, x: f64, y: f64| {
+            let gx = eq.dpsi_dx(x, y);
+            let gy = eq.dpsi_dy(x, y);
+            gx * gx + gy * gy
+        };
+        let mut m_here = merit(self, x, y);
+        for _ in 0..60 {
+            if m_here == 0.0 {
                 break;
             }
+            let gx = self.dpsi_dx(x, y);
+            let gy = self.dpsi_dy(x, y);
+            // Central-difference Hessian of the analytic gradient.
+            let hxx = (self.dpsi_dx(x + h, y) - self.dpsi_dx(x - h, y)) / (2.0 * h);
+            let hyy = (self.dpsi_dy(x, y + h) - self.dpsi_dy(x, y - h)) / (2.0 * h);
+            let hxy = 0.5 * ((self.dpsi_dx(x, y + h) - self.dpsi_dx(x, y - h)) / (2.0 * h)
+                + (self.dpsi_dy(x + h, y) - self.dpsi_dy(x - h, y)) / (2.0 * h));
+            let det = hxx * hyy - hxy * hxy;
 
-            // Simple gradient ascent (ψ is maximum at axis for our convention)
-            let step = 0.001;
-            x += step * gx;
-            y += step * gy;
+            // Newton step H·d = −∇ψ when the Hessian is invertible; otherwise
+            // steepest descent on the merit function, −Hᵀ∇ψ, scaled.
+            let (mut dx, mut dy) = if det.abs() > 1e-300 {
+                (-(hyy * gx - hxy * gy) / det, -(hxx * gy - hxy * gx) / det)
+            } else {
+                let sx = -(hxx * gx + hxy * gy);
+                let sy = -(hxy * gx + hyy * gy);
+                let n = (sx * sx + sy * sy).sqrt().max(1e-300);
+                (0.01 * sx / n, 0.01 * sy / n)
+            };
 
-            // Keep within plasma region
-            x = x.clamp(1.0 - self.shape.epsilon * 0.9, 1.0 + self.shape.epsilon * 0.9);
-            y = y.clamp(-self.shape.epsilon * self.shape.kappa * 0.5,
-                        self.shape.epsilon * self.shape.kappa * 0.5);
+            // Backtrack until the merit function does not increase.
+            let mut accepted = false;
+            for _ in 0..30 {
+                let (xn, yn) = clamp(x + dx, y + dy);
+                let m_new = merit(self, xn, yn);
+                if m_new <= m_here {
+                    let moved = ((xn - x).powi(2) + (yn - y).powi(2)).sqrt();
+                    x = xn;
+                    y = yn;
+                    m_here = m_new;
+                    accepted = true;
+                    if moved < 1e-13 {
+                        // Converged: the step is below double precision in
+                        // position (1e-13 R₀ ≈ 0.1 pm).
+                        self.axis = (x, y);
+                        self.psi_axis = self.psi_normalized(x, y);
+                        self.psi_boundary = 0.0;
+                        return;
+                    }
+                    break;
+                }
+                dx *= 0.5;
+                dy *= 0.5;
+            }
+            if !accepted {
+                break; // no step lowers |∇ψ|: at the stationary point
+            }
         }
 
         self.axis = (x, y);
         self.psi_axis = self.psi_normalized(x, y);
         self.psi_boundary = 0.0; // separatrix is ψ = 0 by construction
+    }
+
+    /// The pre-2026-11 fixed-step gradient ascent, kept only so tests can
+    /// quantify what the Newton search changed. Not used by the engine.
+    #[cfg(test)]
+    pub(crate) fn find_axis_legacy(&self) -> ((f64, f64), f64) {
+        let (mut x, mut y) = (1.0 + 0.05, 0.0);
+        for _ in 0..100 {
+            let gx = self.dpsi_dx(x, y);
+            let gy = self.dpsi_dy(x, y);
+            if gx.abs() < 1e-12 && gy.abs() < 1e-12 {
+                break;
+            }
+            let step = 0.001;
+            x += step * gx;
+            y += step * gy;
+            x = x.clamp(1.0 - self.shape.epsilon * 0.9, 1.0 + self.shape.epsilon * 0.9);
+            y = y.clamp(-self.shape.epsilon * self.shape.kappa * 0.5,
+                        self.shape.epsilon * self.shape.kappa * 0.5);
+        }
+        ((x, y), self.psi_normalized(x, y))
     }
 
     /// Get the magnetic axis in physical coordinates (R, Z) in meters.
@@ -2002,5 +2087,61 @@ mod tests {
             psi_out.abs() < 1e-6,
             "ψ at outboard midplane should be ~0 after update"
         );
+    }
+
+    /// The Newton axis search ends at a stationary point of ψ that is a
+    /// definite extremum, on every device shape and on the limited shapes.
+    #[test]
+    fn test_axis_is_a_stationary_maximum_on_every_device() {
+        let mut shapes: Vec<(String, ShapeParams, f64, f64)> = crate::devices::all_devices()
+            .iter()
+            .map(|d| (d.id.clone(), ShapeParams::from_device(d), d.r0, d.z0))
+            .collect();
+        for (eps, kappa, delta) in [(0.2, 1.4, 0.1), (0.32, 1.8, 0.4), (0.36, 1.7, -0.3)] {
+            shapes.push((format!("limited eps {eps} kappa {kappa} delta {delta}"), limited_shape(eps, kappa, delta), 1.0, 0.0));
+        }
+        for (name, shape, r0, z0) in shapes {
+            let eq = CerfonEquilibrium::solve(&shape, r0, z0).unwrap_or_else(|| panic!("{name}: no solve"));
+            let (x, y) = eq.axis;
+            let gx = eq.dpsi_dx(x, y);
+            let gy = eq.dpsi_dy(x, y);
+            // Gradient scale: ψ_axis over the minor radius.
+            let gscale = eq.psi_axis.abs() / shape.epsilon;
+            assert!(
+                (gx * gx + gy * gy).sqrt() < 1e-9 * gscale,
+                "{name}: |∇ψ| at the axis {:.3e} vs scale {:.3e}", (gx * gx + gy * gy).sqrt(), gscale
+            );
+            let h = 1e-5;
+            let hxx = (eq.dpsi_dx(x + h, y) - eq.dpsi_dx(x - h, y)) / (2.0 * h);
+            let hyy = (eq.dpsi_dy(x, y + h) - eq.dpsi_dy(x, y - h)) / (2.0 * h);
+            let hxy = (eq.dpsi_dx(x, y + h) - eq.dpsi_dx(x, y - h)) / (2.0 * h);
+            // A definite Hessian (not the X-point saddle), curving back toward
+            // the separatrix value ψ = 0: a minimum where ψ_axis < 0.
+            assert!(hxx * hyy - hxy * hxy > 0.0 && hxx * eq.psi_axis < 0.0, "{name}: axis is not a definite extremum (hxx {hxx}, det {}, psi_axis {})", hxx * hyy - hxy * hxy, eq.psi_axis);
+            assert!(eq.psi_axis != 0.0, "{name}: psi_axis {}", eq.psi_axis);
+            assert!(x > 1.0 - shape.epsilon && x < 1.0 + shape.epsilon, "{name}: axis x {x}");
+        }
+    }
+
+    /// Quantifies the change against the pre-2026-11 fixed-step search: the
+    /// Newton axis must have the deeper |ψ| (it is the extremum). Prints the per-device table that
+    /// the change report quotes.
+    #[test]
+    fn test_axis_newton_vs_legacy() {
+        println!("device        legacy axis (R, Z) m      newton axis (R, Z) m      shift mm   psi_axis legacy -> newton   rel");
+        for d in crate::devices::all_devices() {
+            let shape = ShapeParams::from_device(&d);
+            let eq = CerfonEquilibrium::solve(&shape, d.r0, d.z0).expect("solve");
+            let ((lx, ly), lpsi) = eq.find_axis_legacy();
+            let (nx, ny) = eq.axis;
+            let shift_mm = ((nx - lx).powi(2) + (ny - ly).powi(2)).sqrt() * d.r0 * 1e3;
+            println!(
+                "{:<12}  ({:.4}, {:+.4})          ({:.4}, {:+.4})          {:6.2}     {:.6e} -> {:.6e}   {:+.2e}",
+                d.id, lx * d.r0, ly * d.r0 + d.z0, nx * d.r0, ny * d.r0 + d.z0, shift_mm, lpsi, eq.psi_axis,
+                (eq.psi_axis - lpsi) / lpsi
+            );
+            // The extremum is deeper than any unconverged point.
+            assert!(eq.psi_axis.abs() >= lpsi.abs() - 1e-12, "{}: Newton |ψ_axis| below the legacy value", d.id);
+        }
     }
 }
