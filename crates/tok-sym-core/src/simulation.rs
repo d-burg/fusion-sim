@@ -759,19 +759,24 @@ impl Simulation {
     /// Whether the core boundary leaves the wall. The solved ψ = 0 contour is
     /// extracted exactly as the snapshot's separatrix (twice the flux-surface
     /// grid resolution, chains kept near the X-points), so the check and the
-    /// drawn boundary agree. A vertex counts as core boundary when it lies
-    /// between the X-points (5 cm clear of each, as before) AND is visible
-    /// from the magnetic axis: ψ_N < 1 all along the straight line from the
-    /// axis to it, the "first crossing from the axis" definition of the LCFS
-    /// that the earlier 24-ray march sampled sparsely. That excludes the
-    /// divertor legs near the X-point, which the 5 cm band alone does not
-    /// (the solved saddle sits a few cm from the designed X-point; on ITER at
-    /// the lowest δ a leg vertex 9.6 mm into the baffle tripped a false
-    /// contact). Contact: a core-boundary vertex outside the wall polygon, or
-    /// a segment between two consecutive core-boundary vertices crossing a
-    /// wall edge. Every vertex is tested, so the result no longer depends on
-    /// where rays happen to fall; the axis now converges, so visibility is
-    /// well defined.
+    /// drawn boundary agree, and every vertex between the X-points (5 cm
+    /// clear of each, as before) is tested, so the result does not depend on
+    /// where rays fall (the 24-ray march it replaces stopped at 1.6 m from
+    /// the axis and never tested ITER's lower boundary at all).
+    ///
+    /// Cheap test first: a vertex outside the wall polygon, or a segment
+    /// between consecutive band vertices crossing a wall edge (wall edges
+    /// pre-filtered by bounding box). Only a failing candidate is then
+    /// confirmed: it must be visible from the converged magnetic axis (ψ_N < 1
+    /// along the line to it, the first-crossing definition of the LCFS) and
+    /// is projected along that line onto the exact ψ = 0 surface by
+    /// bisection, and the projected point (or segment) must still lie
+    /// outside the wall. The projection removes the marching-squares offset
+    /// (a vertex at ψ_N 1.0003 on ITER read 9.6 mm outside where the exact
+    /// boundary was 1–2.4 mm outside). The visibility test is a guard: the
+    /// solved X-point coincides with the designed one (it is a constraint of
+    /// the solve), so the legs lie below the band, and in the PR #25 review
+    /// it never excluded a vertex.
     fn lcfs_crosses_wall(&mut self) -> bool {
         if self.device.wall_outline.len() < 3 {
             return false;
@@ -792,31 +797,62 @@ impl Simulation {
         contour::keep_chains_near(&mut sep, &anchors, (0.25 * a_now).max(3.0 * cell));
         let z_lo = xl.map(|(_, z)| z + 0.05).unwrap_or(f64::NEG_INFINITY);
         let z_hi = xu.map(|(_, z)| z - 0.05).unwrap_or(f64::INFINITY);
+        let in_band = |p: (f64, f64)| p.1 >= z_lo && p.1 <= z_hi;
         let (ax_r, ax_z) = self.equilibrium.axis_physical();
         let eq = &self.equilibrium;
-        let visible = |p: (f64, f64)| {
-            (1..32).all(|k| {
-                let f = k as f64 / 32.0;
-                eq.psi_norm(ax_r + f * (p.0 - ax_r), ax_z + f * (p.1 - ax_z)) < 1.0
+        let at = |p: (f64, f64), f: f64| (ax_r + f * (p.0 - ax_r), ax_z + f * (p.1 - ax_z));
+        let psin = |q: (f64, f64)| eq.psi_norm(q.0, q.1);
+        // The exact boundary point on the line axis → p, if p is visible from
+        // the axis (ψ_N < 1 along the line short of p) and the line reaches
+        // ψ_N = 1 within 10 % beyond p; None otherwise.
+        let exact = |p: (f64, f64)| -> Option<(f64, f64)> {
+            if !(1..32).all(|k| psin(at(p, k as f64 / 32.0)) < 1.0) {
+                return None;
+            }
+            let (mut lo, mut hi) = (31.0 / 32.0, 1.0);
+            while psin(at(p, hi)) < 1.0 {
+                lo = hi;
+                hi += 0.005;
+                if hi > 1.1 {
+                    return None;
+                }
+            }
+            for _ in 0..40 {
+                let mid = 0.5 * (lo + hi);
+                if psin(at(p, mid)) < 1.0 { lo = mid } else { hi = mid }
+            }
+            Some(at(p, hi))
+        };
+        let n = wall.len();
+        let crosses_wall_edge = |a: (f64, f64), b: (f64, f64)| {
+            let (r0, r1) = (a.0.min(b.0), a.0.max(b.0));
+            let (z0, z1) = (a.1.min(b.1), a.1.max(b.1));
+            (0..n).any(|i| {
+                let (c, d) = (wall[i], wall[(i + 1) % n]);
+                c.0.max(d.0) >= r0 && c.0.min(d.0) <= r1 && c.1.max(d.1) >= z0 && c.1.min(d.1) <= z1
+                    && segments_cross(a, b, c, d)
             })
         };
-        let bulk = |p: (f64, f64)| p.1 >= z_lo && p.1 <= z_hi && visible(p);
         const JUMP: f64 = 0.15; // chain break, as in contour::keep_chains_near
-        let crosses_wall_edge = |a: (f64, f64), b: (f64, f64)| {
-            let n = wall.len();
-            (0..n).any(|i| segments_cross(a, b, wall[i], wall[(i + 1) % n]))
-        };
         let pts = &sep.points;
         for (i, &p) in pts.iter().enumerate() {
-            if !bulk(p) {
+            if !in_band(p) {
                 continue;
             }
             if !point_in_polygon(p.0, p.1, wall) {
-                return true;
+                if let Some(e) = exact(p) {
+                    if !point_in_polygon(e.0, e.1, wall) {
+                        return true;
+                    }
+                }
             }
             if let Some(&q) = pts.get(i + 1) {
-                if bulk(q) && (p.0 - q.0).hypot(p.1 - q.1) <= JUMP && crosses_wall_edge(p, q) {
-                    return true;
+                if in_band(q) && (p.0 - q.0).hypot(p.1 - q.1) <= JUMP && crosses_wall_edge(p, q) {
+                    if let (Some(ep), Some(eq_)) = (exact(p), exact(q)) {
+                        if !point_in_polygon(ep.0, ep.1, wall) || !point_in_polygon(eq_.0, eq_.1, wall) || crosses_wall_edge(ep, eq_) {
+                            return true;
+                        }
+                    }
                 }
             }
         }

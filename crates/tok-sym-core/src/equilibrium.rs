@@ -2210,7 +2210,11 @@ mod tests {
                                             if v < fine_min { fine_min = v; at = (xx, yy); }
                                         }
                                     }
-                                    let tol = 1e-3 * fine_min.abs().max(1e-12);
+                                    // A verified axis is the box minimum: at or below every scan
+                                    // point to round-off. An unverified one (a minimum on the box
+                                    // edge, far outside any device's range) is the deepest point the
+                                    // descent reached, within 0.1 % of the fine scan.
+                                    let tol = if eq.axis_verified { 1e-12 } else { 1e-3 } * fine_min.abs().max(1e-300);
                                     assert!(eq.psi_axis <= fine_min + tol,
                                         "{cfg:?} eps {eps} k {kappa} d {delta} du {du} sq {sq} A {a}: psi_axis {} at {:?} (verified {}) above the box minimum {fine_min} at {at:?}; box x [{x_lo}, {x_hi}] |y| <= {y_lim}", eq.psi_axis, eq.axis, eq.axis_verified);
                                     if eq.axis_verified {
