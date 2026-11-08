@@ -100,6 +100,10 @@ pub struct CerfonEquilibrium {
     pub psi_axis: f64,
     /// ψ value at the separatrix (= 0 by construction)
     pub psi_boundary: f64,
+    /// Whether `find_axis` verified its result (stationary, a minimum, not
+    /// above the scan seed); false means the scanned grid minimum was kept.
+    #[serde(default)]
+    pub axis_verified: bool,
 }
 
 // ─── Basis functions ───────────────────────────────────────────────────────
@@ -884,9 +888,10 @@ impl CerfonEquilibrium {
             axis: (1.0, 0.0), // initial guess
             psi_axis: 0.0,
             psi_boundary: 0.0,
+            axis_verified: false,
         };
 
-        // Find the magnetic axis (O-point) by searching for ψ maximum
+        // Find the magnetic axis (O-point): the minimum of ψ inside the plasma
         eq.find_axis();
 
         Some(eq)
@@ -1004,96 +1009,141 @@ impl CerfonEquilibrium {
         grid
     }
 
-    /// Find the magnetic axis (O-point): the extremum of ψ inside the plasma
-    /// (a minimum: ψ < 0 inside, 0 on the separatrix), located by a safeguarded
-    /// Newton iteration on ∇ψ = 0.
+    /// Find the magnetic axis (O-point): the minimum of ψ inside the plasma
+    /// (ψ < 0 inside, 0 on the separatrix).
     ///
-    /// History: until 2026-11 this was a fixed-step gradient ascent
-    /// (100 steps of 0.001·∇ψ from (1.05, 0)). Because |∇ψ| is of order
-    /// 10⁻² in normalized units the total travel was ~10⁻³ R₀, so the search
-    /// stopped a few millimeters short of the true maximum on every device
-    /// (found by PR #24, where the Modern look's axis marker sat 3–5 px off
-    /// the innermost flux surface's center). psi_axis was therefore slightly
-    /// low and every ψ_N-derived quantity slightly off. The Newton iteration
-    /// below converges to machine precision in a handful of steps; the
-    /// analytic gradient is exact and the Hessian is a central difference of
-    /// it, so the converged point does not depend on the difference step.
+    /// Method (2026-11, PR #25 and its review): a coarse scan of the search box
+    /// seeds a Levenberg–Marquardt-damped Newton MINIMIZATION of ψ. Each step
+    /// solves (H + λI)·d = −∇ψ with the analytic gradient and a central-
+    /// difference Hessian of it, and is accepted only if ψ decreases, so the
+    /// iteration cannot settle on a saddle (an X-point) or a non-stationary
+    /// point of |∇ψ|², which the first Newton version could (the review found
+    /// 18 such stalls in a 95,040-shape sweep, none reached by the engine).
+    /// Every accepted step lowers ψ, so the result is never above the deepest
+    /// scanned point. It is then verified (small gradient, positive-definite
+    /// Hessian) and `axis_verified` records the outcome; an unverified result
+    /// is still the deepest point found (it can only occur for shapes far
+    /// outside any device's range, e.g. a minimum on the search-box edge).
+    ///
+    /// History: until 2026-11 this was a fixed-step gradient ascent (100 steps
+    /// of 0.001·∇ψ from (1.05, 0)). With |∇ψ| of order 10⁻² in normalized
+    /// units the search barely moved from its start, so its axis sat 35–320 mm
+    /// from the true one (the PR #25 table; 318 mm measured on ITER L-mode by
+    /// the review) and psi_axis was shallower than the true minimum.
     fn find_axis(&mut self) {
-        // Fixed starting guess near the geometric center, slightly outboard
-        // (Shafranov shift). The previous axis is deliberately NOT reused:
-        // when epsilon changes between frames the search could otherwise
-        // drift to a false maximum outside the plasma, especially through the
-        // limited → diverted transition.
-        let (mut x, mut y) = (1.0 + 0.05, 0.0);
         let x_lo = 1.0 - self.shape.epsilon * 0.9;
         let x_hi = 1.0 + self.shape.epsilon * 0.9;
         let y_lim = self.shape.epsilon * self.shape.kappa * 0.5;
         let clamp = |x: f64, y: f64| (x.clamp(x_lo, x_hi), y.clamp(-y_lim, y_lim));
 
-        // ψ is extremal at the axis: in this normalization (separatrix at
-        // ψ = 0) the interior is negative and the axis is the minimum, so the
-        // search is for the stationary point ∇ψ = 0, with |∇ψ|² as the merit
-        // function; it does not assume a sign.
-        let h = 1e-6; // Hessian difference step (normalized units)
-        let merit = |eq: &Self, x: f64, y: f64| {
-            let gx = eq.dpsi_dx(x, y);
-            let gy = eq.dpsi_dy(x, y);
-            gx * gx + gy * gy
-        };
-        let mut m_here = merit(self, x, y);
-        for _ in 0..60 {
-            if m_here == 0.0 {
-                break;
+        // Seed: the deepest ψ on a coarse grid of the box. Not the previous
+        // frame's axis: between frames epsilon and the configuration change
+        // (limited → diverted), and a reused point could start the search in
+        // the wrong basin.
+        const NS: usize = 16;
+        let (mut x, mut y) = (1.0, 0.0);
+        let mut f = f64::INFINITY;
+        for i in 0..=NS {
+            let xi = x_lo + (x_hi - x_lo) * i as f64 / NS as f64;
+            for j in 0..=NS {
+                let yj = -y_lim + 2.0 * y_lim * j as f64 / NS as f64;
+                let v = self.psi_normalized(xi, yj);
+                if v < f {
+                    f = v;
+                    x = xi;
+                    y = yj;
+                }
             }
+        }
+        let (seed, f_seed) = ((x, y), f);
+
+        let h = 1e-6; // Hessian difference step (normalized units)
+        let hessian = |eq: &Self, x: f64, y: f64| {
+            let hxx = (eq.dpsi_dx(x + h, y) - eq.dpsi_dx(x - h, y)) / (2.0 * h);
+            let hyy = (eq.dpsi_dy(x, y + h) - eq.dpsi_dy(x, y - h)) / (2.0 * h);
+            let hxy = 0.5 * ((eq.dpsi_dx(x, y + h) - eq.dpsi_dx(x, y - h)) / (2.0 * h)
+                + (eq.dpsi_dy(x + h, y) - eq.dpsi_dy(x - h, y)) / (2.0 * h));
+            (hxx, hyy, hxy)
+        };
+        let mut lambda = 0.0_f64;
+        for _ in 0..200 {
             let gx = self.dpsi_dx(x, y);
             let gy = self.dpsi_dy(x, y);
-            // Central-difference Hessian of the analytic gradient.
-            let hxx = (self.dpsi_dx(x + h, y) - self.dpsi_dx(x - h, y)) / (2.0 * h);
-            let hyy = (self.dpsi_dy(x, y + h) - self.dpsi_dy(x, y - h)) / (2.0 * h);
-            let hxy = 0.5 * ((self.dpsi_dx(x, y + h) - self.dpsi_dx(x, y - h)) / (2.0 * h)
-                + (self.dpsi_dy(x + h, y) - self.dpsi_dy(x - h, y)) / (2.0 * h));
-            let det = hxx * hyy - hxy * hxy;
-
-            // Newton step H·d = −∇ψ when the Hessian is invertible; otherwise
-            // steepest descent on the merit function, −Hᵀ∇ψ, scaled.
-            let (mut dx, mut dy) = if det.abs() > 1e-300 {
-                (-(hyy * gx - hxy * gy) / det, -(hxx * gy - hxy * gx) / det)
-            } else {
-                let sx = -(hxx * gx + hxy * gy);
-                let sy = -(hxy * gx + hyy * gy);
-                let n = (sx * sx + sy * sy).sqrt().max(1e-300);
-                (0.01 * sx / n, 0.01 * sy / n)
-            };
-
-            // Backtrack until the merit function does not increase.
-            let mut accepted = false;
-            for _ in 0..30 {
+            if gx == 0.0 && gy == 0.0 {
+                break;
+            }
+            let (hxx, hyy, hxy) = hessian(self, x, y);
+            let mut stepped = false;
+            for _ in 0..40 {
+                let (a, b, c) = (hxx + lambda, hyy + lambda, hxy);
+                let det = a * b - c * c;
+                // (H + λI) must be positive definite for a descent step;
+                // otherwise raise λ (toward a scaled gradient step).
+                if !(a > 0.0 && det > 0.0) {
+                    lambda = (lambda * 4.0).max(1e-3 * (hxx.abs() + hyy.abs()).max(1e-12));
+                    continue;
+                }
+                let dx = -(b * gx - c * gy) / det;
+                let dy = -(a * gy - c * gx) / det;
                 let (xn, yn) = clamp(x + dx, y + dy);
-                let m_new = merit(self, xn, yn);
-                if m_new <= m_here {
+                let fn_ = self.psi_normalized(xn, yn);
+                if fn_ < f {
                     let moved = ((xn - x).powi(2) + (yn - y).powi(2)).sqrt();
                     x = xn;
                     y = yn;
-                    m_here = m_new;
-                    accepted = true;
-                    if moved < 1e-13 {
-                        // Converged: the step is below double precision in
-                        // position (1e-13 R₀ ≈ 0.1 pm).
-                        self.axis = (x, y);
-                        self.psi_axis = self.psi_normalized(x, y);
-                        self.psi_boundary = 0.0;
-                        return;
-                    }
+                    f = fn_;
+                    lambda *= 0.25;
+                    stepped = moved >= 1e-14;
                     break;
                 }
-                dx *= 0.5;
-                dy *= 0.5;
+                lambda = (lambda * 4.0).max(1e-3 * (hxx.abs() + hyy.abs()).max(1e-12));
             }
-            if !accepted {
-                break; // no step lowers |∇ψ|: at the stationary point
+            if !stepped {
+                break; // no descent step left: at the minimum to double precision
             }
         }
 
+        // Polish: minimizing ψ stops where ψ no longer decreases in double
+        // precision, ~1e-8 from the minimum in position. A few undamped
+        // Newton steps on ∇ψ = 0 take the gradient to round-off (~1e-12);
+        // each is kept only if |∇ψ| falls, the Hessian is positive definite
+        // and the step is shorter than 1e-4 (normalized), so the polish
+        // cannot leave the minimum's basin. (ψ itself changes by less than
+        // its round-off there, so it cannot be the acceptance test.)
+        for _ in 0..6 {
+            let gx = self.dpsi_dx(x, y);
+            let gy = self.dpsi_dy(x, y);
+            let (hxx, hyy, hxy) = hessian(self, x, y);
+            let det = hxx * hyy - hxy * hxy;
+            if !(hxx > 0.0 && det > 0.0) {
+                break;
+            }
+            let (sx, sy) = (-(hyy * gx - hxy * gy) / det, -(hxx * gy - hxy * gx) / det);
+            if !(sx.hypot(sy) < 1e-4) {
+                break;
+            }
+            let (xn, yn) = clamp(x + sx, y + sy);
+            let gn = self.dpsi_dx(xn, yn).hypot(self.dpsi_dy(xn, yn));
+            if !(gn < gx.hypot(gy)) {
+                break;
+            }
+            x = xn;
+            y = yn;
+            f = self.psi_normalized(x, y);
+        }
+
+        // Verify: stationary (relative to |ψ_axis|/ε) and a minimum (H
+        // positive definite). A non-finite result falls back to the seed.
+        if !(x.is_finite() && y.is_finite() && f.is_finite()) || f > f_seed {
+            x = seed.0;
+            y = seed.1;
+            f = f_seed;
+        }
+        let gscale = (f.abs() / self.shape.epsilon).max(1e-300);
+        let g = self.dpsi_dx(x, y).hypot(self.dpsi_dy(x, y)) / gscale;
+        let (hxx, hyy, hxy) = hessian(self, x, y);
+        let ok = g < 1e-6 && hxx > 0.0 && hxx * hyy - hxy * hxy > 0.0;
+        self.axis_verified = ok;
         self.axis = (x, y);
         self.psi_axis = self.psi_normalized(x, y);
         self.psi_boundary = 0.0; // separatrix is ψ = 0 by construction
@@ -1479,7 +1529,7 @@ mod tests {
             "Magnetic axis should be outboard of geometric center"
         );
 
-        // ψ at axis should be nonzero (maximum)
+        // ψ at axis should be nonzero (the minimum; ψ < 0 inside)
         assert!(
             eq.psi_axis.abs() > 1e-6,
             "ψ at axis should be nonzero"
@@ -1841,7 +1891,7 @@ mod tests {
 
             // 1. The decisive check: ψ has NO saddle anywhere in the vessel
             //    box — the single critical point there is the magnetic axis,
-            //    a maximum (det H > 0). Solved with the LSN system every one
+            //    an extremum (det H > 0; a minimum, ψ < 0 inside). Solved with the LSN system every one
             //    of these shapes instead shows a second critical point with
             //    det H ≈ −1 to −3 sitting at y = −1.01κε, which is exactly
             //    the spurious X-point that gave the limited plasma its
@@ -2089,10 +2139,10 @@ mod tests {
         );
     }
 
-    /// The Newton axis search ends at a stationary point of ψ that is a
-    /// definite extremum, on every device shape and on the limited shapes.
+    /// The axis search ends at a verified stationary minimum of ψ on every
+    /// device shape and on the limited shapes.
     #[test]
-    fn test_axis_is_a_stationary_maximum_on_every_device() {
+    fn test_axis_is_a_stationary_minimum_on_every_device() {
         let mut shapes: Vec<(String, ShapeParams, f64, f64)> = crate::devices::all_devices()
             .iter()
             .map(|d| (d.id.clone(), ShapeParams::from_device(d), d.r0, d.z0))
@@ -2120,7 +2170,64 @@ mod tests {
             assert!(hxx * hyy - hxy * hxy > 0.0 && hxx * eq.psi_axis < 0.0, "{name}: axis is not a definite extremum (hxx {hxx}, det {}, psi_axis {})", hxx * hyy - hxy * hxy, eq.psi_axis);
             assert!(eq.psi_axis != 0.0, "{name}: psi_axis {}", eq.psi_axis);
             assert!(x > 1.0 - shape.epsilon && x < 1.0 + shape.epsilon, "{name}: axis x {x}");
+            assert!(eq.axis_verified, "{name}: axis not verified");
         }
+    }
+
+    /// Robustness over a broad shape sweep (the PR #25 review found 18
+    /// shapes, DoubleNull δ 0.8 κ 1.08, where the first Newton version
+    /// stalled at a non-stationary point): the axis is never shallower than
+    /// the deepest point of a fine scan of the search box (so never a saddle
+    /// or a stall short of the minimum), and when verified it is a
+    /// stationary, positive-definite minimum.
+    #[test]
+    fn test_axis_is_the_box_minimum_over_a_shape_sweep() {
+        use crate::devices::MagneticConfig;
+        let (mut total, mut verified) = (0usize, 0usize);
+        for cfg in [MagneticConfig::Limited, MagneticConfig::LowerSingleNull, MagneticConfig::UpperSingleNull, MagneticConfig::DoubleNull] {
+            for eps in [0.1, 0.15, 0.2, 0.25, 0.32, 0.45] {
+                for kappa in [1.08, 1.4, 1.8, 2.2] {
+                    for delta in [-0.6, 0.0, 0.4, 0.8] {
+                        for du in [-0.3, 0.0, 0.3] {
+                            for sq in [0.0, 0.15] {
+                                for a in [-0.2, -0.05, 0.3] {
+                                    let shape = ShapeParams {
+                                        epsilon: eps, kappa, delta,
+                                        delta_upper: Some((delta + du).clamp(-0.8, 0.8)),
+                                        a_param: a, config: cfg,
+                                        x_point_alpha: Some((delta as f64).clamp(-0.99, 0.99).asin()),
+                                        squareness: sq, squareness_out: sq,
+                                    };
+                                    let Some(eq) = CerfonEquilibrium::solve(&shape, 1.0, 0.0) else { continue };
+                                    total += 1;
+                                    let (x_lo, x_hi, y_lim) = (1.0 - eps * 0.9, 1.0 + eps * 0.9, eps * kappa * 0.5);
+                                    let (mut fine_min, mut at) = (f64::INFINITY, (0.0, 0.0));
+                                    for i in 0..=60 {
+                                        for j in 0..=60 {
+                                            let xx = x_lo + (x_hi - x_lo) * i as f64 / 60.0;
+                                            let yy = -y_lim + 2.0 * y_lim * j as f64 / 60.0;
+                                            let v = eq.psi_normalized(xx, yy);
+                                            if v < fine_min { fine_min = v; at = (xx, yy); }
+                                        }
+                                    }
+                                    let tol = 1e-3 * fine_min.abs().max(1e-12);
+                                    assert!(eq.psi_axis <= fine_min + tol,
+                                        "{cfg:?} eps {eps} k {kappa} d {delta} du {du} sq {sq} A {a}: psi_axis {} at {:?} (verified {}) above the box minimum {fine_min} at {at:?}; box x [{x_lo}, {x_hi}] |y| <= {y_lim}", eq.psi_axis, eq.axis, eq.axis_verified);
+                                    if eq.axis_verified {
+                                        verified += 1;
+                                        let (x, y) = eq.axis;
+                                        let g = eq.dpsi_dx(x, y).hypot(eq.dpsi_dy(x, y));
+                                        assert!(g < 1e-6 * eq.psi_axis.abs() / eps, "{cfg:?} eps {eps} k {kappa} d {delta}: verified but |grad| {g}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        println!("axis sweep: {total} shapes, {verified} verified, {} unverified (still the deepest point found)", total - verified);
+        assert!(total > 5000, "sweep solved {total} shapes");
     }
 
     /// Quantifies the change against the pre-2026-11 fixed-step search: the
