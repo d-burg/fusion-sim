@@ -673,6 +673,10 @@ pub struct Simulation {
     // Equilibrium grid resolution
     eq_nr: usize,
     eq_nz: usize,
+    /// The raw solved ψ = 0 contour extracted by this step's wall-contact
+    /// check, reused by the snapshot so it is extracted once per step
+    /// (cleared at the start of every step; same equilibrium in both).
+    sep_raw: Option<Contour>,
     n_flux_surfaces: usize,
 }
 
@@ -704,6 +708,7 @@ impl Simulation {
             i_cd: 0.0,
             eq_nr: 48,
             eq_nz: 72,
+            sep_raw: None,
             n_flux_surfaces: 10,
             device,
         }
@@ -758,14 +763,16 @@ impl Simulation {
     /// (twice the flux-surface grid resolution, chains kept near the
     /// X-points), so the check and the drawn boundary agree. Independent of
     /// the magnetic axis.
-    fn lcfs_crosses_wall(&self) -> bool {
-        let wall = &self.device.wall_outline;
-        if wall.len() < 3 {
+    fn lcfs_crosses_wall(&mut self) -> bool {
+        if self.device.wall_outline.len() < 3 {
             return false;
         }
         let bounds = self.contour_grid_bounds();
         let (nr, nz) = (self.eq_nr * 2, self.eq_nz * 2);
-        let mut sep = contour::extract_separatrix(&self.equilibrium, nr, nz, Some(bounds));
+        let raw = contour::extract_separatrix(&self.equilibrium, nr, nz, Some(bounds));
+        let mut sep = raw.clone();
+        self.sep_raw = Some(raw);
+        let wall = &self.device.wall_outline;
         let (xl, xu) = self.equilibrium.x_points_physical();
         let anchors: Vec<(f64, f64)> = xl.into_iter().chain(xu).collect();
         if anchors.is_empty() {
@@ -895,6 +902,7 @@ impl Simulation {
     /// Advance the simulation by one timestep.
     /// Returns a snapshot of the current state.
     pub fn step(&mut self, dt: f64) -> SimulationSnapshot {
+        self.sep_raw = None;
         if self.status != SimulationStatus::Running {
             return self.snapshot();
         }
@@ -1527,12 +1535,11 @@ impl Simulation {
             // bistable between the roof diagonal and the back corner and
             // hid most of the inner strike's sweep motion. One extra ψ_N
             // level at 96×144 costs well under a millisecond.
-            let mut sep = contour::extract_separatrix(
-                &self.equilibrium,
-                self.eq_nr * 2,
-                self.eq_nz * 2,
-                sep_bounds,
-            );
+            // Reuse this step's extraction by the wall-contact check when
+            // there was one (same equilibrium, same grid and bounds).
+            let mut sep = self.sep_raw.clone().unwrap_or_else(|| {
+                contour::extract_separatrix(&self.equilibrium, self.eq_nr * 2, self.eq_nz * 2, sep_bounds)
+            });
             // Terminate divertor legs at their first wall impact: a leg that
             // strikes a baffle must not re-emerge beyond it, and spurious
             // far-SOL ψ=0 chains outside the vessel are dropped outright.
