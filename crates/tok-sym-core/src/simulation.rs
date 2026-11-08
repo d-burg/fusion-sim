@@ -756,13 +756,22 @@ impl Simulation {
             .max(0.1)
     }
 
-    /// Whether the bulk of the solved ψ = 0 contour (the LCFS between the
-    /// X-points, 5 cm clear of each) leaves the wall: a vertex outside the
-    /// wall polygon, or a segment between two bulk vertices crossing a wall
-    /// edge. The contour is extracted exactly as the snapshot's separatrix
-    /// (twice the flux-surface grid resolution, chains kept near the
-    /// X-points), so the check and the drawn boundary agree. Independent of
-    /// the magnetic axis.
+    /// Whether the core boundary leaves the wall. The solved ψ = 0 contour is
+    /// extracted exactly as the snapshot's separatrix (twice the flux-surface
+    /// grid resolution, chains kept near the X-points), so the check and the
+    /// drawn boundary agree. A vertex counts as core boundary when it lies
+    /// between the X-points (5 cm clear of each, as before) AND is visible
+    /// from the magnetic axis: ψ_N < 1 all along the straight line from the
+    /// axis to it, the "first crossing from the axis" definition of the LCFS
+    /// that the earlier 24-ray march sampled sparsely. That excludes the
+    /// divertor legs near the X-point, which the 5 cm band alone does not
+    /// (the solved saddle sits a few cm from the designed X-point; on ITER at
+    /// the lowest δ a leg vertex 9.6 mm into the baffle tripped a false
+    /// contact). Contact: a core-boundary vertex outside the wall polygon, or
+    /// a segment between two consecutive core-boundary vertices crossing a
+    /// wall edge. Every vertex is tested, so the result no longer depends on
+    /// where rays happen to fall; the axis now converges, so visibility is
+    /// well defined.
     fn lcfs_crosses_wall(&mut self) -> bool {
         if self.device.wall_outline.len() < 3 {
             return false;
@@ -783,7 +792,15 @@ impl Simulation {
         contour::keep_chains_near(&mut sep, &anchors, (0.25 * a_now).max(3.0 * cell));
         let z_lo = xl.map(|(_, z)| z + 0.05).unwrap_or(f64::NEG_INFINITY);
         let z_hi = xu.map(|(_, z)| z - 0.05).unwrap_or(f64::INFINITY);
-        let bulk = |p: (f64, f64)| p.1 >= z_lo && p.1 <= z_hi;
+        let (ax_r, ax_z) = self.equilibrium.axis_physical();
+        let eq = &self.equilibrium;
+        let visible = |p: (f64, f64)| {
+            (1..32).all(|k| {
+                let f = k as f64 / 32.0;
+                eq.psi_norm(ax_r + f * (p.0 - ax_r), ax_z + f * (p.1 - ax_z)) < 1.0
+            })
+        };
+        let bulk = |p: (f64, f64)| p.1 >= z_lo && p.1 <= z_hi && visible(p);
         const JUMP: f64 = 0.15; // chain break, as in contour::keep_chains_near
         let crosses_wall_edge = |a: (f64, f64), b: (f64, f64)| {
             let n = wall.len();
