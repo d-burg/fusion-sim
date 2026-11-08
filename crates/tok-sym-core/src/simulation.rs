@@ -1466,6 +1466,7 @@ impl Simulation {
                 grid_r_min, grid_r_max, grid_z_min, grid_z_max,
                 &levels,
                 self.equilibrium.axis_physical(),
+                0.3 * self.device.a,
             )
         } else {
             vec![]

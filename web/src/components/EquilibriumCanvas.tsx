@@ -213,15 +213,18 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       // tracks the actual rendered contours during dynamic shape changes.
       let axisR = snapshot.axis_r
       let axisZ = snapshot.axis_z
-      const innermost = snapshot.flux_surfaces?.[0]
-      if (innermost && innermost.points.length > 3) {
-        let sumR = 0, sumZ = 0
-        for (const pt of innermost.points) {
-          sumR += pt[0]
-          sumZ += pt[1]
+      // Only a closed ring (the engine picks the chain around its axis);
+      // the closing vertex repeats the first and is counted once.
+      const pts = snapshot.flux_surfaces?.[0]?.points
+      if (pts && pts.length > 3) {
+        const [f, l] = [pts[0], pts[pts.length - 1]]
+        if (Math.hypot(f[0] - l[0], f[1] - l[1]) < 1e-6) {
+          let sumR = 0, sumZ = 0
+          const n = pts.length - 1
+          for (let i = 0; i < n; i++) { sumR += pts[i][0]; sumZ += pts[i][1] }
+          axisR = sumR / n
+          axisZ = sumZ / n
         }
-        axisR = sumR / innermost.points.length
-        axisZ = sumZ / innermost.points.length
       }
       const ax = toX(axisR)
       const ay = toY(axisZ)

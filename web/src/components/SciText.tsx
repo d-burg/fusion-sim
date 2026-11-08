@@ -48,6 +48,12 @@ export function sci(text: string): ReactNode {
  * and never wraps.
  */
 export default function SciText({ text, unit, className }: { text: string; unit?: boolean; className?: string }) {
-  // aria-label keeps the exponent readable to screen readers (10²⁰, not "1020")
-  return <span aria-label={text} className={`sci${unit ? ' sci-unit' : ''}${className ? ` ${className}` : ''}`}>{sci(text)}</span>
+  // Screen readers get the original string (10²⁰, not "1020"); the typeset
+  // copy is hidden from them. aria-label on a role-less span is unreliable.
+  return (
+    <span className={`sci${unit ? ' sci-unit' : ''}${className ? ` ${className}` : ''}`}>
+      <span className="sr-only">{text}</span>
+      <span aria-hidden="true">{sci(text)}</span>
+    </span>
+  )
 }

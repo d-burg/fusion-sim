@@ -49,7 +49,10 @@ pub fn extract_contours(
 /// [`extract_contours`], but at each level the chain kept is the one that
 /// belongs to the core, not simply the longest. Choice, in order: a closed
 /// chain that encloses `anchor`; else the closed chain whose vertex mean is
-/// nearest `anchor`; else the longest chain (the old rule). Near the axis the
+/// nearest `anchor` and within `max_dist` of it; else the longest chain (the
+/// old rule). Of several closed chains enclosing the anchor, the smallest
+/// (fewest points) is kept, so a same-level ring around the whole plasma
+/// can never stand in for the core ring. Near the axis the
 /// core ring at a small ψ_N is short, and an open chain at the same level in
 /// the private-flux region below the X-point can be longer; the longest-chain
 /// rule then drew that chain as the innermost surface during the current
@@ -64,6 +67,7 @@ pub fn extract_contours_around(
     z_max: f64,
     levels: &[f64],
     anchor: (f64, f64),
+    max_dist: f64,
 ) -> Vec<Contour> {
     let dr = (r_max - r_min) / (nr - 1) as f64;
     let dz = (z_max - z_min) / (nz - 1) as f64;
@@ -72,7 +76,7 @@ pub fn extract_contours_around(
         .map(|&level| {
             let segments = march_squares_raw(grid, nr, nz, r_min, z_min, dr, dz, level);
             let chains = chain_list(segments);
-            let points = pick_core_chain(chains, anchor, 1e-6 * (dr * dr + dz * dz));
+            let points = pick_core_chain(chains, anchor, max_dist, 1e-6 * (dr * dr + dz * dz));
             Contour { level, points }
         })
         .collect()
@@ -103,9 +107,9 @@ fn encloses(chain: &[(f64, f64)], p: (f64, f64)) -> bool {
 }
 
 /// The core chain at one level (see [`extract_contours_around`]).
-fn pick_core_chain(chains: Vec<Vec<(f64, f64)>>, anchor: (f64, f64), tol2: f64) -> Vec<(f64, f64)> {
+fn pick_core_chain(chains: Vec<Vec<(f64, f64)>>, anchor: (f64, f64), max_dist: f64, tol2: f64) -> Vec<(f64, f64)> {
     let closed: Vec<&Vec<(f64, f64)>> = chains.iter().filter(|c| is_closed(c, tol2)).collect();
-    if let Some(c) = closed.iter().filter(|c| encloses(c, anchor)).max_by_key(|c| c.len()) {
+    if let Some(c) = closed.iter().filter(|c| encloses(c, anchor)).min_by_key(|c| c.len()) {
         return (*c).clone();
     }
     let dist_to_anchor = |c: &Vec<(f64, f64)>| {
@@ -113,7 +117,8 @@ fn pick_core_chain(chains: Vec<Vec<(f64, f64)>>, anchor: (f64, f64), tol2: f64) 
         let (sr, sz) = c[..c.len() - 1].iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
         (sr / n - anchor.0).powi(2) + (sz / n - anchor.1).powi(2)
     };
-    if let Some(c) = closed.iter().min_by(|a, b| dist_to_anchor(a).partial_cmp(&dist_to_anchor(b)).unwrap_or(std::cmp::Ordering::Equal)) {
+    let near = closed.iter().filter(|c| dist_to_anchor(c) <= max_dist * max_dist);
+    if let Some(c) = near.min_by(|a, b| dist_to_anchor(a).partial_cmp(&dist_to_anchor(b)).unwrap_or(std::cmp::Ordering::Equal)) {
         return (*c).clone();
     }
     chains.into_iter().max_by_key(|c| c.len()).unwrap_or_default()
@@ -869,7 +874,7 @@ mod tests {
         }
         let level = 0.6;
         let longest = &extract_contours(&grid, nr, nz, r0, r1, z0, z1, &[level])[0].points;
-        let core = &extract_contours_around(&grid, nr, nz, r0, r1, z0, z1, &[level], (1.0, 0.0))[0].points;
+        let core = &extract_contours_around(&grid, nr, nz, r0, r1, z0, z1, &[level], (1.0, 0.0), 0.5)[0].points;
         let mean = |c: &Vec<(f64, f64)>| {
             let n = c.len() as f64;
             c.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n))
@@ -882,6 +887,53 @@ mod tests {
         assert!((mr - 1.0).abs() < 0.01 && mz.abs() < 0.01, "core ring centered on the anchor: ({mr}, {mz})");
     }
 
+
+    /// Shared fixture: a grid of the larger of a narrow core Gaussian at
+    /// (1, 0) and a broad off-grid Gaussian below, plus optionally a ring
+    /// bump (a same-level closed ring around the core).
+    fn two_bump_grid(ring: bool) -> (Vec<f64>, usize, usize) {
+        let (nr, nz) = (121, 121);
+        let mut grid = vec![0.0; nr * nz];
+        for ir in 0..nr {
+            for iz in 0..nz {
+                let r = 2.0 * ir as f64 / (nr - 1) as f64;
+                let z = -1.0 + 2.0 * iz as f64 / (nz - 1) as f64;
+                let rho = ((r - 1.0).powi(2) + z.powi(2)).sqrt();
+                let core = (-(rho * rho) / 0.01).exp();
+                let side = (-((r - 1.0).powi(2) + (z + 1.4).powi(2)) / 0.5).exp();
+                let annulus = if ring { 0.9 * (-((rho - 0.6).powi(2)) / 0.002).exp() } else { 0.0 };
+                grid[ir * nz + iz] = core.max(side).max(annulus);
+            }
+        }
+        (grid, nr, nz)
+    }
+
+    /// The nearest-closed fallback: the anchor sits beside the core ring,
+    /// outside it (an engine axis a few cm off), with a longer open arc at
+    /// the same level. The ring is kept while it is within `max_dist`; past
+    /// `max_dist` the old longest-chain rule applies.
+    #[test]
+    fn test_contours_around_nearest_closed_fallback_and_its_radius() {
+        let (grid, nr, nz) = two_bump_grid(false);
+        let anchor = (1.2, 0.0); // outside the ~0.07 m core ring
+        let near = &extract_contours_around(&grid, nr, nz, 0.0, 2.0, -1.0, 1.0, &[0.6], anchor, 0.5)[0].points;
+        assert!(is_closed(near, 1e-12) && !encloses(near, anchor), "fallback keeps the closed core ring");
+        let far = &extract_contours_around(&grid, nr, nz, 0.0, 2.0, -1.0, 1.0, &[0.6], anchor, 0.1)[0].points;
+        assert!(!is_closed(far, 1e-12), "beyond max_dist the longest (open) chain is taken");
+    }
+
+    /// Two closed rings at one level both enclosing the anchor (the core
+    /// ring and a ring around it): the smaller, the core, is kept.
+    #[test]
+    fn test_contours_around_prefer_the_smallest_enclosing_ring() {
+        let (grid, nr, nz) = two_bump_grid(true);
+        let all = chain_list(march_squares_raw(&grid, nr, nz, 0.0, -1.0, 2.0 / 120.0, 2.0 / 120.0, 0.6));
+        let enclosing = all.iter().filter(|c| is_closed(c, 1e-12) && encloses(c, (1.0, 0.0))).count();
+        assert!(enclosing >= 2, "fixture must have two enclosing rings, has {enclosing}");
+        let pick = &extract_contours_around(&grid, nr, nz, 0.0, 2.0, -1.0, 1.0, &[0.6], (1.0, 0.0), 0.5)[0].points;
+        let rmax = pick.iter().map(|p| ((p.0 - 1.0).powi(2) + p.1.powi(2)).sqrt()).fold(0.0, f64::max);
+        assert!(rmax < 0.2, "kept the core ring, not the outer one (max radius {rmax})");
+    }
 }
 
 /// Keep only the chains that belong to the plasma: those passing within
@@ -921,6 +973,4 @@ pub fn keep_chains_near(contour: &mut Contour, anchors: &[(f64, f64)], tol: f64)
         }
     }
     contour.points = out;
-
-
 }
