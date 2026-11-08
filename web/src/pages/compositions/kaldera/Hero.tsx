@@ -141,7 +141,26 @@ export default function Hero({ snapshot, wallJson, limiterPoints, bare }: Props)
     if (hasPlasma && snapshot) {
       g.save(); wallPath(); g.clip()
       if (snapshot.axis_r > 0) {
-        const x = Math.round(X(snapshot.axis_r)), y = Math.round(Y(snapshot.axis_z))
+        // Mark the center of the innermost drawn surface, not the engine's
+        // axis_r/axis_z: the engine locates its axis by a short fixed-step
+        // gradient climb that stops a few centimeters short of the ψ
+        // maximum, and that offset reads plainly against the tight inner
+        // ring. Only a CLOSED innermost chain is used (the engine picks the
+        // chain around its axis at each level; an open chain would be a
+        // private-flux arc); otherwise the engine's axis. The closing
+        // vertex repeats the first and is counted once.
+        let ar = snapshot.axis_r, az = snapshot.axis_z
+        const pts = snapshot.flux_surfaces?.[0]?.points
+        if (pts && pts.length >= 6) {
+          const [f, l] = [pts[0], pts[pts.length - 1]]
+          if (Math.hypot(f[0] - l[0], f[1] - l[1]) < 1e-6) {
+            let sr = 0, sz = 0
+            const n = pts.length - 1
+            for (let i = 0; i < n; i++) { sr += pts[i][0]; sz += pts[i][1] }
+            ar = sr / n; az = sz / n
+          }
+        }
+        const x = Math.round(X(ar)), y = Math.round(Y(az))
         g.fillStyle = 'rgba(255,255,255,0.95)'
         g.fillRect(x - 2, y - 2, 4, 4)
       }

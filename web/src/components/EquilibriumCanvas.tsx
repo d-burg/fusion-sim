@@ -11,30 +11,26 @@ interface Props {
   limiterPoints?: [number, number][] // optional CAD limiter — replaces wall when provided
 }
 
-/** Inferno colormap — perceptually uniform, colourblind-robust (vs the old
- *  ad-hoc orange→blue ramp). 10 anchor stops, linearly interpolated. */
-const INFERNO: [number, number, number][] = [
-  [0, 0, 4], [27, 12, 65], [74, 12, 107], [120, 28, 109], [165, 44, 96],
-  [207, 68, 70], [237, 105, 37], [251, 154, 6], [247, 208, 60], [252, 255, 164],
-]
-function inferno(t: number): [number, number, number] {
-  const x = Math.max(0, Math.min(1, t)) * (INFERNO.length - 1)
-  const i = Math.floor(x)
-  const f = x - i
-  const a = INFERNO[i]
-  const b = INFERNO[Math.min(i + 1, INFERNO.length - 1)]
-  return [
-    Math.round(a[0] + (b[0] - a[0]) * f),
-    Math.round(a[1] + (b[1] - a[1]) * f),
-    Math.round(a[2] + (b[2] - a[2]) * f),
-  ]
+function hexRgb(hex: string): [number, number, number] {
+  const m = hex.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!m) return [128, 128, 128]
+  let h = m[1]
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
 }
 
-/** Flux-surface colour — core (level 0) is hottest/brightest, edge (level 1)
- *  fades to dark, following the inferno luminance ramp. */
-function fluxColor(normalizedLevel: number): string {
-  const [r, g, b] = inferno(1 - normalizedLevel)
-  return `rgb(${r},${g},${b})`
+/** Flux-surface color at normalized level t (0 = core, 1 = edge) on the
+ *  look's ramp: the stops are evenly spaced and linearly interpolated. The
+ *  signature ramp is inferno (perceptually uniform, colorblind-robust); each
+ *  look sets its own through the --c-eq-flux token. */
+function fluxColor(stops: string[], t: number): string {
+  if (stops.length === 0) return '#888888'
+  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1)
+  const i = Math.floor(x)
+  const f = x - i
+  const a = hexRgb(stops[i])
+  const b = hexRgb(stops[Math.min(i + 1, stops.length - 1)])
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)},${Math.round(a[1] + (b[1] - a[1]) * f)},${Math.round(a[2] + (b[2] - a[2]) * f)})`
 }
 
 export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }: Props) {
@@ -153,9 +149,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
           const g = Math.round(100 + (1 - t) * 155)
           ctx.strokeStyle = `rgb(0,${g},0)`
         } else {
-          // On a light field the top of the inferno ramp is too pale to read,
-          // so clamp it: the core stays orange, the edge dark.
-          ctx.strokeStyle = tc.light ? fluxColor(t * 0.15 + 0.15) : fluxColor(t)
+          ctx.strokeStyle = fluxColor(tc.eq.flux, t)
         }
         ctx.lineWidth = isRetro ? 1.0 : 1.2
         ctx.globalAlpha = isRetro ? 0.8 : 0.7
@@ -173,15 +167,11 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
           ctx.lineWidth = 2
           ctx.shadowColor = '#33ff33'
           ctx.shadowBlur = 4
-        } else if (tc.light) {
-          ctx.strokeStyle = '#b45309' // dark amber: yellow vanishes on paper
-          ctx.lineWidth = 2
-          ctx.shadowBlur = 0
         } else {
-          ctx.strokeStyle = '#facc15' // bright yellow
+          ctx.strokeStyle = tc.eq.lcfs
           ctx.lineWidth = 2
-          ctx.shadowColor = '#facc15'
-          ctx.shadowBlur = 6
+          ctx.shadowColor = tc.eq.lcfs
+          ctx.shadowBlur = tc.eq.lcfsGlow
         }
       }
 
@@ -223,25 +213,28 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       // tracks the actual rendered contours during dynamic shape changes.
       let axisR = snapshot.axis_r
       let axisZ = snapshot.axis_z
-      const innermost = snapshot.flux_surfaces?.[0]
-      if (innermost && innermost.points.length > 3) {
-        let sumR = 0, sumZ = 0
-        for (const pt of innermost.points) {
-          sumR += pt[0]
-          sumZ += pt[1]
+      // Only a closed ring (the engine picks the chain around its axis);
+      // the closing vertex repeats the first and is counted once.
+      const pts = snapshot.flux_surfaces?.[0]?.points
+      if (pts && pts.length > 3) {
+        const [f, l] = [pts[0], pts[pts.length - 1]]
+        if (Math.hypot(f[0] - l[0], f[1] - l[1]) < 1e-6) {
+          let sumR = 0, sumZ = 0
+          const n = pts.length - 1
+          for (let i = 0; i < n; i++) { sumR += pts[i][0]; sumZ += pts[i][1] }
+          axisR = sumR / n
+          axisZ = sumZ / n
         }
-        axisR = sumR / innermost.points.length
-        axisZ = sumZ / innermost.points.length
       }
       const ax = toX(axisR)
       const ay = toY(axisZ)
-      ctx.fillStyle = isRetro ? '#33ff33' : '#f97316'
+      ctx.fillStyle = isRetro ? '#33ff33' : tc.eq.axis
       ctx.beginPath()
       ctx.arc(ax, ay, 4, 0, Math.PI * 2)
       ctx.fill()
 
       // Crosshair
-      ctx.strokeStyle = isRetro ? '#33ff33' : '#f97316'
+      ctx.strokeStyle = isRetro ? '#33ff33' : tc.eq.axis
       ctx.lineWidth = 1
       ctx.globalAlpha = 0.5
       ctx.beginPath()
@@ -257,7 +250,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     const drawXMark = (r: number, z: number) => {
       const xp = toX(r)
       const yp = toY(z)
-      ctx.strokeStyle = isRetro ? '#ffff33' : '#ef4444'
+      ctx.strokeStyle = isRetro ? '#ffff33' : tc.eq.xpoint
       ctx.lineWidth = 2
       const s = 5
       ctx.beginPath()

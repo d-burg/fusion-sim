@@ -21,13 +21,28 @@ export interface ThemeColors {
   ok: string
   warn: string
   bad: string
+  /** Equilibrium cross-section palette (per look; see the --c-eq-* tokens). */
+  eq: EquilibriumColors
   /** true when --c-base is light (luminance > 0.5): plots invert their neutrals */
   light: boolean
   /** a hairline grid colour appropriate to the field: white-ish on dark, black-ish on light */
   grid: (alpha: number) => string
 }
 
-const TOKENS: Array<[keyof Omit<ThemeColors, 'light' | 'grid'>, string]> = [
+export interface EquilibriumColors {
+  /** Flux-surface ramp, core first, edge last; surfaces between the stops are interpolated. */
+  flux: string[]
+  /** Last closed flux surface. */
+  lcfs: string
+  /** Glow radius (px) under the LCFS; 0 for a flat line. */
+  lcfsGlow: number
+  /** Magnetic-axis marker. */
+  axis: string
+  /** X-point marks. */
+  xpoint: string
+}
+
+const TOKENS: Array<[keyof Omit<ThemeColors, 'light' | 'grid' | 'eq'>, string]> = [
   ['base', '--c-base'],
   ['surface', '--c-surface'],
   ['raised', '--c-raised'],
@@ -47,6 +62,33 @@ const FALLBACK: Record<string, string> = {
   base: '#0e0f11', surface: '#16181b', raised: '#1e2125', line: '#2a2e33', lineStrong: '#3b4047',
   ink: '#e7e8ea', inkDim: '#9aa0a6', inkFaint: '#8a9096', accent: '#e0a23a',
   ok: '#57a773', warn: '#d8a23a', bad: '#c8553d',
+}
+// The signature equilibrium palette: the inferno ramp, core bright, edge dark;
+// the same values as the --c-eq-* tokens in index.css.
+const EQ_TOKENS: Array<[keyof EquilibriumColors, string]> = [
+  ['flux', '--c-eq-flux'], ['lcfs', '--c-eq-lcfs'], ['lcfsGlow', '--c-eq-lcfs-glow'],
+  ['axis', '--c-eq-axis'], ['xpoint', '--c-eq-xpoint'],
+]
+const EQ_FALLBACK: EquilibriumColors = {
+  flux: ['#fcffa4', '#f7d03c', '#fb9a06', '#ed6925', '#cf4446', '#a52c60', '#781c6d', '#4a0c6b', '#1b0c41', '#000004'],
+  lcfs: '#facc15', lcfsGlow: 6, axis: '#f97316', xpoint: '#ef4444',
+}
+function parseEq(read: (prop: string) => string): EquilibriumColors {
+  const eq: EquilibriumColors = { ...EQ_FALLBACK, flux: [...EQ_FALLBACK.flux] }
+  for (const [k, prop] of EQ_TOKENS) {
+    const v = read(prop).trim()
+    if (!v) continue
+    if (k === 'flux') {
+      const stops = v.split(',').map((s) => s.trim()).filter(Boolean)
+      if (stops.length > 0) eq.flux = stops
+    } else if (k === 'lcfsGlow') {
+      const n = parseFloat(v)
+      if (isFinite(n)) eq.lcfsGlow = n
+    } else {
+      eq[k] = v
+    }
+  }
+  return eq
 }
 
 function relativeLuminance(hex: string): number {
@@ -73,16 +115,17 @@ export function themeColors(): ThemeColors {
     vals[k] = v || FALLBACK[k]
   }
   cacheKey = key
-  cache = build(vals)
+  cache = build(vals, parseEq((prop) => cs.getPropertyValue(prop)))
   return cache
 }
 
-function build(v: Record<string, string>): ThemeColors {
+function build(v: Record<string, string>, eq: EquilibriumColors = EQ_FALLBACK): ThemeColors {
   const light = relativeLuminance(v.base) > 0.5
   return {
     base: v.base, surface: v.surface, raised: v.raised, line: v.line, lineStrong: v.lineStrong,
     ink: v.ink, inkDim: v.inkDim, inkFaint: v.inkFaint, accent: v.accent,
     ok: v.ok, warn: v.warn, bad: v.bad,
+    eq,
     light,
     grid: (alpha) => (light ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`),
   }

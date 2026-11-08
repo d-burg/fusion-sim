@@ -2,6 +2,7 @@ import { themeColors } from '../lib/themeColors'
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { WaveformPoint } from '../lib/wasm'
+import SciText from './SciText'
 
 interface Props {
   waveform: WaveformPoint[]
@@ -215,7 +216,7 @@ export default function WaveformDrawer({
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
             <span className="text-sm font-medium text-gray-200">{label}</span>
-            <span className="text-xs text-gray-500">({unit})</span>
+            <span className="text-xs text-gray-500">(<SciText unit text={unit} />)</span>
           </div>
         </div>
 

@@ -1439,11 +1439,17 @@ impl Simulation {
                 grid_r_min, grid_r_max, grid_z_min, grid_z_max,
                 self.eq_nr, self.eq_nz,
             );
-            // Evenly spaced levels from ψ_N = 0.1 to 0.9, giving uniform
-            // contour spacing from near the magnetic axis to near the edge.
+            // Levels evenly spaced in ρ = √ψ_N from 0.1 to 0.95 (ψ_N = ρ²).
+            // Near the axis ψ_N grows as r², so levels even in ψ_N leave a
+            // wide hole around the axis and crowd toward the edge; even in ρ
+            // they are even in minor radius, so the drawn rings keep one
+            // spacing from the axis out to the edge.
             let n = self.n_flux_surfaces;
             let mut levels: Vec<f64> = (0..n)
-                .map(|i| 0.1 + 0.8 * i as f64 / (n - 1).max(1) as f64)
+                .map(|i| {
+                    let rho = 0.1 + 0.85 * i as f64 / (n - 1).max(1) as f64;
+                    rho * rho
+                })
                 .collect();
             // Add a near-edge surface at ψ_N=0.995 for emission shell rendering.
             // The actual separatrix (ψ=0) has figure-eight topology at the X-point
@@ -1451,10 +1457,16 @@ impl Simulation {
             // surface is close enough to be visually identical while staying a
             // simple closed curve inside the plasma.
             levels.push(0.995);
-            contour::extract_contours(
+            // The core chain at each level, chosen around the magnetic
+            // axis (`extract_contours_around`): with the innermost level
+            // at ψ_N = 0.01 the longest-chain rule picked an open
+            // private-flux chain over the short core ring during the ramps.
+            contour::extract_contours_around(
                 &grid, self.eq_nr, self.eq_nz,
                 grid_r_min, grid_r_max, grid_z_min, grid_z_max,
                 &levels,
+                self.equilibrium.axis_physical(),
+                0.3 * self.device.a,
             )
         } else {
             vec![]
