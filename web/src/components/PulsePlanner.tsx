@@ -296,7 +296,7 @@ export default function PulsePlanner({
                   className="w-16 max-md:min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs
                              text-cyan-400 font-mono tabular-nums text-right focus:outline-none focus:border-cyan-600"
                 />
-                <SciText unit text={param.unit} className="text-xs text-gray-500 min-w-14" />
+                <SciText unit text={param.unit} className="text-xs text-gray-500 w-24 shrink-0" />
               </div>
             </div>
           )

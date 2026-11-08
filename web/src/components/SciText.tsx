@@ -48,5 +48,6 @@ export function sci(text: string): ReactNode {
  * and never wraps.
  */
 export default function SciText({ text, unit, className }: { text: string; unit?: boolean; className?: string }) {
-  return <span className={`sci${unit ? ' sci-unit' : ''}${className ? ` ${className}` : ''}`}>{sci(text)}</span>
+  // aria-label keeps the exponent readable to screen readers (10²⁰, not "1020")
+  return <span aria-label={text} className={`sci${unit ? ' sci-unit' : ''}${className ? ` ${className}` : ''}`}>{sci(text)}</span>
 }

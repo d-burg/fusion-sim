@@ -1457,10 +1457,15 @@ impl Simulation {
             // surface is close enough to be visually identical while staying a
             // simple closed curve inside the plasma.
             levels.push(0.995);
-            contour::extract_contours(
+            // The core chain at each level, chosen around the magnetic
+            // axis (`extract_contours_around`): with the innermost level
+            // at ψ_N = 0.01 the longest-chain rule picked an open
+            // private-flux chain over the short core ring during the ramps.
+            contour::extract_contours_around(
                 &grid, self.eq_nr, self.eq_nz,
                 grid_r_min, grid_r_max, grid_z_min, grid_z_max,
                 &levels,
+                self.equilibrium.axis_physical(),
             )
         } else {
             vec![]

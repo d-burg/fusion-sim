@@ -45,6 +45,80 @@ pub fn extract_contours(
         .collect()
 }
 
+/// Flux-surface contours around a point (the magnetic axis): like
+/// [`extract_contours`], but at each level the chain kept is the one that
+/// belongs to the core, not simply the longest. Choice, in order: a closed
+/// chain that encloses `anchor`; else the closed chain whose vertex mean is
+/// nearest `anchor`; else the longest chain (the old rule). Near the axis the
+/// core ring at a small ψ_N is short, and an open chain at the same level in
+/// the private-flux region below the X-point can be longer; the longest-chain
+/// rule then drew that chain as the innermost surface during the current
+/// ramps (adversarial review of PR #24, 2026-11-07).
+pub fn extract_contours_around(
+    grid: &[f64],
+    nr: usize,
+    nz: usize,
+    r_min: f64,
+    r_max: f64,
+    z_min: f64,
+    z_max: f64,
+    levels: &[f64],
+    anchor: (f64, f64),
+) -> Vec<Contour> {
+    let dr = (r_max - r_min) / (nr - 1) as f64;
+    let dz = (z_max - z_min) / (nz - 1) as f64;
+    levels
+        .iter()
+        .map(|&level| {
+            let segments = march_squares_raw(grid, nr, nz, r_min, z_min, dr, dz, level);
+            let chains = chain_list(segments);
+            let points = pick_core_chain(chains, anchor, 1e-6 * (dr * dr + dz * dz));
+            Contour { level, points }
+        })
+        .collect()
+}
+
+/// Whether a chain closes on itself (first and last points coincide).
+fn is_closed(chain: &[(f64, f64)], tol2: f64) -> bool {
+    chain.len() >= 4 && {
+        let (a, b) = (chain[0], chain[chain.len() - 1]);
+        (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2) <= tol2
+    }
+}
+
+/// Even-odd point-in-polygon test.
+fn encloses(chain: &[(f64, f64)], p: (f64, f64)) -> bool {
+    let mut inside = false;
+    let n = chain.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let (xi, yi) = chain[i];
+        let (xj, yj) = chain[j];
+        if (yi > p.1) != (yj > p.1) && p.0 < (xj - xi) * (p.1 - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+/// The core chain at one level (see [`extract_contours_around`]).
+fn pick_core_chain(chains: Vec<Vec<(f64, f64)>>, anchor: (f64, f64), tol2: f64) -> Vec<(f64, f64)> {
+    let closed: Vec<&Vec<(f64, f64)>> = chains.iter().filter(|c| is_closed(c, tol2)).collect();
+    if let Some(c) = closed.iter().filter(|c| encloses(c, anchor)).max_by_key(|c| c.len()) {
+        return (*c).clone();
+    }
+    let dist_to_anchor = |c: &Vec<(f64, f64)>| {
+        let n = (c.len() - 1) as f64; // the closing vertex repeats the first
+        let (sr, sz) = c[..c.len() - 1].iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
+        (sr / n - anchor.0).powi(2) + (sz / n - anchor.1).powi(2)
+    };
+    if let Some(c) = closed.iter().min_by(|a, b| dist_to_anchor(a).partial_cmp(&dist_to_anchor(b)).unwrap_or(std::cmp::Ordering::Equal)) {
+        return (*c).clone();
+    }
+    chains.into_iter().max_by_key(|c| c.len()).unwrap_or_default()
+}
+
 /// Generate raw marching squares segments (endpoint pairs) without chaining.
 ///
 /// Returns a flat list of (R, Z) points where consecutive pairs form
@@ -218,10 +292,19 @@ fn chain_segments(segments: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
     if segments.len() < 2 {
         return segments;
     }
+    chain_list(segments).into_iter().fold(Vec::new(), |best, c| if c.len() > best.len() { c } else { best })
+}
+
+/// Every chain of a segment list, in discovery order (the chaining of
+/// [`chain_segments`], without the selection).
+fn chain_list(segments: Vec<(f64, f64)>) -> Vec<Vec<(f64, f64)>> {
+    if segments.len() < 2 {
+        return Vec::new();
+    }
 
     let n_segs = segments.len() / 2;
     let mut used = vec![false; n_segs];
-    let mut best_chain: Vec<(f64, f64)> = Vec::new();
+    let mut all: Vec<Vec<(f64, f64)>> = Vec::new();
 
     let dist2 = |a: (f64, f64), b: (f64, f64)| -> f64 {
         (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)
@@ -229,7 +312,7 @@ fn chain_segments(segments: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
 
     let tolerance = 1e-10;
 
-    // Find all chains, keep the longest
+    // Find all chains
     for start in 0..n_segs {
         if used[start] {
             continue;
@@ -268,12 +351,10 @@ fn chain_segments(segments: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
             }
         }
 
-        if chain.len() > best_chain.len() {
-            best_chain = chain;
-        }
+        all.push(chain);
     }
 
-    best_chain
+    all
 }
 
 /// Chain disconnected line segments into ordered polylines, returning
@@ -767,6 +848,40 @@ mod tests {
             }
         }
     }
+
+    /// A short closed core ring and a longer open chain at the same level
+    /// (the shape of the ramp-phase case the PR #24 review measured: a
+    /// private-flux arc beside a small ψ_N = 0.01 ring). The longest-chain
+    /// rule takes the arc; the around-the-axis rule takes the ring.
+    #[test]
+    fn test_contours_around_pick_the_core_ring_not_the_longest_chain() {
+        let (nr, nz) = (121, 121);
+        let (r0, r1, z0, z1) = (0.0, 2.0, -1.0, 1.0);
+        let mut grid = vec![0.0; nr * nz];
+        for ir in 0..nr {
+            for iz in 0..nz {
+                let r = r0 + (r1 - r0) * ir as f64 / (nr - 1) as f64;
+                let z = z0 + (z1 - z0) * iz as f64 / (nz - 1) as f64;
+                let core = (-((r - 1.0).powi(2) + z.powi(2)) / 0.01).exp();
+                let side = (-((r - 1.0).powi(2) + (z + 1.4).powi(2)) / 0.5).exp();
+                grid[ir * nz + iz] = core.max(side);
+            }
+        }
+        let level = 0.6;
+        let longest = &extract_contours(&grid, nr, nz, r0, r1, z0, z1, &[level])[0].points;
+        let core = &extract_contours_around(&grid, nr, nz, r0, r1, z0, z1, &[level], (1.0, 0.0))[0].points;
+        let mean = |c: &Vec<(f64, f64)>| {
+            let n = c.len() as f64;
+            c.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n))
+        };
+        assert!(longest.len() > core.len(), "the open arc must be the longer chain here");
+        assert!(mean(longest).1 < -0.5, "longest chain is the arc below: {:?}", mean(longest));
+        assert!(is_closed(core, 1e-12), "the core chain is closed");
+        assert!(encloses(core, (1.0, 0.0)), "the core chain encloses the anchor");
+        let (mr, mz) = mean(core);
+        assert!((mr - 1.0).abs() < 0.01 && mz.abs() < 0.01, "core ring centered on the anchor: ({mr}, {mz})");
+    }
+
 }
 
 /// Keep only the chains that belong to the plasma: those passing within
@@ -806,4 +921,6 @@ pub fn keep_chains_near(contour: &mut Contour, anchors: &[(f64, f64)], tol: f64)
         }
     }
     contour.points = out;
+
+
 }
