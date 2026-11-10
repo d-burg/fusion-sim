@@ -3,6 +3,7 @@ import type { Snapshot } from '../lib/types'
 import type { ProcessedProfile } from '../lib/types'
 import ProfilePanel from './ProfilePanel'
 import InfoPopup from './InfoPopup'
+import { sci } from './SciText'
 import { plasmaParamsInfo, stabilityInfo, powerBalanceInfo, divertorInfo, neutronDiagnosticInfo } from './infoContent'
 import { getDevice } from '../lib/wasm'
 import { computeFusion, computeDivertorHeatFlux, DivertorThermalModel, formatNeutronRate, formatQ, neutronSignalLevel, type FusionState, type DivertorState } from '../lib/fusionPhysics'
@@ -718,7 +719,7 @@ function Param({
         title={invalid ? 'No plasma: equilibrium reconstruction invalid' : undefined}
       >
         <span className="font-mono tabular-nums inline-block min-w-[3.5em] text-right">{formatted}</span>
-        <span className="text-gray-600 ml-0.5 text-xs inline-block min-w-[2.5em] unit-label">{unit}</span>
+        <span className="text-gray-600 ml-0.5 text-xs inline-block min-w-[2.5em] unit-label">{sci(unit)}</span>
       </span>
     </div>
   )

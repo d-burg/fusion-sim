@@ -8,7 +8,7 @@ import StatusGrid from './diiid/StatusGrid'
 import Console from './diiid/Console'
 import DiagBars from './diiid/DiagBars'
 import Phone from './diiid/Phone'
-import { useWallCharts, GREEN, YELLOW, CYAN, RED, MAGENTA } from './diiid/charts'
+import { useWallCharts, eqTileTitle, GREEN, YELLOW, CYAN, RED, MAGENTA } from './diiid/charts'
 import { elmRecent, useDiagnostics } from './useDiagnostics'
 import { shotWords } from './diiid/statusCells'
 import { usePhone } from './usePhone'
@@ -23,12 +23,23 @@ const SEV: Record<string, string> = { info: '#bbbbbb', ok: GREEN, minor: YELLOW,
 const clock = (t: number) => Math.max(0, t).toFixed(2).padStart(6, ' ')
 
 export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
-  // Black field for the shared canvases (equilibrium) while this layout is up.
+  // Black field and the wall's equilibrium palette for the shared canvases
+  // while this layout is up. The settings provider re-asserts its own theme
+  // on mount (its effect runs after this one on a fresh load), so an observer
+  // puts ours back, as the JET and Apollo looks do; the previous value is
+  // restored on unmount.
   useEffect(() => {
     const el = document.documentElement
     const prev = el.getAttribute('data-theme')
     el.setAttribute('data-theme', 'diiid')
-    return () => { if (prev === null) el.removeAttribute('data-theme'); else el.setAttribute('data-theme', prev) }
+    const mo = new MutationObserver(() => {
+      if (el.getAttribute('data-theme') !== 'diiid') el.setAttribute('data-theme', 'diiid')
+    })
+    mo.observe(el, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => {
+      mo.disconnect()
+      if (prev === null) el.removeAttribute('data-theme'); else el.setAttribute('data-theme', prev)
+    }
   }, [])
   const phone = usePhone()
   return phone ? <Phone ctx={ctx} /> : <Desktop ctx={ctx} />
@@ -66,7 +77,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
       <div className="dc-wall" data-tutorial="traces">
         <div className="dc-tile dc-eq" data-tutorial="equilibrium">
           <EquilibriumCanvas snapshot={snap} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
-          <span className="dc-tile-title">EFIT01</span>
+          <span className="dc-tile-title">{eqTileTitle(ctx.activeDevice)}</span>
         </div>
         {charts.map((c) => (
           <StripChart

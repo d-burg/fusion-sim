@@ -9,6 +9,14 @@ html[data-theme="diiid"] {
   --c-accent: #ffff00; --c-accent-hi: #ffff80;
   --c-ok: #00ff00; --c-warn: #ffff00; --c-bad: #ff3030; --c-bad-ink: #ff6060;
   --c-invalid: #ff40ff;
+  /* Equilibrium on the wall: the plot primaries, flat. Cyan flux surfaces
+     fading toward the edge, the LCFS in the yellow of the accent, a white
+     axis and magenta X-points. No glow anywhere on this wall. */
+  --c-eq-flux: #80ffff, #00e0e0, #00a0a0, #006060;
+  --c-eq-lcfs: #ffff00;
+  --c-eq-lcfs-glow: 0;
+  --c-eq-axis: #ffffff;
+  --c-eq-xpoint: #ff40ff;
 }
 html[data-theme="diiid"] body { background: #000; }
 

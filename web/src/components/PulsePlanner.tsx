@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import WaveformDrawer from './WaveformDrawer'
+import SciText from './SciText'
 import {
   getPreset,
   getDevice,
@@ -255,7 +256,7 @@ export default function PulsePlanner({
             <div key={param.key}>
               <div className="flex items-center justify-between">
                 <label className="text-xs text-gray-500">
-                  {param.label}
+                  <SciText text={param.label} />
                 </label>
                 <button
                   onClick={() => setDrawingParam(param.key)}
@@ -295,7 +296,7 @@ export default function PulsePlanner({
                   className="w-16 max-md:min-h-11 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs
                              text-cyan-400 font-mono tabular-nums text-right focus:outline-none focus:border-cyan-600"
                 />
-                <span className="text-xs text-gray-500 w-14 truncate">{param.unit}</span>
+                <SciText unit text={param.unit} className="text-xs text-gray-500 w-24 shrink-0" />
               </div>
             </div>
           )
@@ -304,8 +305,14 @@ export default function PulsePlanner({
         {/* Device info */}
         <div className="text-xs text-gray-600 space-y-0.5 pt-2 border-t border-gray-800">
           <div>Device: {device.name}</div>
-          <div>R₀ = <span className="font-mono tabular-nums">{device.r0.toFixed(2)}</span> m, a = <span className="font-mono tabular-nums">{device.a.toFixed(2)}</span> m</div>
-          <div>Bₜ,max = <span className="font-mono tabular-nums">{device.bt_max.toFixed(1)}</span> T, Iₚ,max = <span className="font-mono tabular-nums">{device.ip_max.toFixed(1)}</span> MA</div>
+          <div className="sci">
+            R<sub>0</sub> = <span className="font-mono tabular-nums">{device.r0.toFixed(2)}</span> <span className="sci-unit">m</span>,{' '}
+            a = <span className="font-mono tabular-nums">{device.a.toFixed(2)}</span> <span className="sci-unit">m</span>
+          </div>
+          <div className="sci">
+            B<sub>T,max</sub> = <span className="font-mono tabular-nums">{device.bt_max.toFixed(1)}</span> <span className="sci-unit">T</span>,{' '}
+            I<sub>p,max</sub> = <span className="font-mono tabular-nums">{device.ip_max.toFixed(1)}</span> <span className="sci-unit">MA</span>
+          </div>
         </div>
       </div>
 

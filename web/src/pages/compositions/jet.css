@@ -14,6 +14,13 @@ html[data-theme="jet"] {
   --c-accent: #0000c0; --c-accent-hi: #0000ff;
   --c-ok: #008000; --c-warn: #c07000; --c-bad: #d00000; --c-bad-ink: #c00000;
   --c-invalid: #800080;
+  /* Equilibrium on the white field: the warm end of the inferno ramp (the
+     pale top vanishes on paper), a dark-amber LCFS with no glow. */
+  --c-eq-flux: #f8bd29, #fb9907, #f1781c;
+  --c-eq-lcfs: #b45309;
+  --c-eq-lcfs-glow: 0;
+  --c-eq-axis: #f97316;
+  --c-eq-xpoint: #ef4444;
   --font-sans: Arial, Helvetica, sans-serif;
   --font-mono: 'Cousine', 'Courier New', monospace;
 }
