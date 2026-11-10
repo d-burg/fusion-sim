@@ -219,16 +219,16 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
           <LampKey caption="PAUSE" lamp={paused ? 'amber' : 'off'} onClick={ctx.controls.pause} disabled={!running} />
           <LampKey caption="RESET" lamp="off" onClick={ctx.controls.reset} disabled={!canReset} />
           <LampKey caption="LIVE" lamp={scrubTime !== null ? 'white' : 'off'} onClick={() => ctx.controls.setScrubTime(null)} disabled={scrubTime === null} />
-          <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} />
           <LampKey caption="REPORT" lamp={showReport ? 'white' : 'off'} onClick={() => setShowReport((v) => !v)} disabled={!ctx.report} />
+          <span className="ap-slot">{ctx.settingsNode}</span>
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
           <span className="ap-engr">SPEED</span>
           {[2, 1, 0.75, 0.5].map((sp) => (
             <LampKey key={sp} caption={`${sp}X`} lamp={ctx.activeSpeed === sp ? 'white' : 'off'} onClick={() => ctx.onSpeedChange(sp)} />
           ))}
-          <span className="ap-engr ap-engr-r">SETTINGS</span>
-          <span className="ap-slot">{ctx.settingsNode}</span>
+          {/* EDIT follows the speed keys, the order every look shares */}
+          <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} />
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
           <span className="ap-engr">DEVICE</span>

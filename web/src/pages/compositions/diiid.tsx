@@ -74,6 +74,9 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
 
   return (
     <div data-layout="diiid" className="dc-root">
+      {/* the key row sits on the top edge, in the order every look shares: run, speed, edit, device, scenario, settings */}
+      <Console ctx={ctx} />
+
       <div className="dc-wall" data-tutorial="traces">
         <div className="dc-tile dc-eq" data-tutorial="equilibrium">
           <EquilibriumCanvas snapshot={snap} wallJson={ctx.wallJson} limiterPoints={ctx.limiterPoints} />
@@ -148,8 +151,6 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
             </span>
           ))}
       </div>
-
-      <Console ctx={ctx} />
 
       {ctx.plannerNode}
       {ctx.tutorialNode}

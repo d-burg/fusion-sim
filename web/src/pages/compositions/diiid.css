@@ -31,7 +31,7 @@ html[data-theme="diiid"] body { background: #000; }
   font-family: var(--dc-sans);
   display: grid;
   grid-template-columns: 1fr 411px;
-  grid-template-rows: 1fr 20px 30px;
+  grid-template-rows: 30px 1fr 20px;
   overflow: hidden;
   cursor: default;
   user-select: none;
@@ -39,7 +39,7 @@ html[data-theme="diiid"] body { background: #000; }
 
 /* ── strip-chart wall ─────────────────────────────── */
 [data-layout="diiid"] .dc-wall {
-  grid-column: 1; grid-row: 1;
+  grid-column: 1; grid-row: 2;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows: repeat(4, 1fr);
@@ -53,7 +53,7 @@ html[data-theme="diiid"] body { background: #000; }
 
 /* ── right column ─────────────────────────────────── */
 [data-layout="diiid"] .dc-side {
-  grid-column: 2; grid-row: 1;
+  grid-column: 2; grid-row: 2;
   display: grid;
   grid-template-rows: 96px 1fr 393px;
   gap: 2px;
@@ -131,7 +131,7 @@ html[data-theme="diiid"] body { background: #000; }
 
 /* ── ticker ───────────────────────────────────────── */
 [data-layout="diiid"] .dc-ticker {
-  grid-column: 1 / -1; grid-row: 2;
+  grid-column: 1 / -1; grid-row: 3;
   background: #000; border-top: 2px solid var(--dc-bezel);
   display: flex; align-items: center; gap: 0;
   font: 11px var(--dc-mono); white-space: nowrap; overflow: hidden; padding: 0 8px;
@@ -145,8 +145,8 @@ html[data-theme="diiid"] body { background: #000; }
 
 /* ── console key row ──────────────────────────────── */
 [data-layout="diiid"] .dc-console {
-  grid-column: 1 / -1; grid-row: 3;
-  background: #101010; border-top: 1px solid #333;
+  grid-column: 1 / -1; grid-row: 1;
+  background: #101010; border-bottom: 1px solid #333;
   display: flex; align-items: stretch; gap: 0;
   font: 700 12px var(--dc-mono); letter-spacing: 0.06em;
 }

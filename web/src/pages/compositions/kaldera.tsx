@@ -103,25 +103,28 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
 
   return (
     <div data-layout="kaldera" className="kd-root">
+      {/* One strip in the order every look shares: run, speed, edit, device, scenario, settings. */}
       <nav className="kd-nav">
         <div className="kd-nav-l">
-          <span className="kd-brand">CONTROL ROOM</span>
           <span className="kd-group">
-            {ctx.devices.map((d) => <Link key={d.id} on={d.id === ctx.activeDevice} onClick={() => ctx.onDeviceChange(d.id)}>{d.name}</Link>)}
+            <span className="kd-run"><Link onClick={ctx.running ? ctx.controls.pause : ctx.controls.start}>{ctx.running ? 'PAUSE' : 'START'}</Link></span>
+            <Link onClick={ctx.controls.reset}>RESET</Link>
           </span>
-        </div>
-        <div className="kd-nav-c">
-          <span className="kd-cap">SPEED</span>
           <span className="kd-group">
-            {speeds.map((sp, i) => (
+            <span className="kd-cap">SPEED</span>
+            {[...speeds].reverse().map((sp, i) => (
               <span key={sp} className="kd-group-item">
                 {i > 0 && <span className="kd-dot">.</span>}
                 <Link on={ctx.activeSpeed === sp} onClick={() => ctx.onSpeedChange(sp)}>{sp === 1 ? '1' : sp === 2 ? '2' : sp.toFixed(2).replace(/0$/, '')}</Link>
               </span>
             ))}
           </span>
-        </div>
-        <div className="kd-nav-r">
+          <span className="kd-group">
+            <Link on={ctx.showPlanner} onClick={ctx.togglePlanner}>EDIT{ctx.hasCustomProgram ? ' *' : ''}</Link>
+          </span>
+          <span className="kd-group">
+            {ctx.devices.map((d) => <Link key={d.id} on={d.id === ctx.activeDevice} onClick={() => ctx.onDeviceChange(d.id)}>{d.name}</Link>)}
+          </span>
           <span className="kd-group">
             {ctx.presets.map((p) => <Link key={p.id} on={p.id === ctx.activePreset} onClick={() => ctx.onPresetChange(p.id)}>{PRESET_WORD[p.id] ?? p.label}</Link>)}
           </span>
@@ -130,10 +133,9 @@ export default function Composition({ ctx }: { ctx: ControlRoomContext }) {
               {(['DD', 'DT'] as const).map((f) => <Link key={f} on={ctx.fuelType === f} onClick={() => ctx.onFuelChange(f)}>{f}</Link>)}
             </span>
           )}
-          <span className="kd-group">
-            <Link on={ctx.showPlanner} onClick={ctx.togglePlanner}>EDIT{ctx.hasCustomProgram ? ' *' : ''}</Link>
-            <Link onClick={ctx.controls.reset}>RESET</Link>
-          </span>
+        </div>
+        <div className="kd-nav-r">
+          <span className="kd-brand">CONTROL ROOM</span>
           <span className="kd-settings">{ctx.settingsNode}</span>
         </div>
       </nav>
