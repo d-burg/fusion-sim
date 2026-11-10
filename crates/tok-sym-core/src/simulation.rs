@@ -591,6 +591,15 @@ pub enum SimulationStatus {
 
 /// Ray-casting point-in-polygon test.
 /// Returns true if (r, z) is inside the polygon defined by `outline`.
+/// Whether the closed segments a–b and c–d properly cross (strict
+/// orientation test; touching or collinear overlap is not a crossing).
+fn segments_cross(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) -> bool {
+    let orient = |p: (f64, f64), q: (f64, f64), r: (f64, f64)| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);
+    let (d1, d2) = (orient(c, d, a), orient(c, d, b));
+    let (d3, d4) = (orient(a, b, c), orient(a, b, d));
+    ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
+}
+
 fn point_in_polygon(r: f64, z: f64, outline: &[(f64, f64)]) -> bool {
     let n = outline.len();
     if n < 3 {
@@ -664,6 +673,10 @@ pub struct Simulation {
     // Equilibrium grid resolution
     eq_nr: usize,
     eq_nz: usize,
+    /// The raw solved ψ = 0 contour extracted by this step's wall-contact
+    /// check, reused by the snapshot so it is extracted once per step
+    /// (cleared at the start of every step; same equilibrium in both).
+    sep_raw: Option<Contour>,
     n_flux_surfaces: usize,
 }
 
@@ -695,6 +708,7 @@ impl Simulation {
             i_cd: 0.0,
             eq_nr: 48,
             eq_nz: 72,
+            sep_raw: None,
             n_flux_surfaces: 10,
             device,
         }
@@ -740,6 +754,139 @@ impl Simulation {
             .map(|&(_, v)| v)
             .fold(0.0_f64, f64::max)
             .max(0.1)
+    }
+
+    /// Whether the core boundary leaves the wall. The solved ψ = 0 contour is
+    /// extracted exactly as the snapshot's separatrix (twice the flux-surface
+    /// grid resolution, chains kept near the X-points), so the check and the
+    /// drawn boundary agree, and every vertex between the X-points (5 cm
+    /// clear of each, as before) is tested, so the result does not depend on
+    /// where rays fall (the 24-ray march it replaces stopped at 1.6 m from
+    /// the axis and never tested ITER's lower boundary at all).
+    ///
+    /// Cheap test first: a vertex outside the wall polygon, or a segment
+    /// between consecutive band vertices crossing a wall edge (wall edges
+    /// pre-filtered by bounding box). Only a failing candidate is then
+    /// confirmed: it must be visible from the converged magnetic axis (ψ_N < 1
+    /// along the line to it, the first-crossing definition of the LCFS) and
+    /// is projected along that line onto the exact ψ = 0 surface by
+    /// bisection, and the projected point (or segment) must still lie
+    /// outside the wall. The projection removes the marching-squares offset
+    /// (a vertex at ψ_N 1.0003 on ITER read 9.6 mm outside where the exact
+    /// boundary was 1–2.4 mm outside). The visibility test is a guard: the
+    /// solved X-point coincides with the designed one (it is a constraint of
+    /// the solve), so the legs lie below the band, and in the PR #25 review
+    /// it never excluded a vertex.
+    fn lcfs_crosses_wall(&mut self) -> bool {
+        if self.device.wall_outline.len() < 3 {
+            return false;
+        }
+        let bounds = self.contour_grid_bounds();
+        let (nr, nz) = (self.eq_nr * 2, self.eq_nz * 2);
+        let raw = contour::extract_separatrix(&self.equilibrium, nr, nz, Some(bounds));
+        let mut sep = raw.clone();
+        self.sep_raw = Some(raw);
+        let wall = &self.device.wall_outline;
+        let (xl, xu) = self.equilibrium.x_points_physical();
+        let anchors: Vec<(f64, f64)> = xl.into_iter().chain(xu).collect();
+        if anchors.is_empty() {
+            return false; // no X-point: limited, where contact is intended
+        }
+        let a_now = self.equilibrium.shape.epsilon * self.equilibrium.r0;
+        let cell = ((bounds.1 - bounds.0) / nr as f64).hypot((bounds.3 - bounds.2) / nz as f64);
+        contour::keep_chains_near(&mut sep, &anchors, (0.25 * a_now).max(3.0 * cell));
+        let z_lo = xl.map(|(_, z)| z + 0.05).unwrap_or(f64::NEG_INFINITY);
+        let z_hi = xu.map(|(_, z)| z - 0.05).unwrap_or(f64::INFINITY);
+        let in_band = |p: (f64, f64)| p.1 >= z_lo && p.1 <= z_hi;
+        let (ax_r, ax_z) = self.equilibrium.axis_physical();
+        let eq = &self.equilibrium;
+        let at = |p: (f64, f64), f: f64| (ax_r + f * (p.0 - ax_r), ax_z + f * (p.1 - ax_z));
+        let psin = |q: (f64, f64)| eq.psi_norm(q.0, q.1);
+        // The exact boundary point on the line axis → p, if p is visible from
+        // the axis (ψ_N < 1 along the line short of p) and the line reaches
+        // ψ_N = 1 within 10 % beyond p; None otherwise.
+        let exact = |p: (f64, f64)| -> Option<(f64, f64)> {
+            if !(1..32).all(|k| psin(at(p, k as f64 / 32.0)) < 1.0) {
+                return None;
+            }
+            let (mut lo, mut hi) = (31.0 / 32.0, 1.0);
+            while psin(at(p, hi)) < 1.0 {
+                lo = hi;
+                hi += 0.005;
+                if hi > 1.1 {
+                    return None;
+                }
+            }
+            for _ in 0..40 {
+                let mid = 0.5 * (lo + hi);
+                if psin(at(p, mid)) < 1.0 { lo = mid } else { hi = mid }
+            }
+            Some(at(p, hi))
+        };
+        let n = wall.len();
+        let crosses_wall_edge = |a: (f64, f64), b: (f64, f64)| {
+            let (r0, r1) = (a.0.min(b.0), a.0.max(b.0));
+            let (z0, z1) = (a.1.min(b.1), a.1.max(b.1));
+            (0..n).any(|i| {
+                let (c, d) = (wall[i], wall[(i + 1) % n]);
+                c.0.max(d.0) >= r0 && c.0.min(d.0) <= r1 && c.1.max(d.1) >= z0 && c.1.min(d.1) <= z1
+                    && segments_cross(a, b, c, d)
+            })
+        };
+        const JUMP: f64 = 0.15; // chain break, as in contour::keep_chains_near
+        let pts = &sep.points;
+        for (i, &p) in pts.iter().enumerate() {
+            if !in_band(p) {
+                continue;
+            }
+            if !point_in_polygon(p.0, p.1, wall) {
+                if let Some(e) = exact(p) {
+                    if !point_in_polygon(e.0, e.1, wall) {
+                        return true;
+                    }
+                }
+            }
+            if let Some(&q) = pts.get(i + 1) {
+                if in_band(q) && (p.0 - q.0).hypot(p.1 - q.1) <= JUMP && crosses_wall_edge(p, q) {
+                    if let (Some(ep), Some(eq_)) = (exact(p), exact(q)) {
+                        if !point_in_polygon(ep.0, ep.1, wall) || !point_in_polygon(eq_.0, eq_.1, wall) || crosses_wall_edge(ep, eq_) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Bounds (r_min, r_max, z_min, z_max) of the contour grids: the device
+    /// extent with a margin, extended to cover the wall outline.
+    fn contour_grid_bounds(&self) -> (f64, f64, f64, f64) {
+        // Compute grid bounds using DEVICE dimensions (not the possibly-scaled shape
+        // epsilon). This ensures the contour grid always extends to the full plasma
+        // extent / divertor region, even during limited phase when epsilon is small.
+        let full_eps = self.device.epsilon();
+        let full_kappa = self.device.kappa.max(self.equilibrium.shape.kappa);
+        let margin = 0.15;
+        let mut grid_r_min = self.device.r0 * (1.0 - full_eps - margin);
+        let mut grid_r_max = self.device.r0 * (1.0 + full_eps + margin);
+        let mut grid_z_min = self.device.z0 + self.device.r0 * (-full_eps * full_kappa - margin);
+        let mut grid_z_max = self.device.z0 + self.device.r0 * (full_eps * full_kappa + margin);
+
+        // Extend grid bounds to cover the device wall outline so separatrix
+        // divertor legs can be traced all the way to the wall/divertor targets.
+        // Without this, the marching-squares contour extraction truncates legs
+        // at the grid boundary, which falls short of the divertor floor.
+        if !self.device.wall_outline.is_empty() {
+            let wall_pad = 0.02; // small padding beyond wall
+            for &(r, z) in &self.device.wall_outline {
+                grid_r_min = grid_r_min.min(r - wall_pad);
+                grid_r_max = grid_r_max.max(r + wall_pad);
+                grid_z_min = grid_z_min.min(z - wall_pad);
+                grid_z_max = grid_z_max.max(z + wall_pad);
+            }
+        }
+        (grid_r_min, grid_r_max, grid_z_min, grid_z_max)
     }
 
     fn ip_ramp_fraction(&self, prog_ip: f64) -> f64 {
@@ -808,6 +955,7 @@ impl Simulation {
     /// Advance the simulation by one timestep.
     /// Returns a snapshot of the current state.
     pub fn step(&mut self, dt: f64) -> SimulationSnapshot {
+        self.sep_raw = None;
         if self.status != SimulationStatus::Running {
             return self.snapshot();
         }
@@ -1352,52 +1500,26 @@ impl Simulation {
         // gap is under 3 cm — just after X-point formation the LCFS is
         // millimetres from the limiter by construction, and the solved
         // boundary deviates from its parametrization by about that much.
-        // Once armed the check is exactly as strict as before.
+        // Once armed, the whole solved boundary is tested (below).
         if config != MagneticConfig::Limited
             && (lift >= 1.0 || inboard_gap >= 0.03)
             && !self.disruption.disrupted
             && prog.ip > 0.3 * self.device.ip_max
             && self.actual_ip > 0.1
         {
-            // Sample the SOLVED boundary, not the analytic parametrization.
-            // The Cerfon–Freidberg solution deviates from its own boundary
-            // parametrization by a few cm (outboard bulge, squarer corners
-            // when squareness ≠ 0), and the rendered separatrix is the solved
-            // contour — so the analytic proxy both misses real contacts and
-            // reports false ones. Ray-march ψ_N = 1 from the axis instead.
-            let (ax_r, ax_z) = self.equilibrium.axis_physical();
-            let mut lcfs_points: Vec<(f64, f64, f64)> = Vec::with_capacity(24);
-            for k in 0..24 {
-                let theta = 2.0 * std::f64::consts::PI * (k as f64) / 24.0;
-                let (dr, dz) = (theta.cos(), theta.sin());
-                let mut rad = 0.05;
-                while rad < 1.6 {
-                    let r = ax_r + dr * rad;
-                    let z = ax_z + dz * rad;
-                    if self.equilibrium.psi_norm(r, z) >= 1.0 {
-                        lcfs_points.push((r, z, theta));
-                        break;
-                    }
-                    rad += 0.01;
-                }
-            }
-
-            // X-point(s) for bulk/leg discrimination
-            let (xp_lower, xp_upper) = self.equilibrium.x_points_physical();
-
-            for &(r, z, _theta) in &lcfs_points {
-                // Skip divertor leg regions near X-points
-                if let Some((_, z_lo)) = xp_lower {
-                    if z < z_lo + 0.05 { continue; }
-                }
-                if let Some((_, z_up)) = xp_upper {
-                    if z > z_up - 0.05 { continue; }
-                }
-                // Check if this LCFS point is outside the wall
-                if !point_in_polygon(r, z, &self.device.wall_outline) {
-                    self.disruption.force_disruption();
-                    break;
-                }
+            // Test the SOLVED boundary, not the analytic parametrization:
+            // the Cerfon–Freidberg solution deviates from its own boundary
+            // parametrization by a few cm (outboard bulge, squarer corners),
+            // and the rendered separatrix is the solved contour. Since
+            // 2026-11 (PR #25 review) the whole solved ψ = 0 contour is
+            // tested: every vertex of its bulk part (between the X-points,
+            // 5 cm clear of them, as before) and every segment between two
+            // such vertices, against the wall polygon. The previous check
+            // marched 24 rays from the magnetic axis, so its result depended
+            // on where the axis was and it missed overlaps between rays
+            // (a ~20 mm wall crossing on JET δ 0.8 that no ray hit).
+            if self.lcfs_crosses_wall() {
+                self.disruption.force_disruption();
             }
         }
 
@@ -1408,30 +1530,7 @@ impl Simulation {
     fn snapshot(&self) -> SimulationSnapshot {
         let prog = self.program.values_at(self.time);
 
-        // Compute grid bounds using DEVICE dimensions (not the possibly-scaled shape
-        // epsilon). This ensures the contour grid always extends to the full plasma
-        // extent / divertor region, even during limited phase when epsilon is small.
-        let full_eps = self.device.epsilon();
-        let full_kappa = self.device.kappa.max(self.equilibrium.shape.kappa);
-        let margin = 0.15;
-        let mut grid_r_min = self.device.r0 * (1.0 - full_eps - margin);
-        let mut grid_r_max = self.device.r0 * (1.0 + full_eps + margin);
-        let mut grid_z_min = self.device.z0 + self.device.r0 * (-full_eps * full_kappa - margin);
-        let mut grid_z_max = self.device.z0 + self.device.r0 * (full_eps * full_kappa + margin);
-
-        // Extend grid bounds to cover the device wall outline so separatrix
-        // divertor legs can be traced all the way to the wall/divertor targets.
-        // Without this, the marching-squares contour extraction truncates legs
-        // at the grid boundary, which falls short of the divertor floor.
-        if !self.device.wall_outline.is_empty() {
-            let wall_pad = 0.02; // small padding beyond wall
-            for &(r, z) in &self.device.wall_outline {
-                grid_r_min = grid_r_min.min(r - wall_pad);
-                grid_r_max = grid_r_max.max(r + wall_pad);
-                grid_z_min = grid_z_min.min(z - wall_pad);
-                grid_z_max = grid_z_max.max(z + wall_pad);
-            }
-        }
+        let (grid_r_min, grid_r_max, grid_z_min, grid_z_max) = self.contour_grid_bounds();
 
         // Generate flux surfaces using device-level grid bounds
         let flux_surfaces = if self.actual_ip > 0.1 {
@@ -1489,12 +1588,11 @@ impl Simulation {
             // bistable between the roof diagonal and the back corner and
             // hid most of the inner strike's sweep motion. One extra ψ_N
             // level at 96×144 costs well under a millisecond.
-            let mut sep = contour::extract_separatrix(
-                &self.equilibrium,
-                self.eq_nr * 2,
-                self.eq_nz * 2,
-                sep_bounds,
-            );
+            // Reuse this step's extraction by the wall-contact check when
+            // there was one (same equilibrium, same grid and bounds).
+            let mut sep = self.sep_raw.clone().unwrap_or_else(|| {
+                contour::extract_separatrix(&self.equilibrium, self.eq_nr * 2, self.eq_nz * 2, sep_bounds)
+            });
             // Terminate divertor legs at their first wall impact: a leg that
             // strikes a baffle must not re-emerge beyond it, and spurious
             // far-SOL ψ=0 chains outside the vessel are dropped outright.

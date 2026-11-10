@@ -209,23 +209,11 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     ctx.clip()
 
     if (hasPlasma && snapshot.axis_r > 0) {
-      // Compute axis from centroid of the innermost flux surface so it
-      // tracks the actual rendered contours during dynamic shape changes.
-      let axisR = snapshot.axis_r
-      let axisZ = snapshot.axis_z
-      // Only a closed ring (the engine picks the chain around its axis);
-      // the closing vertex repeats the first and is counted once.
-      const pts = snapshot.flux_surfaces?.[0]?.points
-      if (pts && pts.length > 3) {
-        const [f, l] = [pts[0], pts[pts.length - 1]]
-        if (Math.hypot(f[0] - l[0], f[1] - l[1]) < 1e-6) {
-          let sumR = 0, sumZ = 0
-          const n = pts.length - 1
-          for (let i = 0; i < n; i++) { sumR += pts[i][0]; sumZ += pts[i][1] }
-          axisR = sumR / n
-          axisZ = sumZ / n
-        }
-      }
+      // The engine's magnetic axis, the converged ψ minimum since PR #25
+      // (it used to be the innermost ring's centroid, while the engine's
+      // axis was an unconverged gradient climb).
+      const axisR = snapshot.axis_r
+      const axisZ = snapshot.axis_z
       const ax = toX(axisR)
       const ay = toY(axisZ)
       ctx.fillStyle = isRetro ? '#33ff33' : tc.eq.axis
