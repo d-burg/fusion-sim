@@ -218,6 +218,8 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
           {/* one key starts and pauses, as in the other looks: green while running, amber while paused */}
           <LampKey caption={running ? 'PAUSE' : 'START'} lamp={running ? 'green' : paused ? 'amber' : 'off'} onClick={running ? ctx.controls.pause : ctx.controls.start} />
           <LampKey caption="RESET" lamp="off" onClick={ctx.controls.reset} disabled={!canReset} />
+          {/* EDIT and the settings key close the RUN row: both act on the run, and the speed row keeps a spare place */}
+          <span className="ap-ctl-end"><LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} /></span>
           <span className="ap-slot">{ctx.settingsNode}</span>
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
@@ -225,8 +227,6 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
           {[2, 1, 0.75, 0.5].map((sp) => (
             <LampKey key={sp} caption={`${sp}X`} lamp={ctx.activeSpeed === sp ? 'white' : 'off'} onClick={() => ctx.onSpeedChange(sp)} />
           ))}
-          {/* EDIT follows the speed keys, the order every look shares */}
-          <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} />
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
           <span className="ap-engr">DEVICE</span>

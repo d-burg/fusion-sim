@@ -278,6 +278,7 @@ html[data-theme="apollo"] {
 }
 [data-layout="apollo"] .ap-ctl-row-6 { grid-template-columns: 62px repeat(6, 1fr); }
 [data-layout="apollo"] .ap-ctl-row > .ap-engr { align-self: center; }
+[data-layout="apollo"] .ap-ctl-end { grid-column: 6; display: grid; }
 /* the settings key keeps the top right corner of the console */
 [data-layout="apollo"] .ap-slot {
   grid-column: 7;
