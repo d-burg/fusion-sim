@@ -227,8 +227,8 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
           {[2, 1, 0.75, 0.5].map((sp) => (
             <LampKey key={sp} caption={`${sp}X`} lamp={ctx.activeSpeed === sp ? 'white' : 'off'} onClick={() => ctx.onSpeedChange(sp)} />
           ))}
-          {/* EDIT follows the speed keys, the order every look shares */}
-          <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} />
+          {/* EDIT follows the speed keys, the order every look shares; double width so the settings key above is not alone in its column */}
+          <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} wide />
         </div>
         <div className="ap-ctl-row ap-ctl-row-6">
           <span className="ap-engr">DEVICE</span>
