@@ -218,7 +218,7 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
           {/* one key starts and pauses, as in the other looks: green while running, amber while paused */}
           <LampKey caption={running ? 'PAUSE' : 'START'} lamp={running ? 'green' : paused ? 'amber' : 'off'} onClick={running ? ctx.controls.pause : ctx.controls.start} />
           <LampKey caption="RESET" lamp="off" onClick={ctx.controls.reset} disabled={!canReset} />
-          {/* EDIT and the settings key close the RUN row: both act on the run, and the speed row keeps a spare place */}
+          {/* EDIT and the settings key follow on the RUN row: both act on the run, and the speed row keeps a spare place */}
           <span className="ap-ctl-end"><LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} /></span>
           <span className="ap-slot">{ctx.settingsNode}</span>
         </div>
