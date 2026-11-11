@@ -319,6 +319,7 @@ export default function BoardPlot(p: Props) {
       className={`ap-plot${finished && !phone ? ' ap-plot-scrub' : ''}`}
       onPointerDown={scrubAt}
       onPointerMove={(e) => { if (e.buttons & 1) scrubAt(e) }}
+      onDoubleClick={() => { if (finished && !phone) p.onScrub(null) }}
     >
       <canvas ref={canvasRef} />
       <div className="ap-plot-title">{p.title} <span className="ap-unit">{p.unit}</span></div>
