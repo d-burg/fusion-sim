@@ -57,11 +57,11 @@ html[data-theme="kaldera"] body { background: #0a0d14; }
 
 /* ── nav row ──────────────────────────────────────────────────────── */
 [data-layout="kaldera"] .kd-nav {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
   padding: 0 var(--kd-x); height: 64px;
 }
 [data-layout="kaldera"] .kd-nav-l { justify-self: start; display: flex; align-items: center; gap: 30px; }
-[data-layout="kaldera"] .kd-nav-c { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+[data-layout="kaldera"] .kd-run { display: inline-flex; min-width: 52px; }
 [data-layout="kaldera"] .kd-nav-r { justify-self: end; display: flex; align-items: center; gap: 26px; }
 [data-layout="kaldera"] .kd-brand { color: rgba(255,255,255,0.92); }
 [data-layout="kaldera"] .kd-cap { color: rgba(255,255,255,0.7); font-size: 8px; }

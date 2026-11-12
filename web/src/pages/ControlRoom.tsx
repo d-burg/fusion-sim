@@ -298,17 +298,18 @@ export default function ControlRoom() {
   return (
     <div className="page-enter h-screen flex flex-col bg-[#0a0e17] overflow-hidden">
       {/* ─── Top bar ─── */}
-      {/* Three-column grid rather than justify-between: the side columns take
-          an equal share of the free space, so the playback controls stay
-          centered on the page even as the side content changes width (DD/DT
-          toggle appearing per device, "(done)" suffix at end of pulse). */}
+      {/* From md up the bar reads in the order every look shares: playback
+          (run, speed, edit) first, then the device and scenario selectors,
+          both packed to the left; time and settings keep the right edge. The
+          playback buttons have fixed widths, so nothing to their right shifts
+          as the pulse state changes. */}
       {/* Below md the bar is two rows: selectors and time/settings on the first,
           playback centered on its own full-width second row. A single row is
           wider than a phone and the root clips overflow, so the right-hand
           controls were cut off and could not be scrolled to. */}
-      <div className="relative z-50 grid grid-cols-[1fr_auto] md:grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-x-1 sm:gap-x-2 gap-y-1">
+      <div className="relative z-50 grid grid-cols-[1fr_auto] md:grid-cols-[auto_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-x-1 sm:gap-x-2 gap-y-1">
         {/* Device, Scenario, Fuel selectors */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start col-start-1 row-start-1">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start col-start-1 row-start-1 md:col-start-2">
           {/* Device selector */}
           <select
             value={activeDevice}
@@ -361,8 +362,8 @@ export default function ControlRoom() {
 
         {/* Playback controls — fixed widths on the buttons whose label changes
             so the row never reflows as the pulse state changes. */}
-        <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 justify-self-center
-                        col-span-2 row-start-2 md:col-span-1 md:col-start-2 md:row-start-1">
+        <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 justify-self-center md:justify-self-start
+                        col-span-2 row-start-2 md:col-span-1 md:col-start-1 md:row-start-1">
           {!running ? (
             <button
               onClick={roomControls.start}

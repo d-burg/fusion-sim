@@ -213,30 +213,30 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
     <div className="ap-mod ap-mod-ctl" data-tutorial="controls">
       <div className="ap-mod-head"><span className="ap-plate">16</span><span className="ap-engr">CONTROL</span></div>
       <div className="ap-ctl-rows">
-        <div className="ap-ctl-row ap-ctl-row-6">
+        <div className="ap-ctl-row ap-ctl-row-5">
           <span className="ap-engr">RUN</span>
-          <LampKey caption="START" lamp={running ? 'green' : 'off'} onClick={ctx.controls.start} disabled={running} />
-          <LampKey caption="PAUSE" lamp={paused ? 'amber' : 'off'} onClick={ctx.controls.pause} disabled={!running} />
+          {/* one key starts and pauses, as in the other looks: green while running, amber while paused */}
+          <LampKey caption={running ? 'PAUSE' : 'START'} lamp={running ? 'green' : paused ? 'amber' : 'off'} onClick={running ? ctx.controls.pause : ctx.controls.start} />
           <LampKey caption="RESET" lamp="off" onClick={ctx.controls.reset} disabled={!canReset} />
-          <LampKey caption="LIVE" lamp={scrubTime !== null ? 'white' : 'off'} onClick={() => ctx.controls.setScrubTime(null)} disabled={scrubTime === null} />
-          <LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} />
-          <LampKey caption="REPORT" lamp={showReport ? 'white' : 'off'} onClick={() => setShowReport((v) => !v)} disabled={!ctx.report} />
+          {/* EDIT and the settings key follow on the RUN row: both act on the run, and the speed row keeps a spare place */}
+          <span className="ap-ctl-end"><LampKey caption="EDIT" lamp={ctx.showPlanner ? 'white' : 'off'} onClick={ctx.togglePlanner} /></span>
+          <span className="ap-slot">{ctx.settingsNode}</span>
         </div>
-        <div className="ap-ctl-row ap-ctl-row-6">
+        <div className="ap-ctl-row ap-ctl-row-5">
           <span className="ap-engr">SPEED</span>
           {[2, 1, 0.75, 0.5].map((sp) => (
             <LampKey key={sp} caption={`${sp}X`} lamp={ctx.activeSpeed === sp ? 'white' : 'off'} onClick={() => ctx.onSpeedChange(sp)} />
           ))}
-          <span className="ap-engr ap-engr-r">SETTINGS</span>
-          <span className="ap-slot">{ctx.settingsNode}</span>
         </div>
-        <div className="ap-ctl-row ap-ctl-row-6">
+        <div className="ap-ctl-row ap-ctl-row-5">
           <span className="ap-engr">DEVICE</span>
           {ctx.devices.map((d) => (
             <LampKey key={d.id} caption={d.name.toUpperCase()} lamp={ctx.activeDevice === d.id ? 'white' : 'off'} onClick={() => ctx.onDeviceChange(d.id)} />
           ))}
+          {/* SPARC's place on the console, dark until the device is installed */}
+          {!ctx.devices.some((d) => d.id === 'sparc') && <LampKey caption="SPARC" lamp="off" onClick={() => {}} disabled />}
         </div>
-        <div className="ap-ctl-row ap-ctl-row-6">
+        <div className="ap-ctl-row ap-ctl-row-5">
           <span className="ap-engr">SCENARIO</span>
           {ctx.presets.map((p) => (
             <LampKey key={p.id} caption={p.label.toUpperCase().replace(' ', '\n')} lamp={ctx.activePreset === p.id ? 'white' : 'off'} onClick={() => ctx.onPresetChange(p.id)} />
@@ -299,7 +299,13 @@ function Desktop({ ctx }: { ctx: ControlRoomContext }) {
             <div className="ap-plot-num">12</div>
           </div>
           <div className="ap-tile ap-log">
-            <div className="ap-plot-title">{showReport && ctx.report ? 'REPORT' : 'LOG'}</div>
+            {ctx.report ? (
+              <button type="button" className="ap-plot-title ap-log-toggle" onClick={() => setShowReport((v) => !v)}>
+                {showReport ? 'REPORT' : 'LOG'} <span className="ap-unit">{showReport ? 'LOG' : 'REPORT'} ▸</span>
+              </button>
+            ) : (
+              <div className="ap-plot-title">LOG</div>
+            )}
             <div className="ap-plot-num">13</div>
             {/* the report is taller than the screen: it scrolls in place */}
             <div key={showReport && ctx.report ? 'report' : 'log'} className="ap-log-lines" data-report={(showReport && !!ctx.report) || undefined}>
